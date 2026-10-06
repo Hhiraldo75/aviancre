@@ -25,11 +25,11 @@ describe('yearOneNOI', () => {
     // NOI = rent × (1 − 3% management); landlord opex is zero.
     const y1 = yearOneNOI(byId('sample-olneyville-distribution'), AS_OF)
     expect(y1.landlordOpex).toBe(0)
-    expect(y1.noi).toBeCloseTo(145_000 * 7.25 * Math.pow(1.03, 7) * 0.97, 2)
+    expect(y1.noi).toBeCloseTo(36_000 * 7.25 * Math.pow(1.03, 7) * 0.97, 2)
   })
   it('makes the landlord carry opex on full-service and vacant space', () => {
     const y1 = yearOneNOI(byId('sample-westminster-tower'), AS_OF)
-    expect(y1.landlordOpex).toBeCloseTo(320_000 * 10.5, 2)
+    expect(y1.landlordOpex).toBeCloseTo(355_900 * 10.5, 2)
   })
 })
 
@@ -52,9 +52,9 @@ describe('stackingPlan', () => {
   it('accounts for every rentable SF and lists floors top-down', () => {
     const plan = stackingPlan(byId('sample-westminster-tower'), AS_OF)
     if (!plan) throw new Error('no plan')
-    expect(plan.length).toBe(20)
-    expect(plan[0].floor).toBe(20)
-    expect(plan.reduce((s, f) => s + f.totalSF, 0)).toBeCloseTo(320_000, 4)
+    expect(plan.length).toBe(28)
+    expect(plan[0].floor).toBe(28)
+    expect(plan.reduce((s, f) => s + f.totalSF, 0)).toBeCloseTo(355_900, 4)
     expect(plan[plan.length - 1].segments[0].label).toBe('Cobblestone Community Bank')
   })
   it('returns null for buildings without floor data', () => {
@@ -65,8 +65,8 @@ describe('stackingPlan', () => {
 describe('developmentCapacity', () => {
   it('computes unused FAR for an underbuilt industrial site', () => {
     const d = developmentCapacity(byId('sample-olneyville-distribution'))
-    expect(d.existingFAR).toBeCloseTo(145_000 / 392_000, 6)
-    expect(d.additionalBuildableSF).toBeCloseTo(392_000 * 2 - 145_000, 6)
+    expect(d.existingFAR).toBeCloseTo(36_000 / 392_000, 6)
+    expect(d.additionalBuildableSF).toBeCloseTo(392_000 * 2 - 36_000, 6)
   })
   it('flags buildings that exceed current zoning as negative capacity', () => {
     expect((developmentCapacity(byId('sample-westminster-tower')).additionalBuildableSF ?? 0) < 0).toBe(true)

@@ -15,7 +15,7 @@
    - [x] Live tax-roll lookup (Providence Open Data, works from any network)
    - [x] City GIS enrichment (zoning, flood, building size, outline) when reachable; blocked from some non-US networks
    - [ ] For deployment: a small US-hosted relay so GIS details work for every visitor
-   - [ ] Attach each sample property to a real parcel instead of a placeholder square
+   - [x] Attach each sample property to a real parcel (address, tax map, coordinates from the 2025 tax roll)
    - [ ] Decode state/municipal use codes into plain-language property types
    - Footprints: keep OpenStreetMap buildings (the statewide RIGIS layer is 2018 machine-generated outlines with no heights)
 2. **Photorealistic 3D toggle**

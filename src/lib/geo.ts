@@ -4,7 +4,8 @@ import { occupancy, occupancyColor } from './metrics'
 
 const SQFT_TO_SQM = 0.092903
 const METERS_PER_DEG_LAT = 111_320
-/** Typical floor-to-floor height for the placeholder massing. */
+const METERS_PER_FT = 0.3048
+/** Typical floor-to-floor height when the real building height is unknown. */
 const METERS_PER_FLOOR = 4
 
 export interface PropertyFeatureProps {
@@ -17,9 +18,8 @@ export interface PropertyFeatureProps {
 }
 
 /**
- * Placeholder massing: a square footprint sized from gross SF ÷ floors,
- * centered on the property's point and extruded by floor count.
- * Replace with real parcel or building footprints once those are loaded.
+ * Fallback massing when no real outline is saved: a square footprint sized
+ * from gross SF ÷ floors, centered on the property's point.
  */
 function squareFootprint(lng: number, lat: number, footprintSqFt: number): Polygon {
   const sideM = Math.sqrt(footprintSqFt * SQFT_TO_SQM)
@@ -48,14 +48,16 @@ export function propertiesToGeoJSON(
       const occ = occupancy(p, asOf)
       return {
         type: 'Feature',
-        geometry: squareFootprint(p.location.lng, p.location.lat, p.physical.grossBuildingSF.value / floors),
+        geometry: p.physical.footprint
+          ? { type: 'Polygon', coordinates: [p.physical.footprint.value] }
+          : squareFootprint(p.location.lng, p.location.lat, p.physical.grossBuildingSF.value / floors),
         properties: {
           id: p.id,
           name: p.name,
           assetType: p.assetType,
           occupancy: occ,
           color: occupancyColor(occ),
-          heightM: floors * METERS_PER_FLOOR,
+          heightM: p.physical.heightFt ? p.physical.heightFt.value * METERS_PER_FT : floors * METERS_PER_FLOOR,
         },
       }
     }),

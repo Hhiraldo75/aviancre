@@ -2,6 +2,7 @@ import type {
   AssetType,
   BuildingClass,
   ISODate,
+  LngLat,
   Pct,
   SF,
   Sourced,
@@ -40,6 +41,8 @@ export interface PhysicalCharacteristics {
   /** Industrial only. */
   clearHeightFt?: Sourced<number>
   loadingDocks?: Sourced<number>
+  /** Real building outline (closed ring of [lng, lat]); the map extrudes this instead of a placeholder square. */
+  footprint?: Sourced<LngLat[]>
 }
 
 export interface ZoningInfo {

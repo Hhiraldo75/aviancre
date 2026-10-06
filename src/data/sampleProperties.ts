@@ -11,22 +11,30 @@ import type {
   UnitType,
   VacantSpace,
 } from '../types'
-import { estimate, estimateWithBand } from '../lib/sourced'
+import { estimate, estimateWithBand, fromPublic } from '../lib/sourced'
 import { marketViewFor } from '../lib/marketView'
+import { OSM_AS_OF, OSM_SOURCE, SAMPLE_FOOTPRINTS } from './sampleFootprints'
 import { ZONING_LIMITS, ZONING_SOURCE } from './zoning'
 
 /**
  * SAMPLE DATASET – for development and demos only.
  *
- * - Property names, tenants and every financial figure are fictional.
- * - Locations are approximate points inside real Providence submarkets, not
- *   geocoded addresses. Next step: replace them with real parcels from the
- *   Providence assessor / RIGIS and keep these as "sample" overlays.
+ * - Each sample sits on a REAL Providence parcel: address, ZIP, tax map and
+ *   coordinates come from the Providence Open Data 2025 Property Tax Roll.
+ * - Everything else is fictional: property names, tenants, leases, rents,
+ *   market figures, building size, floors, year built and assessed value.
+ *   They do not describe the real building at that address. Names are
+ *   invented and never use the real owner's name.
+ * - Building outline, floors and height come from OpenStreetMap when OSM has
+ *   them (see sampleFootprints.ts). Gross SF is the OSM footprint × floors;
+ *   rentable SF and every lease, vacancy and unit count were rescaled from the
+ *   original sample to fit that size.
  * - Zoning districts are plausible guesses and must be verified against the
  *   City of Providence zoning map.
  */
 
 const SAMPLE = 'Sample placeholder'
+const OSM_SIZE = 'Estimated: OpenStreetMap footprint × floors'
 const SAMPLE_RENT_ROLL = 'Sample rent roll (fictional tenants)'
 
 // ---------- small builders to keep the dataset readable ----------
@@ -98,6 +106,10 @@ interface PropertyInput {
   assetType: AssetType
   cls: BuildingClass
   submarket: SubmarketId
+  /** Real address, ZIP, tax map and point from the 2025 tax roll. */
+  address: string
+  zip: string
+  parcelId: string
   lng: number
   lat: number
   grossSF: number
@@ -119,6 +131,11 @@ interface PropertyInput {
 
 function property(p: PropertyInput): Property {
   const market = marketViewFor(p.submarket, p.assetType, p.cls)
+  const fp = SAMPLE_FOOTPRINTS[p.id]
+  if (fp?.levels !== undefined && fp.levels !== p.floors) {
+    throw new Error(`${p.id}: floors (${p.floors}) must match OpenStreetMap levels (${fp.levels})`)
+  }
+  const osmSource = fp ? `${OSM_SOURCE} – way ${fp.osmWayId}` : OSM_SOURCE
   if (p.marketRentOverride !== undefined) {
     market.marketRent = estimateWithBand(p.marketRentOverride, 'Weighted average of unit-type market rents', 0.1)
   }
@@ -129,21 +146,25 @@ function property(p: PropertyInput): Property {
     assetType: p.assetType,
     buildingClass: p.cls,
     location: {
-      address: `Sample location – ${p.submarket.replace(/-/g, ' ')}`,
+      address: p.address,
       city: 'Providence',
       state: 'RI',
+      zip: p.zip,
       lng: p.lng,
       lat: p.lat,
       submarket: p.submarket,
-      isApproximate: true,
+      parcelId: p.parcelId,
+      isApproximate: false,
     },
     physical: {
-      grossBuildingSF: estimate(p.grossSF, SAMPLE),
-      rentableSF: estimate(p.rentableSF, SAMPLE),
+      grossBuildingSF: estimate(p.grossSF, fp ? OSM_SIZE : SAMPLE),
+      rentableSF: estimate(p.rentableSF, fp ? `${OSM_SIZE}, × sample efficiency ratio` : SAMPLE),
       yearBuilt: estimate(p.yearBuilt, SAMPLE),
       yearRenovated: p.yearRenovated !== undefined ? estimate(p.yearRenovated, SAMPLE) : undefined,
-      floors: estimate(p.floors, SAMPLE),
+      floors: fp?.levels !== undefined ? fromPublic(fp.levels, osmSource, OSM_AS_OF) : estimate(p.floors, SAMPLE),
+      heightFt: fp?.heightM !== undefined ? fromPublic(Math.round(fp.heightM * 3.28084), osmSource, OSM_AS_OF) : undefined,
       landAreaSF: estimate(p.landAreaSF, SAMPLE),
+      footprint: fp ? fromPublic(fp.ring, osmSource, OSM_AS_OF) : undefined,
       ...p.extras,
     },
     zoning: {
@@ -219,65 +240,71 @@ export const SAMPLE_PROPERTIES: Property[] = [
     assetType: 'office',
     cls: 'A',
     submarket: 'downtown',
-    lng: -71.4112,
-    lat: 41.8246,
-    grossSF: 345_000,
-    rentableSF: 320_000,
+    address: '1 Financial Plaza',
+    zip: '02903',
+    parcelId: '020-0005-0000',
+    lng: -71.40968,
+    lat: 41.82505,
+    grossSF: 383_700,
+    rentableSF: 355_900,
     yearBuilt: 1985,
     yearRenovated: 2016,
-    floors: 20,
+    floors: 28,
     zoning: 'D-1',
     landAreaSF: 21_000,
-    assessedValue: 38_000_000,
+    assessedValue: 42_300_000,
     extras: { parkingSpaces: estimate(180, SAMPLE) },
     tags: ['multi-tenant', 'full-service'],
     rentRoll: {
       kind: 'commercial',
       leases: leases('sample-westminster-tower', [
-        { tenant: 'Weybridge Insurance Services', suite: 'Fl 14–18', floors: [14, 15, 16, 17, 18], sf: 95_000, start: '2019-01-01', end: '2029-12-31', rent: 26.0, esc: pct(0.025), type: 'full-service-gross', recovery: baseYear(2019), credit: 'national', industry: 'Insurance' },
-        { tenant: 'Meridian Health Administration', suite: 'Fl 5–7', floors: [5, 6, 7], sf: 55_000, start: '2020-01-01', end: '2028-03-31', rent: 25.5, esc: pct(0.025), type: 'full-service-gross', recovery: baseYear(2020), credit: 'national', industry: 'Healthcare' },
-        { tenant: 'Harborline Legal Partners', suite: 'Fl 19–20', floors: [19, 20], sf: 42_000, start: '2021-06-01', end: '2031-05-31', rent: 27.5, esc: pct(0.025), type: 'full-service-gross', recovery: baseYear(2021), credit: 'regional', industry: 'Legal', freeRentMonths: 6, tiPerSF: 60 },
-        { tenant: 'Kestrel Analytics', suite: 'Fl 10–11', floors: [10, 11], sf: 28_500, start: '2018-03-01', end: '2027-02-28', rent: 24.0, esc: perSF(0.5), type: 'full-service-gross', recovery: baseYear(2018), credit: 'local', industry: 'Technology' },
-        { tenant: 'Larkfield Architects', suite: 'Fl 2', floors: [2], sf: 16_000, start: '2023-09-01', end: '2030-08-31', rent: 27.0, esc: pct(0.03), type: 'full-service-gross', recovery: baseYear(2023), credit: 'local', industry: 'Professional services', freeRentMonths: 4, tiPerSF: 45 },
-        { tenant: 'Cobblestone Community Bank', suite: 'Ground', floors: [1], sf: 12_000, start: '2016-07-01', end: '2026-12-31', rent: 30.0, esc: pct(0.02), type: 'full-service-gross', recovery: baseYear(2016), credit: 'regional', industry: 'Banking' },
+        { tenant: 'Weybridge Insurance Services', suite: 'Fl 19–25', floors: [19, 20, 21, 22, 23, 24, 25], sf: 105_700, start: '2019-01-01', end: '2029-12-31', rent: 26.0, esc: pct(0.025), type: 'full-service-gross', recovery: baseYear(2019), credit: 'national', industry: 'Insurance' },
+        { tenant: 'Meridian Health Administration', suite: 'Fl 7–10', floors: [7, 8, 9, 10], sf: 61_200, start: '2020-01-01', end: '2028-03-31', rent: 25.5, esc: pct(0.025), type: 'full-service-gross', recovery: baseYear(2020), credit: 'national', industry: 'Healthcare' },
+        { tenant: 'Harborline Legal Partners', suite: 'Fl 26–28', floors: [26, 27, 28], sf: 46_700, start: '2021-06-01', end: '2031-05-31', rent: 27.5, esc: pct(0.025), type: 'full-service-gross', recovery: baseYear(2021), credit: 'regional', industry: 'Legal', freeRentMonths: 6, tiPerSF: 60 },
+        { tenant: 'Kestrel Analytics', suite: 'Fl 14–15', floors: [14, 15], sf: 31_700, start: '2018-03-01', end: '2027-02-28', rent: 24.0, esc: perSF(0.5), type: 'full-service-gross', recovery: baseYear(2018), credit: 'local', industry: 'Technology' },
+        { tenant: 'Larkfield Architects', suite: 'Fl 2–3', floors: [2, 3], sf: 17_800, start: '2023-09-01', end: '2030-08-31', rent: 27.0, esc: pct(0.03), type: 'full-service-gross', recovery: baseYear(2023), credit: 'local', industry: 'Professional services', freeRentMonths: 4, tiPerSF: 45 },
+        { tenant: 'Cobblestone Community Bank', suite: 'Ground', floors: [1], sf: 13_300, start: '2016-07-01', end: '2026-12-31', rent: 30.0, esc: pct(0.02), type: 'full-service-gross', recovery: baseYear(2016), credit: 'regional', industry: 'Banking' },
       ]),
       vacancies: [
-        vacant('sample-westminster-tower', 0, 'Fl 3–4', 24_000, 18, [3, 4]),
-        vacant('sample-westminster-tower', 1, 'Fl 8–9', 24_000, 15, [8, 9]),
-        vacant('sample-westminster-tower', 2, 'Fl 12–13', 23_500, 12, [12, 13]),
+        vacant('sample-westminster-tower', 0, 'Fl 4–6', 26_700, 18, [4, 5, 6]),
+        vacant('sample-westminster-tower', 1, 'Fl 11–13', 26_700, 15, [11, 12, 13]),
+        vacant('sample-westminster-tower', 2, 'Fl 16–18', 26_100, 12, [16, 17, 18]),
       ],
     },
   }),
 
   property({
     id: 'sample-weybosset-commons',
-    name: 'Weybosset Commons (Sample)',
+    name: 'Dorrance Street Offices (Sample)',
     assetType: 'office',
     cls: 'B',
     submarket: 'downtown',
-    lng: -71.4138,
-    lat: 41.8227,
-    grossSF: 92_000,
-    rentableSF: 85_000,
+    address: '10 Dorrance St',
+    zip: '02903',
+    parcelId: '020-0018-0000',
+    lng: -71.41212,
+    lat: 41.82401,
+    grossSF: 281_100,
+    rentableSF: 259_700,
     yearBuilt: 1925,
     yearRenovated: 2008,
-    floors: 8,
+    floors: 10,
     zoning: 'D-1',
-    landAreaSF: 12_000,
-    assessedValue: 7_200_000,
+    landAreaSF: 28_200,
+    assessedValue: 22_000_000,
     tags: ['multi-tenant', 'historic', 'value-add'],
     rentRoll: {
       kind: 'commercial',
       leases: leases('sample-weybosset-commons', [
-        { tenant: 'Fieldstone Engineering', suite: '500–600', floors: [5, 6], sf: 22_000, start: '2020-05-01', end: '2027-04-30', rent: 21.0, esc: pct(0.025), type: 'full-service-gross', recovery: baseYear(2020), credit: 'local', industry: 'Engineering' },
-        { tenant: 'Granite Row Software', suite: '700–800', floors: [7, 8], sf: 18_000, start: '2021-10-01', end: '2026-12-31', rent: 19.75, esc: pct(0.025), type: 'full-service-gross', recovery: baseYear(2021), credit: 'local', industry: 'Technology' },
-        { tenant: 'Tidewater Staffing', suite: '200', floors: [2], sf: 9_500, start: '2022-02-01', end: '2027-01-31', rent: 20.5, esc: pct(0.03), type: 'full-service-gross', recovery: baseYear(2022), credit: 'local', industry: 'Staffing' },
-        { tenant: 'Bridgeway Counseling Associates', suite: '400', floors: [4], sf: 7_800, start: '2024-01-01', end: '2029-12-31', rent: 22.0, esc: pct(0.03), type: 'full-service-gross', recovery: baseYear(2024), credit: 'local', industry: 'Healthcare', freeRentMonths: 3, tiPerSF: 30 },
-        { tenant: 'Mainline Title Co.', suite: '100', floors: [1], sf: 6_200, start: '2019-08-01', end: '2028-07-31', rent: 20.0, esc: perSF(0.5), type: 'full-service-gross', recovery: baseYear(2019), credit: 'regional', industry: 'Real estate services' },
+        { tenant: 'Fieldstone Engineering', suite: '600–800', floors: [6, 7, 8], sf: 67_200, start: '2020-05-01', end: '2027-04-30', rent: 21.0, esc: pct(0.025), type: 'full-service-gross', recovery: baseYear(2020), credit: 'local', industry: 'Engineering' },
+        { tenant: 'Granite Row Software', suite: '900–1000', floors: [9, 10], sf: 55_000, start: '2021-10-01', end: '2026-12-31', rent: 19.75, esc: pct(0.025), type: 'full-service-gross', recovery: baseYear(2021), credit: 'local', industry: 'Technology' },
+        { tenant: 'Tidewater Staffing', suite: '200', floors: [2], sf: 29_000, start: '2022-02-01', end: '2027-01-31', rent: 20.5, esc: pct(0.03), type: 'full-service-gross', recovery: baseYear(2022), credit: 'local', industry: 'Staffing' },
+        { tenant: 'Bridgeway Counseling Associates', suite: '500', floors: [5], sf: 23_800, start: '2024-01-01', end: '2029-12-31', rent: 22.0, esc: pct(0.03), type: 'full-service-gross', recovery: baseYear(2024), credit: 'local', industry: 'Healthcare', freeRentMonths: 3, tiPerSF: 30 },
+        { tenant: 'Mainline Title Co.', suite: '100', floors: [1], sf: 18_900, start: '2019-08-01', end: '2028-07-31', rent: 20.0, esc: perSF(0.5), type: 'full-service-gross', recovery: baseYear(2019), credit: 'regional', industry: 'Real estate services' },
       ]),
       vacancies: [
-        vacant('sample-weybosset-commons', 0, '300', 11_000, 12, [3]),
-        vacant('sample-weybosset-commons', 1, '450', 10_500, 15, [4]),
+        vacant('sample-weybosset-commons', 0, '300–400', 33_700, 12, [3, 4]),
+        vacant('sample-weybosset-commons', 1, '550', 32_100, 15, [5]),
       ],
     },
   }),
@@ -288,12 +315,15 @@ export const SAMPLE_PROPERTIES: Property[] = [
     assetType: 'office',
     cls: 'A',
     submarket: 'capital-center',
-    lng: -71.4142,
-    lat: 41.8296,
+    address: '1 Citizens Plz',
+    zip: '02903',
+    parcelId: '019-0103-0000',
+    lng: -71.41116,
+    lat: 41.82765,
     grossSF: 196_000,
     rentableSF: 180_000,
     yearBuilt: 2004,
-    floors: 12,
+    floors: 13,
     zoning: 'D-1',
     landAreaSF: 45_000,
     assessedValue: 42_000_000,
@@ -309,13 +339,13 @@ export const SAMPLE_PROPERTIES: Property[] = [
             { termMonths: 60, rentBasis: 'percent-of-market', value: 0.95, noticeMonths: 12 },
           ],
         },
-        { tenant: 'Halsey & Ward LLP', suite: 'Fl 10–11', floors: [10, 11], sf: 38_000, start: '2022-04-01', end: '2032-03-31', rent: 33.0, esc: pct(0.025), type: 'full-service-gross', recovery: baseYear(2022), credit: 'regional', industry: 'Legal', freeRentMonths: 8, tiPerSF: 75 },
-        { tenant: 'Northgate Consulting', suite: 'Fl 7', floors: [7], sf: 24_000, start: '2019-09-01', end: '2027-08-31', rent: 30.5, esc: pct(0.025), type: 'full-service-gross', recovery: baseYear(2019), credit: 'national', industry: 'Consulting' },
-        { tenant: 'Capstone Wealth Partners', suite: 'Fl 12', floors: [12], sf: 15_000, start: '2021-01-01', end: '2028-12-31', rent: 32.0, esc: pct(0.0275), type: 'full-service-gross', recovery: baseYear(2021), credit: 'regional', industry: 'Financial services' },
+        { tenant: 'Halsey & Ward LLP', suite: 'Fl 11–12', floors: [11, 12], sf: 38_000, start: '2022-04-01', end: '2032-03-31', rent: 33.0, esc: pct(0.025), type: 'full-service-gross', recovery: baseYear(2022), credit: 'regional', industry: 'Legal', freeRentMonths: 8, tiPerSF: 75 },
+        { tenant: 'Northgate Consulting', suite: 'Fl 7–8', floors: [7, 8], sf: 24_000, start: '2019-09-01', end: '2027-08-31', rent: 30.5, esc: pct(0.025), type: 'full-service-gross', recovery: baseYear(2019), credit: 'national', industry: 'Consulting' },
+        { tenant: 'Capstone Wealth Partners', suite: 'Fl 13', floors: [13], sf: 15_000, start: '2021-01-01', end: '2028-12-31', rent: 32.0, esc: pct(0.0275), type: 'full-service-gross', recovery: baseYear(2021), credit: 'regional', industry: 'Financial services' },
       ]),
       vacancies: [
-        vacant('sample-capital-center-plaza', 0, 'Fl 9', 18_000, 12, [9]),
-        vacant('sample-capital-center-plaza', 1, 'Fl 8', 15_000, 9, [8]),
+        vacant('sample-capital-center-plaza', 0, 'Fl 10', 18_000, 12, [10]),
+        vacant('sample-capital-center-plaza', 1, 'Fl 9', 15_000, 9, [9]),
       ],
     },
   }),
@@ -326,24 +356,28 @@ export const SAMPLE_PROPERTIES: Property[] = [
     assetType: 'office',
     cls: 'A',
     submarket: 'jewelry-district',
-    lng: -71.4079,
-    lat: 41.8178,
-    grossSF: 132_000,
-    rentableSF: 120_000,
+    address: '1 Davol Sq',
+    // Tax roll lists 02901 (a PO-box ZIP); 02903 per OpenStreetMap address tags.
+    zip: '02903',
+    parcelId: '021-0441-0000',
+    lng: -71.40593,
+    lat: 41.81765,
+    grossSF: 57_600,
+    rentableSF: 52_400,
     yearBuilt: 2019,
-    floors: 6,
+    floors: 4,
     zoning: 'D-1',
     landAreaSF: 30_000,
-    assessedValue: 48_000_000,
+    assessedValue: 20_900_000,
     tags: ['life-science', 'NNN'],
     rentRoll: {
       kind: 'commercial',
       leases: leases('sample-innovation-lab', [
-        { tenant: 'Helix Therapeutics', suite: 'Fl 1–3', floors: [1, 2, 3], sf: 52_000, start: '2020-07-01', end: '2030-06-30', rent: 38.0, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'national', industry: 'Life science', tiPerSF: 150 },
-        { tenant: 'Coastal Robotics Lab', suite: 'Fl 5', floors: [5], sf: 26_000, start: '2022-01-01', end: '2029-12-31', rent: 36.5, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'regional', industry: 'Robotics', tiPerSF: 90 },
-        { tenant: 'Vireo Diagnostics', suite: 'Fl 6', floors: [6], sf: 18_000, start: '2023-05-01', end: '2028-04-30', rent: 39.0, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Life science', freeRentMonths: 6, tiPerSF: 120 },
+        { tenant: 'Helix Therapeutics', suite: 'Fl 1–2', floors: [1, 2], sf: 22_700, start: '2020-07-01', end: '2030-06-30', rent: 38.0, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'national', industry: 'Life science', tiPerSF: 150 },
+        { tenant: 'Coastal Robotics Lab', suite: 'Fl 4', floors: [4], sf: 11_400, start: '2022-01-01', end: '2029-12-31', rent: 36.5, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'regional', industry: 'Robotics', tiPerSF: 90 },
+        { tenant: 'Vireo Diagnostics', suite: 'Fl 4', floors: [4], sf: 7_900, start: '2023-05-01', end: '2028-04-30', rent: 39.0, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Life science', freeRentMonths: 6, tiPerSF: 120 },
       ]),
-      vacancies: [vacant('sample-innovation-lab', 0, 'Fl 4', 24_000, 15, [4])],
+      vacancies: [vacant('sample-innovation-lab', 0, 'Fl 3', 10_400, 15, [3])],
     },
   }),
 
@@ -354,16 +388,19 @@ export const SAMPLE_PROPERTIES: Property[] = [
     assetType: 'retail',
     cls: 'B',
     submarket: 'federal-hill',
-    lng: -71.4262,
-    lat: 41.8236,
-    grossSF: 19_500,
-    rentableSF: 18_000,
+    address: '245 Atwells Ave',
+    zip: '02909',
+    parcelId: '028-0361-0000',
+    lng: -71.42628,
+    lat: 41.82379,
+    grossSF: 15_600,
+    rentableSF: 14_400,
     yearBuilt: 1910,
     yearRenovated: 2014,
     floors: 3,
     zoning: 'C-2',
     landAreaSF: 7_500,
-    assessedValue: 4_300_000,
+    assessedValue: 3_400_000,
     tags: ['street retail', 'restaurant'],
     locationContext: context(
       [['Atwells Ave', 12_000, 0], ['Broadway', 9_500, 900], ['Route 6 / 10 connector', 98_000, 2_600]],
@@ -374,14 +411,14 @@ export const SAMPLE_PROPERTIES: Property[] = [
       kind: 'commercial',
       leases: leases('sample-atwells-retail-row', [
         {
-          tenant: 'Casa Lucenti Trattoria', suite: '101', sf: 4_200, start: '2015-03-01', end: '2030-02-28', rent: 24.0, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Restaurant',
+          tenant: 'Casa Lucenti Trattoria', suite: '101', sf: 3_400, start: '2015-03-01', end: '2030-02-28', rent: 24.0, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Restaurant',
           renewalOptions: [{ termMonths: 60, rentBasis: 'fixed', value: 30.0, noticeMonths: 9 }],
         },
-        { tenant: 'Hill Street Wine & Spirits', suite: '103', sf: 3_500, start: '2021-01-01', end: '2027-12-31', rent: 21.0, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Retail' },
-        { tenant: 'Cobblestone Community Bank', suite: '105', sf: 3_000, start: '2018-04-01', end: '2028-03-31', rent: 26.0, esc: pct(0.02), type: 'NNN', recovery: NET, credit: 'regional', industry: 'Banking' },
-        { tenant: 'Bellamonte Bakery', suite: '102', sf: 2_800, start: '2019-06-01', end: '2029-05-31', rent: 23.0, esc: perSF(0.5), type: 'NNN', recovery: NET, credit: 'local', industry: 'Food & beverage' },
+        { tenant: 'Hill Street Wine & Spirits', suite: '103', sf: 2_800, start: '2021-01-01', end: '2027-12-31', rent: 21.0, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Retail' },
+        { tenant: 'Cobblestone Community Bank', suite: '105', sf: 2_400, start: '2018-04-01', end: '2028-03-31', rent: 26.0, esc: pct(0.02), type: 'NNN', recovery: NET, credit: 'regional', industry: 'Banking' },
+        { tenant: 'Bellamonte Bakery', suite: '102', sf: 2_200, start: '2019-06-01', end: '2029-05-31', rent: 23.0, esc: perSF(0.5), type: 'NNN', recovery: NET, credit: 'local', industry: 'Food & beverage' },
       ]),
-      vacancies: [vacant('sample-atwells-retail-row', 0, '200', 4_500, 9)],
+      vacancies: [vacant('sample-atwells-retail-row', 0, '200', 3_600, 9)],
     },
   }),
 
@@ -391,16 +428,19 @@ export const SAMPLE_PROPERTIES: Property[] = [
     assetType: 'retail',
     cls: 'B',
     submarket: 'college-hill',
-    lng: -71.4010,
-    lat: 41.8284,
-    grossSF: 13_500,
-    rentableSF: 12_500,
+    address: '249 Thayer St',
+    zip: '02906',
+    parcelId: '013-0049-0000',
+    lng: -71.40069,
+    lat: 41.82847,
+    grossSF: 7_100,
+    rentableSF: 6_600,
     yearBuilt: 1948,
     yearRenovated: 2011,
     floors: 2,
     zoning: 'C-1',
     landAreaSF: 8_000,
-    assessedValue: 4_600_000,
+    assessedValue: 2_400_000,
     tags: ['street retail', 'student-driven'],
     locationContext: context(
       [['Thayer St', 8_500, 0], ['Angell St', 11_000, 300], ['I-195', 120_000, 4_200]],
@@ -410,12 +450,12 @@ export const SAMPLE_PROPERTIES: Property[] = [
     rentRoll: {
       kind: 'commercial',
       leases: leases('sample-thayer-shops', [
-        { tenant: 'Campus Outfitters', suite: 'A', sf: 4_000, start: '2017-08-01', end: '2027-07-31', rent: 30.0, esc: pct(0.025), type: 'NNN', recovery: NET, credit: 'regional', industry: 'Apparel' },
-        { tenant: 'Northbound Coffee Co.', suite: 'B', sf: 2_500, start: '2020-09-01', end: '2030-08-31', rent: 38.0, esc: pct(0.02), type: 'NNN', recovery: NET, credit: 'national', industry: 'Food & beverage' },
-        { tenant: 'Lotus Noodle House', suite: 'C', sf: 2_200, start: '2022-03-01', end: '2032-02-29', rent: 34.0, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Restaurant', freeRentMonths: 3 },
-        { tenant: 'Brightside Optometry', suite: 'D', sf: 1_800, start: '2021-05-01', end: '2026-11-30', rent: 31.0, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Medical retail' },
+        { tenant: 'Campus Outfitters', suite: 'A', sf: 2_100, start: '2017-08-01', end: '2027-07-31', rent: 30.0, esc: pct(0.025), type: 'NNN', recovery: NET, credit: 'regional', industry: 'Apparel' },
+        { tenant: 'Northbound Coffee Co.', suite: 'B', sf: 1_300, start: '2020-09-01', end: '2030-08-31', rent: 38.0, esc: pct(0.02), type: 'NNN', recovery: NET, credit: 'national', industry: 'Food & beverage' },
+        { tenant: 'Lotus Noodle House', suite: 'C', sf: 1_200, start: '2022-03-01', end: '2032-02-29', rent: 34.0, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Restaurant', freeRentMonths: 3 },
+        { tenant: 'Brightside Optometry', suite: 'D', sf: 1_000, start: '2021-05-01', end: '2026-11-30', rent: 31.0, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Medical retail' },
       ]),
-      vacancies: [vacant('sample-thayer-shops', 0, 'E', 2_000, 6)],
+      vacancies: [vacant('sample-thayer-shops', 0, 'E', 1_000, 6)],
     },
   }),
 
@@ -426,16 +466,19 @@ export const SAMPLE_PROPERTIES: Property[] = [
     assetType: 'industrial',
     cls: 'B',
     submarket: 'olneyville',
-    lng: -71.4448,
-    lat: 41.8178,
-    grossSF: 145_000,
-    rentableSF: 145_000,
+    address: '141 Hartford Ave',
+    zip: '02909',
+    parcelId: '105-0001-0000',
+    lng: -71.44764,
+    lat: 41.81707,
+    grossSF: 36_000,
+    rentableSF: 36_000,
     yearBuilt: 1968,
     yearRenovated: 2005,
     floors: 1,
     zoning: 'M-1',
     landAreaSF: 392_000,
-    assessedValue: 15_200_000,
+    assessedValue: 3_800_000,
     extras: {
       clearHeightFt: estimate(24, SAMPLE),
       loadingDocks: estimate(14, SAMPLE),
@@ -445,7 +488,7 @@ export const SAMPLE_PROPERTIES: Property[] = [
       kind: 'commercial',
       leases: leases('sample-olneyville-distribution', [
         {
-          tenant: 'Mill River Logistics', suite: 'Entire', sf: 145_000, start: '2019-01-01', end: '2028-12-31', rent: 7.25, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'national', industry: 'Logistics',
+          tenant: 'Mill River Logistics', suite: 'Entire', sf: 36_000, start: '2019-01-01', end: '2028-12-31', rent: 7.25, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'national', industry: 'Logistics',
           renewalOptions: [{ termMonths: 60, rentBasis: 'percent-of-market', value: 0.95, noticeMonths: 12 }],
         },
       ]),
@@ -459,16 +502,19 @@ export const SAMPLE_PROPERTIES: Property[] = [
     assetType: 'industrial',
     cls: 'B',
     submarket: 'port-allens-ave',
-    lng: -71.4048,
-    lat: 41.8031,
-    grossSF: 62_000,
-    rentableSF: 62_000,
+    address: '338 Allens Ave',
+    zip: '02905',
+    parcelId: '047-0368-0000',
+    lng: -71.40006,
+    lat: 41.80472,
+    grossSF: 32_400,
+    rentableSF: 32_400,
     yearBuilt: 1985,
     floors: 1,
     zoning: 'W-3',
     landAreaSF: 165_000,
     floodZone: 'AE',
-    assessedValue: 6_000_000,
+    assessedValue: 3_100_000,
     extras: {
       clearHeightFt: estimate(20, SAMPLE),
       loadingDocks: estimate(6, SAMPLE),
@@ -477,11 +523,11 @@ export const SAMPLE_PROPERTIES: Property[] = [
     rentRoll: {
       kind: 'commercial',
       leases: leases('sample-allens-ave-flex', [
-        { tenant: 'Harbor Marine Supply', suite: '1', sf: 28_000, start: '2018-06-01', end: '2027-05-31', rent: 8.0, esc: perSF(0.25), type: 'NNN', recovery: NET, credit: 'regional', industry: 'Marine distribution' },
-        { tenant: 'Ironbound Fabrication', suite: '2', sf: 18_000, start: '2021-03-01', end: '2026-12-31', rent: 8.75, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Manufacturing' },
-        { tenant: 'Quayside Brewing Co.', suite: '3', sf: 9_000, start: '2023-01-01', end: '2032-12-31', rent: 9.5, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Food & beverage', freeRentMonths: 4, tiPerSF: 15 },
+        { tenant: 'Harbor Marine Supply', suite: '1', sf: 14_600, start: '2018-06-01', end: '2027-05-31', rent: 8.0, esc: perSF(0.25), type: 'NNN', recovery: NET, credit: 'regional', industry: 'Marine distribution' },
+        { tenant: 'Ironbound Fabrication', suite: '2', sf: 9_400, start: '2021-03-01', end: '2026-12-31', rent: 8.75, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Manufacturing' },
+        { tenant: 'Quayside Brewing Co.', suite: '3', sf: 4_700, start: '2023-01-01', end: '2032-12-31', rent: 9.5, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Food & beverage', freeRentMonths: 4, tiPerSF: 15 },
       ]),
-      vacancies: [vacant('sample-allens-ave-flex', 0, '4', 7_000, 6)],
+      vacancies: [vacant('sample-allens-ave-flex', 0, '4', 3_700, 6)],
     },
   }),
 
@@ -492,25 +538,28 @@ export const SAMPLE_PROPERTIES: Property[] = [
     assetType: 'multifamily',
     cls: 'A',
     submarket: 'jewelry-district',
-    lng: -71.4098,
-    lat: 41.8193,
-    grossSF: 132_000,
-    rentableSF: 113_000,
+    address: '44 Hospital St',
+    zip: '02905',
+    parcelId: '021-0426-0000',
+    lng: -71.41014,
+    lat: 41.81657,
+    grossSF: 45_100,
+    rentableSF: 38_900,
     yearBuilt: 1910,
     yearRenovated: 2015,
     floors: 6,
     zoning: 'D-1',
     landAreaSF: 24_000,
-    assessedValue: 36_000_000,
-    extras: { unitCount: estimate(140, SAMPLE), parkingSpaces: estimate(90, SAMPLE) },
+    assessedValue: 12_300_000,
+    extras: { unitCount: estimate(48, SAMPLE), parkingSpaces: estimate(31, SAMPLE) },
     tags: ['loft conversion', 'historic tax credits'],
-    marketRentOverride: 2343,
+    marketRentOverride: 2350,
     rentRoll: {
       kind: 'multifamily',
       unitTypes: [
-        unitType('studio', 'Studio', 30, 28, 550, 1750, 1680),
-        unitType('1br', '1BR / 1BA', 70, 67, 750, 2250, 2150),
-        unitType('2br', '2BR / 2BA', 40, 38, 1100, 2950, 2850),
+        unitType('studio', 'Studio', 10, 10, 550, 1750, 1680),
+        unitType('1br', '1BR / 1BA', 24, 23, 750, 2250, 2150),
+        unitType('2br', '2BR / 2BA', 14, 13, 1100, 2950, 2850),
       ],
       otherIncomePerUnitMonthly: estimate(85, SAMPLE, { notes: 'Parking, pet, storage' }),
     },
@@ -522,24 +571,28 @@ export const SAMPLE_PROPERTIES: Property[] = [
     assetType: 'multifamily',
     cls: 'B',
     submarket: 'federal-hill',
-    lng: -71.4291,
-    lat: 41.8219,
-    grossSF: 42_000,
-    rentableSF: 35_700,
+    address: '18 Spruce St',
+    // Tax roll lists 02901 (a PO-box ZIP); 02903 per US Census geocoder.
+    zip: '02903',
+    parcelId: '026-0387-0000',
+    lng: -71.42396,
+    lat: 41.8241,
+    grossSF: 33_400,
+    rentableSF: 28_200,
     yearBuilt: 1925,
     yearRenovated: 2012,
     floors: 4,
     zoning: 'R-3',
     landAreaSF: 14_000,
-    assessedValue: 7_400_000,
-    extras: { unitCount: estimate(48, SAMPLE) },
+    assessedValue: 5_900_000,
+    extras: { unitCount: estimate(38, SAMPLE) },
     tags: ['walk-up', 'loss-to-lease'],
-    marketRentOverride: 1800,
+    marketRentOverride: 1797,
     rentRoll: {
       kind: 'multifamily',
       unitTypes: [
-        unitType('1br', '1BR / 1BA', 30, 29, 650, 1650, 1525),
-        unitType('2br', '2BR / 1BA', 18, 17, 900, 2050, 1925),
+        unitType('1br', '1BR / 1BA', 24, 23, 650, 1650, 1525),
+        unitType('2br', '2BR / 1BA', 14, 14, 900, 2050, 1925),
       ],
       otherIncomePerUnitMonthly: estimate(40, SAMPLE, { notes: 'Laundry, storage' }),
     },

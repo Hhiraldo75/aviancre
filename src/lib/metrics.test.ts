@@ -49,12 +49,12 @@ describe('currentRentPerSF', () => {
 describe('occupancy', () => {
   it('uses active leases only', () => {
     const p = byId('sample-westminster-tower')
-    expect(occupancy(p, AS_OF)).toBeCloseTo(248_500 / 320_000, 6)
+    expect(occupancy(p, AS_OF)).toBeCloseTo(276_400 / 355_900, 6)
     // The bank lease expires 2026-12-31, so it drops out on Jan 1.
-    expect(occupancy(p, '2027-01-01')).toBeCloseTo(236_500 / 320_000, 6)
+    expect(occupancy(p, '2027-01-01')).toBeCloseTo(263_100 / 355_900, 6)
   })
   it('uses occupied units for multifamily', () => {
-    expect(occupancy(byId('sample-federal-hill-apartments'), AS_OF)).toBeCloseTo(46 / 48, 6)
+    expect(occupancy(byId('sample-federal-hill-apartments'), AS_OF)).toBeCloseTo(37 / 38, 6)
   })
 })
 
@@ -65,9 +65,9 @@ describe('mark-to-market', () => {
   })
   it('works per unit for multifamily', () => {
     const p = byId('sample-federal-hill-apartments')
-    const inPlace = (29 * 1525 + 17 * 1925) / 46
+    const inPlace = (23 * 1525 + 14 * 1925) / 37
     expect(averageInPlaceRent(p, AS_OF)).toBeCloseTo(inPlace, 6)
-    expect(markToMarket(p, AS_OF)).toBeCloseTo(1800 / inPlace - 1, 6)
+    expect(markToMarket(p, AS_OF)).toBeCloseTo(1797 / inPlace - 1, 6)
   })
 })
 
