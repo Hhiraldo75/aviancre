@@ -1,0 +1,89 @@
+import type {
+  AssetType,
+  BuildingClass,
+  ISODate,
+  Pct,
+  SF,
+  Sourced,
+  USD,
+} from './common'
+import type { LocationContext } from './context'
+import type { RentRoll } from './lease'
+import type { RentBasis, SubmarketId } from './market'
+
+export interface PropertyLocation {
+  address: string
+  city: string
+  state: string
+  zip?: string
+  lng: number
+  lat: number
+  submarket: SubmarketId
+  /** Assessor parcel ID (plat/lot in Providence); links to public records. */
+  parcelId?: string
+  /** True when coordinates are a placeholder, not a geocoded address. */
+  isApproximate: boolean
+}
+
+export interface PhysicalCharacteristics {
+  grossBuildingSF: Sourced<SF>
+  /** Leasable area; the denominator for occupancy and rent per SF. */
+  rentableSF: Sourced<SF>
+  landAreaSF?: Sourced<SF>
+  yearBuilt: Sourced<number>
+  yearRenovated?: Sourced<number>
+  floors: Sourced<number>
+  heightFt?: Sourced<number>
+  parkingSpaces?: Sourced<number>
+  /** Multifamily only. */
+  unitCount?: Sourced<number>
+  /** Industrial only. */
+  clearHeightFt?: Sourced<number>
+  loadingDocks?: Sourced<number>
+}
+
+export interface ZoningInfo {
+  district: Sourced<string>
+  maxHeightFt?: Sourced<number>
+  maxFAR?: Sourced<number>
+  /** FEMA flood zone designation, e.g. "X", "AE". */
+  floodZone?: Sourced<string>
+  opportunityZone?: Sourced<boolean>
+  historicDistrict?: Sourced<boolean>
+}
+
+export interface Valuation {
+  assessedValue: Sourced<USD>
+  assessmentYear?: number
+  lastSalePrice?: Sourced<USD>
+  lastSaleDate?: Sourced<ISODate>
+  owner?: Sourced<string>
+}
+
+/** Market-level metrics resolved for this specific property. */
+export interface PropertyMarketView {
+  rentBasis: RentBasis
+  /** Estimated market rent for this building (after class/location adjustments). */
+  marketRent: Sourced<USD>
+  marketVacancy: Sourced<Pct>
+  marketCapRate: Sourced<Pct>
+  opexPerYear: Sourced<USD>
+}
+
+export interface Property {
+  id: string
+  name: string
+  assetType: AssetType
+  buildingClass: BuildingClass
+  location: PropertyLocation
+  physical: PhysicalCharacteristics
+  zoning: ZoningInfo
+  valuation: Valuation
+  market: PropertyMarketView
+  rentRoll: RentRoll
+  /** Traffic, demographics and walkability around the site. */
+  locationContext?: LocationContext
+  tags?: string[]
+  /** True for demo data. The UI should badge these clearly. */
+  isSample: boolean
+}
