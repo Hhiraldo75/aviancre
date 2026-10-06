@@ -8,12 +8,16 @@
 - [x] Map ↔ sidebar sync: occupancy-colored buildings, click to select, fly-to
 - [x] Persona dashboard: Analyst / Broker / Developer / Investment views
 - [x] Tested calculations: occupancy, WALT, mark-to-market, NOI, IRR, stacking plan, FAR capacity
+- [x] Click any building → live public record: Providence Open Data 2025 tax roll (owner, land use, assessed value, taxes, condo units), plus City GIS zoning, flood, year built, building size and parcel outline when that server is reachable
 
 ## Next
-1. **Real building footprints and parcels**
-   - Load Rhode Island GIS (RIGIS) building footprints and Providence parcel/assessor data
-   - Attach each sample property to a real parcel and footprint instead of a placeholder square
-   - Use measured heights where available
+1. **Real building footprints and parcels** (in progress)
+   - [x] Live tax-roll lookup (Providence Open Data, works from any network)
+   - [x] City GIS enrichment (zoning, flood, building size, outline) when reachable; blocked from some non-US networks
+   - [ ] For deployment: a small US-hosted relay so GIS details work for every visitor
+   - [ ] Attach each sample property to a real parcel instead of a placeholder square
+   - [ ] Decode state/municipal use codes into plain-language property types
+   - Footprints: keep OpenStreetMap buildings (the statewide RIGIS layer is 2018 machine-generated outlines with no heights)
 2. **Photorealistic 3D toggle**
    - Optional "Photorealistic" mode using Google Photorealistic 3D Tiles (deck.gl or CesiumJS)
    - Translucent highlight of the selected property over the photo mesh

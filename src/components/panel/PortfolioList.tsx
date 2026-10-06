@@ -22,7 +22,11 @@ export default function PortfolioList() {
         <Stat label="Apartment units" value={fmt.int(units)} />
       </div>
 
-      <p className="mb-2 mt-5 text-[10px] uppercase tracking-wide text-slate-500">Select a property · or click a building</p>
+      <p className="mt-4 rounded-md bg-blue-500/10 px-3 py-2 text-xs text-blue-200">
+        Click any building on the map to see its City of Providence public record.
+      </p>
+
+      <p className="mb-2 mt-5 text-[10px] uppercase tracking-wide text-slate-500">Sample properties</p>
       <ul className="-mx-2">
         {properties.map((p) => {
           const occ = occupancy(p, asOf)

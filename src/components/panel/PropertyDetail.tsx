@@ -18,13 +18,13 @@ const VIEWS: Record<Persona, (props: { property: Property }) => ReturnType<typeo
 /** Selected-property shell: shared header, then the active persona's cards. */
 export default function PropertyDetail({ property: p }: { property: Property }) {
   const asOf = useAppStore((s) => s.asOf)
-  const select = useAppStore((s) => s.select)
+  const clear = useAppStore((s) => s.clearSelection)
   const persona = useAppStore((s) => s.activePersona)
   const View = VIEWS[persona]
 
   return (
     <div>
-      <button onClick={() => select(null)} className="mb-2 text-xs text-slate-400 hover:text-slate-100">
+      <button onClick={clear} className="mb-2 text-xs text-slate-400 hover:text-slate-100">
         ← All properties
       </button>
       <h2 className="text-lg font-semibold leading-tight">{p.name}</h2>

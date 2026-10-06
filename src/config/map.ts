@@ -12,8 +12,13 @@ export const MAP_CONFIG = {
 export const LAYER_IDS = {
   contextBuildings: 'osm-buildings-3d',
   properties: 'sample-properties-3d',
+  parcelFill: 'selected-parcel-fill',
+  parcelLine: 'selected-parcel-line',
+  clickPoint: 'parcel-click-point',
 } as const
 
 export const SOURCE_IDS = {
   properties: 'sample-properties',
+  parcel: 'selected-parcel',
+  clickPoint: 'parcel-click-point',
 } as const

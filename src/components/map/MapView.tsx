@@ -1,11 +1,41 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import maplibregl, { type GeoJSONSource, type Map as MaplibreMap } from 'maplibre-gl'
+import type { FeatureCollection } from 'geojson'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { LAYER_IDS, MAP_CONFIG, SOURCE_IDS } from '../../config/map'
 import { propertiesToGeoJSON } from '../../lib/geo'
 import { fmt } from '../../lib/format'
 import { useAppStore } from '../../store/useAppStore'
+import type { ParcelLookup } from '../../types'
 import MapLegend from './MapLegend'
+
+const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
+
+/** Outline of the looked-up parcel, when the city GIS server provided one. */
+function parcelGeoJSON(lookup: ParcelLookup): FeatureCollection {
+  if (lookup.status !== 'loaded' || lookup.gis.status !== 'ok' || !lookup.gis.parcel.geometry) return EMPTY
+  return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: lookup.gis.parcel.geometry }] }
+}
+
+/**
+ * A dot: where the user clicked (loading / not found), or the matched tax-roll
+ * location when there's no parcel outline to draw.
+ */
+function clickPointGeoJSON(lookup: ParcelLookup): FeatureCollection {
+  if (lookup.status === 'idle') return EMPTY
+  let coords: [number, number] = [lookup.lng, lookup.lat]
+  let status: string = lookup.status
+  if (lookup.status === 'loaded') {
+    if (lookup.gis.status === 'ok' && lookup.gis.parcel.geometry) return EMPTY
+    if (!lookup.record) return EMPTY
+    coords = [lookup.record.lng, lookup.record.lat]
+    status = 'matched'
+  }
+  return {
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', properties: { status }, geometry: { type: 'Point', coordinates: coords } }],
+  }
+}
 
 export default function MapView() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -16,6 +46,7 @@ export default function MapView() {
   const properties = useAppStore((s) => s.properties)
   const asOf = useAppStore((s) => s.asOf)
   const selectedId = useAppStore((s) => s.selectedId)
+  const parcel = useAppStore((s) => s.parcel)
 
   const geojson = useMemo(() => propertiesToGeoJSON(properties, asOf), [properties, asOf])
   // Read the latest data inside map callbacks without re-creating the map.
@@ -80,12 +111,45 @@ export default function MapView() {
         },
       })
 
+      // Looked-up public parcel: translucent footprint + outline drawn over the buildings.
+      map.addSource(SOURCE_IDS.parcel, { type: 'geojson', data: EMPTY })
+      map.addLayer({
+        id: LAYER_IDS.parcelFill,
+        type: 'fill',
+        source: SOURCE_IDS.parcel,
+        paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.18 },
+      })
+      map.addLayer({
+        id: LAYER_IDS.parcelLine,
+        type: 'line',
+        source: SOURCE_IDS.parcel,
+        paint: { 'line-color': '#2563eb', 'line-width': 3 },
+      })
+
+      map.addSource(SOURCE_IDS.clickPoint, { type: 'geojson', data: EMPTY })
+      map.addLayer({
+        id: LAYER_IDS.clickPoint,
+        type: 'circle',
+        source: SOURCE_IDS.clickPoint,
+        paint: {
+          'circle-radius': 7,
+          'circle-color': ['match', ['get', 'status'], 'matched', '#2563eb', 'loading', '#60a5fa', '#94a3b8'],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+        },
+      })
+
       setLoaded(true)
     })
 
-    map.on('click', LAYER_IDS.properties, (e) => {
-      const id = e.features?.[0]?.properties?.id
+    // Sample building → its dashboard. Anywhere else → look up the real public parcel there.
+    map.on('click', (e) => {
+      const hit = map.getLayer(LAYER_IDS.properties)
+        ? map.queryRenderedFeatures(e.point, { layers: [LAYER_IDS.properties] })[0]
+        : undefined
+      const id = hit?.properties?.id
       if (typeof id === 'string') useAppStore.getState().select(id)
+      else void useAppStore.getState().lookupParcel(e.lngLat.lng, e.lngLat.lat)
     })
 
     map.on('mousemove', LAYER_IDS.properties, (e) => {
@@ -136,6 +200,14 @@ export default function MapView() {
     }
     prevSelectedRef.current = selectedId
   }, [selectedId, loaded, properties])
+
+  // 4. Show the looked-up parcel outline and the click point.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !loaded) return
+    ;(map.getSource(SOURCE_IDS.parcel) as GeoJSONSource | undefined)?.setData(parcelGeoJSON(parcel))
+    ;(map.getSource(SOURCE_IDS.clickPoint) as GeoJSONSource | undefined)?.setData(clickPointGeoJSON(parcel))
+  }, [parcel, loaded])
 
   return (
     <div className="relative h-full w-full">
