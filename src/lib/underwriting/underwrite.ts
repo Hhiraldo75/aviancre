@@ -16,6 +16,8 @@ export const DSCR_FLOOR = 1.25
 export const ROLLOVER_CONCENTRATION = 0.25
 export const LOW_OCCUPANCY = 0.8
 export const MARK_TO_MARKET_THRESHOLD = 0.1
+/** Minimum year-1 debt yield most lenders look for; reported, not warned on. */
+export const DEBT_YIELD_FLOOR = 0.09
 
 /** Net sale proceeds: exit-year NOI ÷ exit cap, less selling costs. */
 export function saleProceeds(exitNOI: number, exitCapRate: number, sellingCostsPct: number) {
