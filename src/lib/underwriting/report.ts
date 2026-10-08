@@ -40,7 +40,7 @@ function yearZero(r: UnderwritingResult, key: LineKey): number | null {
 
 export interface ReportRow {
   label: string
-  /** Year 0, years 1..N, then the forward year. */
+  /** Year 0, years 1..N, the forward year, then the normalized exit year. */
   values: (number | null)[]
 }
 
@@ -48,21 +48,26 @@ export function cashFlowRows(r: UnderwritingResult): ReportRow[] {
   const isMF = r.assumptions.multifamily !== undefined
   const occupancy: ReportRow = {
     label: 'Occupancy',
-    values: [null, ...r.cashFlows.map((c) => c.occupancy), r.forwardYear.occupancy],
+    values: [null, ...r.cashFlows.map((c) => c.occupancy), r.forwardYear.occupancy, null],
   }
   return [
     occupancy,
     ...lines(isMF).map(([label, key]) => ({
       label,
-      values: [yearZero(r, key), ...r.cashFlows.map((c) => c[key]), forwardValue(r, key)],
+      values: [
+        yearZero(r, key),
+        ...r.cashFlows.map((c) => c[key]),
+        forwardValue(r.forwardYear, key),
+        forwardValue(r.normalizedExitYear, key),
+      ],
     })),
   ]
 }
 
-/** The forward year has no debt or sale lines. */
-function forwardValue(r: UnderwritingResult, key: LineKey): number | null {
+/** The forward and normalized exit years have no debt or sale lines. */
+function forwardValue(year: AnnualCashFlow, key: LineKey): number | null {
   const noDebt: LineKey[] = ['debtService', 'cashFlowAfterDebt', 'saleProceeds', 'loanPayoff', 'unleveredCashFlow', 'leveredCashFlow']
-  return noDebt.includes(key) ? null : r.forwardYear[key]
+  return noDebt.includes(key) ? null : year[key]
 }
 
 const pct = (x: number | null, digits = 2) => (x === null ? 'n/a' : `${(x * 100).toFixed(digits)}%`)
@@ -79,6 +84,8 @@ export function metricRows(r: UnderwritingResult): [label: string, value: string
     ['Going-in cap rate', pct(m.goingInCapRate)],
     ['Loan amount', usd(m.loanAmount)],
     ['Equity required', usd(m.equityRequired)],
+    [`Year-${r.normalizedExitYear.year} NOI (raw)`, usd(m.exitNOIRaw)],
+    [`Year-${r.normalizedExitYear.year} NOI (normalized, used for sale)`, usd(m.exitNOI)],
     ['Exit value (gross)', usd(m.exitValue)],
     ['Net sale proceeds', usd(m.netSaleProceeds)],
     ['Loan payoff at sale', usd(m.loanPayoff)],
@@ -93,7 +100,17 @@ export function metricRows(r: UnderwritingResult): [label: string, value: string
     ['Average cash-on-cash', pct(m.averageCashOnCash)],
     ['Cash-on-cash by year', byYear(m.cashOnCashByYear, (x) => pct(x, 1))],
     ['WALT (years)', m.walt === null ? 'n/a' : m.walt.toFixed(2)],
+    ['In-place vs market rent', inPlaceVsMarket(r)],
   ]
+}
+
+function inPlaceVsMarket(r: UnderwritingResult): string {
+  const m = r.metrics
+  if (m.inPlaceRent === null || m.inPlaceVsMarket === null) return 'n/a'
+  const basis = r.assumptions.multifamily ? '/unit/mo' : '/SF/yr'
+  const money = (x: number) => `$${x.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const sign = m.inPlaceVsMarket >= 0 ? '+' : '−'
+  return `${money(m.inPlaceRent)} vs ${money(m.marketRent)}${basis} (${sign}${pct(Math.abs(m.inPlaceVsMarket), 1)})`
 }
 
 export interface AssumptionRow {
@@ -144,7 +161,7 @@ export function toTable(r: UnderwritingResult): string {
   const colWidth = 9
   const header =
     '$000s'.padEnd(labelWidth) +
-    ['Yr 0', ...r.cashFlows.map((c) => `Yr ${c.year}`), `Yr ${H + 1}*`].map((h) => h.padStart(colWidth)).join('')
+    ['Yr 0', ...r.cashFlows.map((c) => `Yr ${c.year}`), `Yr ${H + 1}*`, `Norm.**`].map((h) => h.padStart(colWidth)).join('')
   const body = rows.map((row) => {
     const isOcc = row.label === 'Occupancy'
     const cells = row.values.map((v) => {
@@ -155,8 +172,15 @@ export function toTable(r: UnderwritingResult): string {
     })
     return row.label.padEnd(labelWidth) + cells.map((c) => c.padStart(colWidth)).join('')
   })
-  const rule = '-'.repeat(labelWidth + colWidth * (H + 2))
-  return [header, rule, ...body, rule, `* Year ${H + 1} is modeled only to value the exit on forward NOI.`].join('\n')
+  const rule = '-'.repeat(labelWidth + colWidth * (H + 3))
+  return [
+    header,
+    rule,
+    ...body,
+    rule,
+    `* Year ${H + 1} is modeled only to value the exit on forward NOI.`,
+    `** Year ${r.normalizedExitYear.year} normalized: rollover vacancy and free rent replaced by general vacancy. The sale uses this NOI.`,
+  ].join('\n')
 }
 
 function csvCell(v: string | number | boolean | null | undefined): string {
@@ -173,7 +197,13 @@ export function toCSV(r: UnderwritingResult, propertyName: string): string {
   out.push([`AVIANCRE underwriting: ${propertyName}`])
   out.push([`Analysis start ${r.assumptions.acquisition.analysisStartDate}; losses and costs are positive amounts`])
   out.push([])
-  out.push(['Line', 'Year 0', ...r.cashFlows.map((c) => `Year ${c.year}`), `Year ${H + 1} (forward)`])
+  out.push([
+    'Line',
+    'Year 0',
+    ...r.cashFlows.map((c) => `Year ${c.year}`),
+    `Year ${H + 1} (forward, raw)`,
+    `Year ${r.normalizedExitYear.year} (normalized for sale)`,
+  ])
   for (const row of cashFlowRows(r)) out.push([row.label, ...row.values])
   out.push([])
   out.push(['Metric', 'Value'])

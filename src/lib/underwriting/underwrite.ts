@@ -6,14 +6,15 @@ import type {
   UnderwritingMetrics,
   UnderwritingResult,
 } from '../../types'
-import { walt } from '../metrics'
+import { averageInPlaceRent, walt } from '../metrics'
 import { defaultAssumptions } from './defaults'
 import { irr, loanSchedule, npv, payment } from './finance'
-import { operatingCashFlows, type OperatingYear } from './waterfall'
+import { normalizeForExit, operatingCashFlows, type OperatingYear } from './waterfall'
 
 export const DSCR_FLOOR = 1.25
 export const ROLLOVER_CONCENTRATION = 0.25
 export const LOW_OCCUPANCY = 0.8
+export const MARK_TO_MARKET_THRESHOLD = 0.1
 
 /** Net sale proceeds: exit-year NOI ÷ exit cap, less selling costs. */
 export function saleProceeds(exitNOI: number, exitCapRate: number, sellingCostsPct: number) {
@@ -52,8 +53,9 @@ export function underwrite(
   const equity = totalCost - loanAmount + loanFee
 
   // ---- sale ----
-  const exitNOI = a.exit.capForwardNOI ? forward.netOperatingIncome : hold[H - 1].netOperatingIncome
-  const sale = saleProceeds(exitNOI, a.exit.exitCapRate.value, a.exit.sellingCostsPct.value)
+  const exitYear = a.exit.capForwardNOI ? forward : hold[H - 1]
+  const normalizedExit = normalizeForExit(exitYear, a.operating)
+  const sale = saleProceeds(normalizedExit.netOperatingIncome, a.exit.exitCapRate.value, a.exit.sellingCostsPct.value)
 
   const cashFlows: AnnualCashFlow[] = hold.map((y, i) => {
     const isExit = i === H - 1
@@ -69,14 +71,17 @@ export function underwrite(
       leveredCashFlow: afterDebt + proceeds - payoff,
     })
   })
-  const forwardYear = annual(forward, {
-    debtService: 0,
-    cashFlowAfterDebt: forward.cashFlowBeforeDebt,
-    saleProceeds: 0,
-    loanPayoff: 0,
-    unleveredCashFlow: 0,
-    leveredCashFlow: 0,
-  })
+  const noDebt = (y: OperatingYear) =>
+    annual(y, {
+      debtService: 0,
+      cashFlowAfterDebt: y.cashFlowBeforeDebt,
+      saleProceeds: 0,
+      loanPayoff: 0,
+      unleveredCashFlow: 0,
+      leveredCashFlow: 0,
+    })
+  const forwardYear = noDebt(forward)
+  const normalizedExitYear = noDebt(normalizedExit)
 
   // ---- returns ----
   const unlevered = [-totalCost, ...cashFlows.map((c) => c.unleveredCashFlow)]
@@ -87,10 +92,15 @@ export function underwrite(
   const dscrByYear = hasDebt ? cashFlows.map((c) => c.netOperatingIncome / c.debtService) : []
   const cashOnCashByYear = cashFlows.map((c) => c.cashFlowAfterDebt / equity)
 
+  const inPlaceRent = averageInPlaceRent(property, asOf)
+  const marketRent = a.leasing.marketRent.value
+
   const metrics: UnderwritingMetrics = {
     purchasePrice: price,
     totalCost,
     goingInCapRate: noi1 / price,
+    exitNOIRaw: exitYear.netOperatingIncome,
+    exitNOI: normalizedExit.netOperatingIncome,
     exitValue: sale.gross,
     netSaleProceeds: sale.net,
     pricePerSF: price / property.physical.rentableSF.value,
@@ -108,6 +118,9 @@ export function underwrite(
     equityRequired: equity,
     npv: npv(a.discountRate.value, unlevered),
     walt: walt(property, asOf),
+    inPlaceRent,
+    marketRent,
+    inPlaceVsMarket: inPlaceRent !== null && marketRent ? inPlaceRent / marketRent - 1 : null,
   }
 
   const loanConstant = hasDebt ? (payment(1, rate / 12, amortMonths) * 12) : null
@@ -118,6 +131,7 @@ export function underwrite(
     assumptions: a,
     cashFlows,
     forwardYear,
+    normalizedExitYear,
     metrics,
     generatedAt: new Date().toISOString(),
     warnings,
@@ -187,6 +201,15 @@ function buildWarnings(
     out.push(
       `Negative leverage: the ${pct(m.goingInCapRate, 2)} going-in cap rate is below the ${pct(loanConstant, 2)} ` +
         `loan constant, so debt lowers the cash yield once the loan amortizes.`,
+    )
+  }
+
+  if (m.inPlaceVsMarket !== null && Math.abs(m.inPlaceVsMarket) > MARK_TO_MARKET_THRESHOLD) {
+    const above = m.inPlaceVsMarket > 0
+    const turn = property.rentRoll.kind === 'multifamily' ? 'units turn' : 'leases roll'
+    out.push(
+      `In-place rents are ${pct(Math.abs(m.inPlaceVsMarket), 0)} ${above ? 'above' : 'below'} market; ` +
+        `income ${above ? 'declines' : 'rises'} as ${turn}.`,
     )
   }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Escalation, Lease, Property, VacantSpace } from '../../types'
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties'
+import { estimate } from '../sourced'
 import { commercialMonths } from './commercial'
 import { defaultAssumptions, withPurchasePrice } from './defaults'
 import { irr, loanSchedule, npv, payment } from './finance'
@@ -9,7 +10,7 @@ import { assumptionRows, toCSV } from './report'
 import { blendTerms, leaseValuePerSF } from './rollover'
 import { analysisStartFor, monthAfter } from './timeline'
 import { saleProceeds, underwrite } from './underwrite'
-import { applyWaterfall, generalVacancy } from './waterfall'
+import { applyWaterfall, generalVacancy, normalizeForExit } from './waterfall'
 
 const AS_OF = '2026-10-04' // analysis starts 2026-11-01
 const byId = (id: string) => {
@@ -177,6 +178,36 @@ describe('general vacancy floor', () => {
   })
 })
 
+describe('exit normalization', () => {
+  it('swaps rollover vacancy and free rent for the general vacancy rate', () => {
+    const op = defaultAssumptions(ATWELLS, AS_OF).operating
+    const raw = applyWaterfall(
+      11,
+      {
+        occupancy: 0.9,
+        grossPotentialRent: 900_000,
+        absorptionTurnoverVacancy: 60_000,
+        freeRent: 25_000,
+        expenseRecoveries: 100_000,
+        otherIncome: 0,
+        propertyExpenses: 150_000,
+        tenantImprovements: 80_000,
+        leasingCommissions: 40_000,
+        capitalReserves: 3_600,
+      },
+      op,
+    )
+    const n = normalizeForExit(raw, op)
+    expect(n.absorptionTurnoverVacancy).toBe(0)
+    expect(n.freeRent).toBe(0)
+    expect(n.generalVacancy).toBeCloseTo(50_000, 9) // 5% × (900,000 + 100,000)
+    // EGI = 950,000 × 0.99 (credit loss); NOI = EGI × 0.97 (mgmt) − 150,000
+    expect(n.netOperatingIncome).toBeCloseTo(950_000 * 0.99 * 0.97 - 150_000, 6)
+    // Raw: 60,000 rollover vacancy already exceeds the 50,000 floor, so no general vacancy.
+    expect(raw.netOperatingIncome).toBeCloseTo(915_000 * 0.99 * 0.97 - 150_000, 6)
+  })
+})
+
 describe('loan amortization', () => {
   it('matches the PMT formula: $1M, 6.5%, 30 years', () => {
     expect(payment(1_000_000, 0.065 / 12, 360)).toBeCloseTo(6_320.68, 2)
@@ -241,6 +272,14 @@ describe('defaults', () => {
 
 describe('underwrite (integration)', () => {
   const r = underwrite(ATWELLS, AS_OF)
+  /** Normalized year-11 NOI rebuilt by hand from the raw forward-year lines. */
+  const handNormalizedNOI = () => {
+    const f = r.forwardYear
+    const op = r.assumptions.operating
+    const potential = f.grossPotentialRent + f.expenseRecoveries + f.otherIncome
+    const egi = potential * (1 - op.generalVacancyPct.value) * (1 - op.creditLossPct.value)
+    return egi * (1 - op.managementFeePct.value) - (f.operatingExpenses - f.managementFee)
+  }
 
   it('accounts for every rentable SF in every month', () => {
     for (const row of monthsFor(ATWELLS)) expect(row.potentialSF).toBeCloseTo(14_400, 6)
@@ -262,13 +301,33 @@ describe('underwrite (integration)', () => {
       )
     }
   })
-  it('sells on year-11 NOI and repays the loan', () => {
+  it('sells on normalized year-11 NOI and repays the loan', () => {
     const a = r.assumptions
-    const sale = saleProceeds(r.forwardYear.netOperatingIncome, a.exit.exitCapRate.value, a.exit.sellingCostsPct.value)
+    expect(r.metrics.exitNOIRaw).toBeCloseTo(r.forwardYear.netOperatingIncome, 6)
+    expect(r.metrics.exitNOI).toBeCloseTo(handNormalizedNOI(), 6)
+    // Atwells has space in downtime in year 11, so normalizing raises NOI.
+    expect(r.metrics.exitNOI).toBeGreaterThan(r.metrics.exitNOIRaw)
+    expect(r.metrics.exitValue).toBeCloseTo(r.metrics.exitNOI / a.exit.exitCapRate.value, 6)
+    const sale = saleProceeds(r.metrics.exitNOI, a.exit.exitCapRate.value, a.exit.sellingCostsPct.value)
     const y10 = r.cashFlows[9]
     expect(y10.saleProceeds).toBeCloseTo(sale.net, 6)
     expect(y10.leveredCashFlow).toBeCloseTo(y10.cashFlowAfterDebt + sale.net - r.metrics.loanPayoff, 6)
     expect(r.metrics.loanAmount).toBeCloseTo(0.6 * r.metrics.purchasePrice, 6)
+  })
+  it('compares in-place rent to market and warns when they differ by more than 10%', () => {
+    // Atwells in-place leases average well above the $22 market rent.
+    expect(r.metrics.inPlaceVsMarket).toBeCloseTo((r.metrics.inPlaceRent ?? 0) / r.metrics.marketRent - 1, 12)
+    const pctAbove = Math.round((r.metrics.inPlaceVsMarket ?? 0) * 100)
+    expect(r.warnings).toContain(`In-place rents are ${pctAbove}% above market; income declines as leases roll.`)
+
+    const withMarket = (rent: number) => ({
+      ...r.assumptions,
+      leasing: { ...r.assumptions.leasing, marketRent: estimate(rent, 'test') },
+    })
+    const below = underwrite(ATWELLS, AS_OF, withMarket(40)).warnings
+    expect(below.some((w) => /^In-place rents are \d+% below market; income rises as leases roll\.$/.test(w))).toBe(true)
+    const atMarket = underwrite(ATWELLS, AS_OF, withMarket(r.metrics.inPlaceRent ?? 0)).warnings
+    expect(atMarket.some((w) => w.startsWith('In-place rents'))).toBe(false)
   })
   it('flags a below-1.25x DSCR with a plain-language warning', () => {
     const tight = withPurchasePrice(r.assumptions, r.metrics.purchasePrice * 1.6)

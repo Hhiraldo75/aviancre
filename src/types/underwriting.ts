@@ -147,7 +147,11 @@ export interface UnderwritingMetrics {
   /** Price + closing costs + initial capex. */
   totalCost: USD
   goingInCapRate: Pct
-  /** Gross sale value: forward NOI ÷ exit cap. */
+  /** Exit-year NOI as modeled, including rollover vacancy and free rent. */
+  exitNOIRaw: USD
+  /** Exit-year NOI with rollover vacancy and free rent replaced by general vacancy; used for the sale. */
+  exitNOI: USD
+  /** Gross sale value: normalized exit NOI ÷ exit cap. */
   exitValue: USD
   /** Sale value after selling costs, before loan payoff. */
   netSaleProceeds: USD
@@ -172,6 +176,12 @@ export interface UnderwritingMetrics {
   npv: USD
   /** Weighted average lease term remaining, in years (commercial only). */
   walt: number | null
+  /** Average in-place rent on `asOf` ($/SF/yr commercial, $/unit/mo multifamily). */
+  inPlaceRent: USD | null
+  /** Year-1 market rent in the same basis. */
+  marketRent: USD
+  /** In-place ÷ market − 1: +0.35 means in-place rents are 35% above market. */
+  inPlaceVsMarket: Pct | null
 }
 
 export interface UnderwritingResult {
@@ -181,6 +191,8 @@ export interface UnderwritingResult {
   cashFlows: AnnualCashFlow[]
   /** Year N+1, modeled only to value the exit on forward NOI (no debt or sale lines). */
   forwardYear: AnnualCashFlow
+  /** The exit year (normally N+1) with rollover vacancy and free rent replaced by general vacancy. */
+  normalizedExitYear: AnnualCashFlow
   metrics: UnderwritingMetrics
   generatedAt: string
   /** Plain-language flags, e.g. "DSCR below 1.25x in year 3". */

@@ -62,6 +62,15 @@ export function applyWaterfall(year: number, x: OperatingInputs, op: OperatingAs
   }
 }
 
+/**
+ * Stabilizes a year for valuation: drops absorption/turnover vacancy and free
+ * rent, so the full general vacancy rate applies instead. A buyer capitalizes
+ * a normal year, not one that happens to have a lease in downtime.
+ */
+export function normalizeForExit(y: OperatingYear, op: OperatingAssumptions): OperatingYear {
+  return applyWaterfall(y.year, { ...y, absorptionTurnoverVacancy: 0, freeRent: 0 }, op)
+}
+
 export interface OperatingResult {
   /** Years 1..hold+1. */
   years: OperatingYear[]

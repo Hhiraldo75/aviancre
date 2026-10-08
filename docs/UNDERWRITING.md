@@ -12,7 +12,7 @@ Step 1 is the calculation engine only, with no UI changes. Code lives in `src/li
 - Waterfall: gross potential rent, absorption/turnover vacancy, free rent, recoveries, general vacancy, credit loss, EGI, operating expenses (incl. management fee), NOI, TI, leasing commissions, capital reserves, cash flow before debt, debt service, levered cash flow.
 - General vacancy is a floor: only add the amount above the vacancy already modeled from rollover and lease-up.
 - Purchase price default = year-1 NOI / market cap rate (overridable), plus closing costs.
-- Sale at end of year 10 = year-11 NOI / exit cap, less selling costs.
+- Sale at end of year 10 = year-11 NOI / exit cap, less selling costs. Year-11 NOI is normalized first: rollover vacancy and free rent are replaced by the general vacancy rate.
 - Loan: LTV, fixed rate, amortization, interest-only years, loan fee.
 - Multifamily: simple unit-type model (vacancy, rent growth, turnover cost per move-out, per-unit reserves).
 
@@ -37,7 +37,7 @@ Defaults added during implementation (not in the original spec): closing costs 1
 Every default is a `Sourced<number>` with a label saying what should replace it (e.g. "Industry rule of thumb – replace with market report"). That lets the UI show an EST badge on each one. Analyst overrides are tagged `fromImport(…, 'Analyst input')`.
 
 ### Outputs
-Going-in cap, unlevered and levered IRR, equity multiple, cash-on-cash by year, DSCR by year, minimum DSCR, debt yield, WALT, NPV, plus plain-language warnings (e.g. DSCR below 1.25x, more than 25% of space rolling in one year).
+Going-in cap, raw and normalized year-11 NOI, in-place vs market rent, unlevered and levered IRR, equity multiple, cash-on-cash by year, DSCR by year, minimum DSCR, debt yield, WALT, NPV, plus plain-language warnings (e.g. DSCR below 1.25x, more than 25% of space rolling in one year, in-place rents more than 10% above or below market).
 
 ### Checks
 - Unit tests for each piece (escalations, rollover blending, recoveries, vacancy floor, loan amortization, IRR, sale) with hand-checkable numbers.
@@ -67,7 +67,7 @@ These are decisions made where the spec is silent. Match them when you rebuild t
 12. **General vacancy floor** (per year): target = rate × (GPR + recoveries + other income). General vacancy = max(0, target − absorption/turnover vacancy). Credit loss = rate × (GPR − absorption vacancy − free rent + recoveries + other income − general vacancy).
 13. **Expenses.** There is one recoverable line, `market.opexPerYear` × RSF (× units for multifamily), grown each analysis year. The management fee = rate × EGI and is not recoverable, which avoids a circular reference. Capital reserves stay flat in $/SF (or $/unit).
 14. **Pricing.** Price defaults to year-1 NOI / market cap rate. Total cost = price × (1 + closing costs) + initial capex. Going-in cap = year-1 NOI / price.
-15. **Sale.** Gross sale = year-11 NOI / exit cap. Net sale = gross × (1 − selling costs). The levered cash flow also pays off the loan balance after month 120.
+15. **Sale.** The exit year (year 11) is normalized before capping: absorption/turnover vacancy and free rent are removed and the full general vacancy rate applies instead (credit loss and management fee recalculate on the new EGI). Recoveries lost to downtime are not added back. Gross sale = normalized year-11 NOI / exit cap. Net sale = gross × (1 − selling costs). The CSV shows both the raw and normalized year-11 columns. The levered cash flow also pays off the loan balance after month 120.
 16. **Debt.** Loan = LTV × price. Months 1–24 are interest-only, then a level payment amortizes the loan over 30 years. Loan fee = fee % × loan, paid from equity at t0. Equity = total cost − loan + fee.
 17. **Returns.** Unlevered cash flows: t0 = −total cost; years 1–10 = CFBD (+ net sale in year 10). Levered cash flows: t0 = −equity; years 1–10 = CFBD − debt service (+ net sale − payoff in year 10). NPV is unlevered, at the discount rate. The equity multiple is levered (total distributions / equity); there is also an unlevered multiple. Cash-on-cash = levered CF / equity. DSCR = NOI / debt service. Debt yield = year-1 NOI / loan. WALT is measured from `asOf`.
 18. **Multifamily.** For each unit type, market rentₜ = market₁ × (1+g)^(t−1). In-place rent closes the loss-to-lease gap as units turn: in-placeₜ = marketₜ − (market₁ − in-place₁) × (1+g)^(t−1) × (1−turnover)^(t−1). GPR = (occupied units × in-place rent + vacant units × market rent) × 12. Other income = $/unit/month × all units × 12, grown with rent. There is no absorption vacancy, so general vacancy applies in full. Turnover cost = units × turnover rate × cost per move-out, grown with expenses, and is shown on the TI line. Reserves = $/unit × units.
