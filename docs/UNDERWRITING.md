@@ -39,6 +39,8 @@ Every default is a `Sourced<number>` with a label saying what should replace it 
 ### Outputs
 Going-in cap, raw and normalized year-11 NOI, in-place vs market rent, unlevered and levered IRR, equity multiple, cash-on-cash by year, DSCR by year, minimum DSCR, debt yield, WALT, NPV, plus plain-language warnings (e.g. DSCR below 1.25x, more than 25% of space rolling in one year, in-place rents more than 10% above or below market, a fixed renewal option above market).
 
+**Sensitivity** (`src/lib/underwriting/sensitivity.ts`, top of the Returns tab): two 5×5 grids, exit cap (±25/50 bps) × market rent growth (±1/2 points, floored at 0%) and purchase price (±5/10%) × exit cap, each showing levered IRR, unlevered IRR or levered equity multiple. Every cell is a full engine run on the current assumptions, analyst edits included, with only its two inputs changed; there is no interpolation. The center cell reuses the current run, so it equals the headline figures exactly. If rent growth is edited below 1%, columns the 0% floor makes identical are shown once, and a negative edited growth is never floored. Grids are cached per assumptions object and built only while the Returns tab is open.
+
 ### Checks
 - Unit tests for each piece (escalations, rollover blending, recoveries, vacancy floor, loan amortization, IRR, sale) with hand-checkable numbers.
 - `npm run underwrite -- <property-id>` prints the annual cash flow table and metrics, and writes them to `docs/underwriting-<property-id>.csv` for comparison against an Excel model.

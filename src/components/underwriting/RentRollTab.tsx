@@ -1,5 +1,6 @@
 import type { RentRollRow, RentRollView } from '../../lib/underwriting/fullView'
 import { UnitMixTable } from '../tables/LeaseTables'
+import ExpirationChart from './ExpirationChart'
 
 const COLUMNS: [label: string, key: keyof RentRollRow, align: 'left' | 'right'][] = [
   ['Suite', 'suite', 'left'],
@@ -84,6 +85,10 @@ export default function RentRollTab({ rentRoll: rr }: { rentRoll: RentRollView }
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="max-w-xl">
+        <ExpirationChart years={rr.expirationChart} />
       </div>
 
       <div className="max-w-xl">

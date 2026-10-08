@@ -133,6 +133,16 @@ describe('full underwriting: rent roll tab', () => {
     const inPlace = r.expirations.inPlaceSF.reduce((s, x) => s + x, 0)
     expect(inPlace).toBe(activeLeases(ATWELLS, AS_OF).reduce((s, l) => s + l.leasedSF, 0))
   })
+  it('charts expirations as in-place plus re-leased SF, with % of building on hover', () => {
+    expect(rr.expirationChart.map((x) => x.year)).toEqual(Array.from({ length: 10 }, (_, i) => i + 1))
+    rr.expirationChart.forEach((x, i) => {
+      expect(x.inPlaceSF).toBe(r.expirations.inPlaceSF[i])
+      expect(x.inPlaceSF + x.releasedSF).toBe(r.expirations.totalSF[i])
+    })
+    expect(rr.expirationChart[0].tooltip).toBe('Year 1: no leases expire')
+    expect(rr.expirationChart[1].tooltip).toBe('Year 2: 5,200 SF expiring (36.1% of building) · in-place leases')
+    expect(rr.expirationChart[7].tooltip).toBe('Year 8: 2,800 SF expiring (19.4% of building) · re-leased space')
+  })
   it('shows the unit mix for apartments', () => {
     expect(ok(fullUnderwriting(FEDERAL_HILL, AS_OF)).rentRoll.kind).toBe('unit-mix')
   })
@@ -168,6 +178,28 @@ describe('full underwriting: returns tab', () => {
     expect(unlevered.values).toEqual([-m.totalCost, ...r.cashFlows.map((c) => c.unleveredCashFlow)])
     expect(levered.values).toEqual([-m.equityRequired, ...r.cashFlows.map((c) => c.leveredCashFlow)])
     expect(unlevered.cells[0]).toMatch(/^\(/)
+  })
+  it('charts NOI and cash flow before and after debt for each hold year', () => {
+    expect(ret.cashFlowChart).toHaveLength(10)
+    ret.cashFlowChart.forEach((x, i) => {
+      const c = r.cashFlows[i]
+      expect(x).toMatchObject({ year: i + 1, noi: c.netOperatingIncome, beforeDebt: c.cashFlowBeforeDebt, afterDebt: c.cashFlowAfterDebt })
+    })
+    expect(ret.cashFlowChart[3].tooltip).toMatch(/^Year 4: NOI \$302,232 · before debt -?\$[\d,]+ · after debt -?\$[\d,]+$/)
+    expect(ok(fullUnderwriting(ATWELLS, AS_OF, { 'acquisition.holdYears': 7 })).returns.cashFlowChart).toHaveLength(7)
+  })
+  it('charts DSCR against the 1.25x floor, flagging years below it', () => {
+    const dscr = ret.dscrChart!
+    expect(dscr.floor).toBe(1.25)
+    expect(dscr.points.map((x) => x.dscr)).toEqual(m.dscrByYear)
+    for (const x of dscr.points) expect(x.belowFloor).toBe(x.dscr < 1.25)
+    expect(dscr.points[3].tooltip).toBe('Year 4: DSCR 1.60x')
+    const tight = ok(fullUnderwriting(ATWELLS, AS_OF, { 'debt.ltv': 0.8 })).returns.dscrChart!
+    const low = tight.points.find((x) => x.belowFloor)!
+    expect(low.tooltip).toBe(`Year ${low.year}: DSCR ${low.dscr.toFixed(2)}x · below 1.25x`)
+  })
+  it('has no DSCR chart without debt', () => {
+    expect(ok(fullUnderwriting(ATWELLS, AS_OF, { 'debt.ltv': 0 })).returns.dscrChart).toBeNull()
   })
 })
 

@@ -81,6 +81,16 @@ export interface ExpirationRow {
   totalPct: string
 }
 
+/** SF expiring in a hold year, for the lease expirations chart. */
+export interface ExpirationBar {
+  year: number
+  inPlaceSF: number
+  /** Modeled re-leased space that rolls again within the hold. */
+  releasedSF: number
+  /** e.g. "Year 3: 12,400 SF expiring (24.8% of building) · in-place 10,000 SF (20.0%) · re-leased 2,400 SF (4.8%)" */
+  tooltip: string
+}
+
 export type RentRollView =
   | {
       kind: 'commercial'
@@ -96,6 +106,7 @@ export type RentRollView =
         vsMarket: string
       }
       expirations: ExpirationRow[]
+      expirationChart: ExpirationBar[]
     }
   | { kind: 'unit-mix'; rentRoll: MultifamilyRentRoll }
 
@@ -103,6 +114,22 @@ export interface LineItem {
   label: string
   value: string
   kind?: 'deduction' | 'total'
+}
+
+export interface CashFlowBar {
+  year: number
+  noi: number
+  beforeDebt: number
+  afterDebt: number
+  /** e.g. "Year 3: NOI $302,232 · before debt $281,000 · after debt $95,400" */
+  tooltip: string
+}
+
+export interface DSCRPoint {
+  year: number
+  dscr: number
+  belowFloor: boolean
+  tooltip: string
 }
 
 export interface ReturnsView {
@@ -115,6 +142,10 @@ export interface ReturnsView {
   returns: SummaryStat[]
   /** Unlevered and levered IRR streams, Year 0..N. */
   cashFlows: { columns: string[]; rows: TableRow[] }
+  /** NOI and cash flow before and after debt, by hold year. */
+  cashFlowChart: CashFlowBar[]
+  /** DSCR by hold year against the lender floor; null without debt. */
+  dscrChart: { floor: number; points: DSCRPoint[] } | null
 }
 
 export interface AssumptionEdit {
@@ -375,6 +406,22 @@ export function rentRollView(property: Property, r: UnderwritingResult, asOf: IS
         totalPct: total ? share(total) : '–',
       }
     }),
+    expirationChart: r.expirations.totalSF.map((total, i) => {
+      const inPlace = r.expirations.inPlaceSF[i]
+      const released = total - inPlace
+      const sfShare = (sf: number) => `${fmt.int(sf)} SF (${share(sf)})`
+      const kind =
+        inPlace && released
+          ? [`in-place ${sfShare(inPlace)}`, `re-leased ${sfShare(released)}`]
+          : [inPlace ? 'in-place leases' : 're-leased space']
+      const parts = [`${fmt.int(total)} SF expiring (${share(total)} of building)`, ...kind]
+      return {
+        year: i + 1,
+        inPlaceSF: inPlace,
+        releasedSF: released,
+        tooltip: `Year ${i + 1}: ${total ? parts.join(' · ') : 'no leases expire'}`,
+      }
+    }),
   }
 }
 
@@ -443,6 +490,29 @@ export function returnsView(r: UnderwritingResult): ReturnsView {
         return { label: row.label, values, cells: values.map((v) => (v === null ? '' : fmt.accounting(v))) }
       }),
     },
+    cashFlowChart: r.cashFlows.map((c) => ({
+      year: c.year,
+      noi: c.netOperatingIncome,
+      beforeDebt: c.cashFlowBeforeDebt,
+      afterDebt: c.cashFlowAfterDebt,
+      tooltip:
+        `Year ${c.year}: NOI ${fmt.money(c.netOperatingIncome)} · before debt ${fmt.money(c.cashFlowBeforeDebt)}` +
+        ` · after debt ${fmt.money(c.cashFlowAfterDebt)}`,
+    })),
+    dscrChart: hasDebt
+      ? {
+          floor: DSCR_FLOOR,
+          points: m.dscrByYear.map((dscr, i) => {
+            const belowFloor = dscr < DSCR_FLOOR
+            return {
+              year: i + 1,
+              dscr,
+              belowFloor,
+              tooltip: `Year ${i + 1}: DSCR ${fmt.multiple(dscr)}${belowFloor ? ` · below ${fmt.multiple(DSCR_FLOOR)}` : ''}`,
+            }
+          }),
+        }
+      : null,
   }
 }
 

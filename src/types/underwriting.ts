@@ -224,12 +224,27 @@ export type SensitivityVariable =
   | 'renewalProbability'
   | 'interestRate'
 
-export interface SensitivityTable {
+/** Metrics a sensitivity grid can show; higher is better for each. */
+export type SensitivityMetric = keyof Pick<UnderwritingMetrics, 'leveredIRR' | 'unleveredIRR' | 'equityMultiple'>
+
+/** One row or column of a sensitivity grid: the input's value and its change from the current case. */
+export interface SensitivityAxis {
+  value: number
+  delta: number
+}
+
+export interface SensitivityCell {
+  /** The current case: no input changed. */
+  center: boolean
+  /** null when the metric can't be computed for this cell. */
+  metrics: Record<SensitivityMetric, number | null>
+}
+
+export interface SensitivityGrid {
   rowVariable: SensitivityVariable
   columnVariable: SensitivityVariable
-  rowValues: number[]
-  columnValues: number[]
-  metric: keyof Pick<UnderwritingMetrics, 'unleveredIRR' | 'leveredIRR' | 'equityMultiple'>
-  /** cells[row][column]; null when the metric can't be computed. */
-  cells: (number | null)[][]
+  rows: SensitivityAxis[]
+  columns: SensitivityAxis[]
+  /** cells[row][column], one engine run each. */
+  cells: SensitivityCell[][]
 }

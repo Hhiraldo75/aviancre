@@ -1,10 +1,47 @@
+import { useMemo } from 'react'
+import type { ISODate, Property, UnderwritingAssumptions } from '../../types'
 import type { LineItem, ReturnsView } from '../../lib/underwriting/fullView'
+import { sensitivityGrids } from '../../lib/underwriting/sensitivity'
 import { Card, Stat } from '../ui/Card'
+import CashFlowChart from './CashFlowChart'
+import DSCRChart from './DSCRChart'
+import SensitivityGrid from './SensitivityGrid'
 
-/** Sources & uses, debt, sale and returns; renders mapped strings only. */
-export default function ReturnsTab({ returns: r }: { returns: ReturnsView }) {
+/**
+ * Sensitivity, charts, sources & uses, debt, sale and returns. The grids run
+ * the engine on the current assumptions; they're built only while this tab is
+ * open and cached per assumptions object.
+ */
+export default function ReturnsTab({
+  returns: r,
+  property,
+  asOf,
+  assumptions,
+}: {
+  returns: ReturnsView
+  property: Property
+  asOf: ISODate
+  assumptions: UnderwritingAssumptions
+}) {
+  const grids = useMemo(() => sensitivityGrids(property, asOf, assumptions), [property, asOf, assumptions])
+
   return (
     <div className="space-y-4">
+      <section aria-labelledby="uw-sensitivity" className="space-y-2">
+        <h3 id="uw-sensitivity" className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          Sensitivity
+        </h3>
+        <div className="grid gap-4 xl:grid-cols-2">
+          <SensitivityGrid title="Exit cap × rent growth" grid={grids.exitCapByRentGrowth} />
+          <SensitivityGrid title="Purchase price × exit cap" grid={grids.priceByExitCap} />
+        </div>
+      </section>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <CashFlowChart years={r.cashFlowChart} />
+        <DSCRChart chart={r.dscrChart} />
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Sources & uses">
           <div className="grid grid-cols-2 gap-6">

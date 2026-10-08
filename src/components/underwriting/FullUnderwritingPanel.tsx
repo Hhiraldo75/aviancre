@@ -130,7 +130,9 @@ export default function FullUnderwritingPanel({ property: p }: { property: Prope
               />
             )}
             {tab === 'Rent roll' && <RentRollTab rentRoll={view.rentRoll} />}
-            {tab === 'Returns' && <ReturnsTab returns={view.returns} />}
+            {tab === 'Returns' && (
+              <ReturnsTab returns={view.returns} property={p} asOf={asOf} assumptions={view.result.assumptions} />
+            )}
             {tab === 'Assumptions' && (
               <AssumptionsTab
                 groups={view.assumptions}
