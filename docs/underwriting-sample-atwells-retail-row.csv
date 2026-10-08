@@ -47,19 +47,22 @@ Minimum DSCR,1.60x
 DSCR by year,1.79 | 2.00 | 1.77 | 1.60 | 1.66 | 1.71 | 1.76 | 1.80 | 1.70 | 1.81
 Average cash-on-cash,4.32%
 Cash-on-cash by year,-2.1% | 2.2% | 5.2% | 1.7% | 6.9% | 7.4% | 8.0% | 8.4% | 0.2% | 5.4%
-WALT (years),2.26
+WALT (years),2.19
 In-place vs market rent,$28.94 vs $22.00/SF/yr (+31.5%)
 
 Warning
 36% of rentable SF rolls in year 2. That year's cash flow depends on renewals.
-"Negative leverage: the 7.00% going-in cap rate is below the 7.58% loan constant, so debt lowers the cash yield once the loan amortizes."
+"Negative leverage: the 7.00% going-in cap rate is below the 7.58% loan constant, so debt lowers the yearly cash yield. The levered IRR can still be higher because the sale gain goes to a smaller equity check."
 In-place rents are 32% above market; income declines as leases roll.
 "Casa Lucenti Trattoria (suite 101) has a $30.00/SF renewal option, above the projected $23.35/SF market rent at its 2030-02-28 expiration. The model assumes renewal at market."
-"Purchase price is a model estimate (year-1 NOI ÷ market cap rate), not an asking price or offer. At this price the going-in cap equals the market cap by construction."
+
+Note
+"Purchase price is a model estimate at default assumptions (default year-1 NOI ÷ market cap rate), not an asking price or offer. At defaults the going-in cap equals the market cap by construction; other assumption edits move the going-in cap and returns, not the price."
 
 Assumption,Value,Source,Source type
 scenario,base,,
-acquisition.purchasePrice,4147091.9176,Year-1 NOI ÷ market cap rate,estimated
+acquisition.purchasePrice,4147091.9176,Default year-1 NOI ÷ market cap rate,estimated
+acquisition.marketCapRate,0.07,Placeholder benchmark – replace with quarterly market report,estimated
 acquisition.closingCostsPct,0.015,Industry rule of thumb – replace with market report,estimated
 acquisition.analysisStartDate,2026-11-01,,
 acquisition.holdYears,10,Placeholder – replace with investor return target,estimated

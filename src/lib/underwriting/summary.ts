@@ -57,7 +57,7 @@ export type UnderwritingSummary =
     }
   | { status: 'unavailable'; reason: string }
 
-export const PRICE_ESTIMATE_HINT = 'Model estimate: Year-1 NOI ÷ market cap'
+export const PRICE_ESTIMATE_HINT = 'Model estimate at default assumptions: Year-1 NOI ÷ market cap'
 
 /** First sentence of a warning: splits at a period followed by a capitalized word. */
 const firstSentence = (text: string) => text.split(/(?<=\.)\s+(?=[A-Z])/)[0]
@@ -82,7 +82,11 @@ type Driver = [name: string, value: Sourced<unknown>]
 
 /** The assumptions behind each stat, grouped so stats can share them. */
 function driverGroups(p: Property, a: UnderwritingAssumptions) {
-  const price: Driver[] = [['Purchase price', a.acquisition.purchasePrice]]
+  const price: Driver[] = [
+    ['Purchase price', a.acquisition.purchasePrice],
+    // An estimated price is set by the market cap rate.
+    ...(isEstimate(a.acquisition.purchasePrice) ? [['Market cap rate', a.acquisition.marketCapRate] as Driver] : []),
+  ]
   const yearOneNOI: Driver[] = [
     ...a.operating.expenses.map((e): Driver => [e.label, e.annualAmount]),
     ['General vacancy', a.operating.generalVacancyPct],

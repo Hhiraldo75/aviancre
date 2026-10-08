@@ -176,7 +176,7 @@ describe('full underwriting: assumptions tab', () => {
     expect(v.assumptions.map((g) => g.title)).toEqual(['Acquisition', 'Leasing', 'Operating', 'Debt', 'Exit'])
     const price = v.assumptions[0].items.find((x) => x.label === 'Purchase price')!
     expect(price.src?.source).toBe('estimated')
-    expect(price.note).toContain('Year-1 NOI ÷ market cap rate')
+    expect(price.note).toContain('Default year-1 NOI ÷ market cap rate')
   })
   it('leaves rule-of-thumb notes to the legend and lifts shared notes to the group', () => {
     const items = v.assumptions.flatMap((g) => g.items)

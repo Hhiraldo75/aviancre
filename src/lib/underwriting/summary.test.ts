@@ -49,7 +49,7 @@ describe('underwriting summary (Atwells, base scenario)', () => {
   })
   it('labels the price as a model estimate, not an asking price', () => {
     expect(stat(s, 'Purchase price').hint).toBe(PRICE_ESTIMATE_HINT)
-    expect(PRICE_ESTIMATE_HINT).toBe('Model estimate: Year-1 NOI ÷ market cap')
+    expect(PRICE_ESTIMATE_HINT).toBe('Model estimate at default assumptions: Year-1 NOI ÷ market cap')
   })
   it('notes estimates once and badges EST only on the cap rates', () => {
     expect(ok(s).estimates?.source).toBe('estimated')

@@ -246,8 +246,9 @@ function buildNotes(a: UnderwritingAssumptions): string[] {
   const out: string[] = []
   if (a.acquisition.purchasePrice.source === 'estimated') {
     out.push(
-      'Purchase price is a model estimate (year-1 NOI ÷ market cap rate), not an asking price or offer. ' +
-        'At this price the going-in cap equals the market cap by construction.',
+      'Purchase price is a model estimate at default assumptions (default year-1 NOI ÷ market cap rate), ' +
+        'not an asking price or offer. At defaults the going-in cap equals the market cap by construction; ' +
+        'other assumption edits move the going-in cap and returns, not the price.',
     )
   }
   return out

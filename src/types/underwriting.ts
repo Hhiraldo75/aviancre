@@ -11,6 +11,8 @@ type S = Sourced<number>
 /** Acquisition basis and hold period. */
 export interface AcquisitionAssumptions {
   purchasePrice: Sourced<USD>
+  /** Cap rate the estimated price is based on: default year-1 NOI ÷ this rate. Unused once a price is entered. */
+  marketCapRate: Sourced<Pct>
   closingCostsPct: Sourced<Pct>
   analysisStartDate: ISODate
   holdYears: S

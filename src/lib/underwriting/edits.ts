@@ -64,6 +64,7 @@ export function editableFields(a: UnderwritingAssumptions): AssumptionField[] {
     fields.push({ key, label, group, scale, suffix: unit, min, max, integer, format: (x) => `${Number((x * scale).toFixed(1))} ${unit}` })
 
   usd('acquisition.purchasePrice', 'Purchase price', '', { aboveZero: true })
+  pct('acquisition.marketCapRate', 'Market cap rate (price estimate)', 2, 15, (x) => fmt.pct(x, 2))
   pct('acquisition.closingCostsPct', 'Closing costs', 0, 10)
   usd('acquisition.initialCapex', 'Initial capex')
   count('acquisition.holdYears', 'Hold period', 'yrs', 1, 20, true)
@@ -173,8 +174,8 @@ export function formatInput(f: AssumptionField, value: number): string {
 
 /**
  * Defaults with the edits applied as Analyst input. An unedited purchase price
- * is re-derived from the edited year-1 NOI, so it stays NOI ÷ market cap.
- * Unknown or out-of-range edits are ignored; the UI only stores valid ones.
+ * stays anchored to the default year-1 NOI and changes only with the market
+ * cap rate. Unknown or out-of-range edits are ignored; the UI only stores valid ones.
  */
 function applyEdits(property: Property, asOf: ISODate, defaults: UnderwritingAssumptions, edits: AssumptionEdits) {
   const a = structuredClone(defaults)
@@ -185,7 +186,9 @@ function applyEdits(property: Property, asOf: ISODate, defaults: UnderwritingAss
     const [parent, last] = parentOf(a, key)
     parent[last] = fromImport(value, ANALYST_INPUT)
   }
-  if (!('acquisition.purchasePrice' in edits)) a.acquisition.purchasePrice = estimatedPrice(property, a, asOf)
+  if (!('acquisition.purchasePrice' in edits) && 'acquisition.marketCapRate' in edits) {
+    a.acquisition.purchasePrice = estimatedPrice(property, defaults, asOf, a.acquisition.marketCapRate)
+  }
   return a
 }
 

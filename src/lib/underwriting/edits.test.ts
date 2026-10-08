@@ -111,15 +111,25 @@ describe('applying edits', () => {
     expect(fieldValue(defaults, 'debt.rate.rate').value).toBe(0.065)
     expect(defaults.operating.expenses[0].annualAmount.source).toBe('estimated')
   })
-  it('re-derives an unedited price from the edited year-1 NOI', () => {
+  it('anchors the estimated price to defaults: other edits move the going-in cap, not the price', () => {
     const a = assumptionsFor(ATWELLS, AS_OF, { 'operating.creditLossPct': 0.03 })
-    expect(a.acquisition.purchasePrice.source).toBe('estimated')
-    expect(a.acquisition.purchasePrice.value).toBeLessThan(defaults.acquisition.purchasePrice.value)
+    expect(a.acquisition.purchasePrice).toEqual(defaults.acquisition.purchasePrice)
+    const base = underwrite(ATWELLS, AS_OF, defaults)
     const r = underwrite(ATWELLS, AS_OF, a)
-    expect(r.metrics.goingInCapRate).toBeCloseTo(ATWELLS.market.marketCapRate.value, 10)
+    expect(base.metrics.goingInCapRate).toBeCloseTo(ATWELLS.market.marketCapRate.value, 10)
+    expect(r.metrics.goingInCapRate).toBeLessThan(base.metrics.goingInCapRate)
+    expect(r.metrics.unleveredIRR!).toBeLessThan(base.metrics.unleveredIRR!)
   })
-  it('keeps an edited price fixed', () => {
-    const a = assumptionsFor(ATWELLS, AS_OF, { 'operating.creditLossPct': 0.03, 'acquisition.purchasePrice': 4_000_000 })
+  it('re-prices the estimate when the market cap rate is edited', () => {
+    const a = assumptionsFor(ATWELLS, AS_OF, { 'acquisition.marketCapRate': 0.075, 'operating.creditLossPct': 0.03 })
+    expect(a.acquisition.purchasePrice.source).toBe('estimated')
+    // Still the default year-1 NOI, now ÷ 7.5% instead of 7%.
+    expect(a.acquisition.purchasePrice.value).toBeCloseTo((defaults.acquisition.purchasePrice.value * 0.07) / 0.075, 4)
+    expect(a.acquisition.purchasePrice.notes).toBe('Market cap rate 7.50% (analyst input)')
+    expect(underwrite(ATWELLS, AS_OF, assumptionsFor(ATWELLS, AS_OF, { 'acquisition.marketCapRate': 0.075 })).metrics.goingInCapRate).toBeCloseTo(0.075, 10)
+  })
+  it('keeps an entered price, whatever the market cap rate', () => {
+    const a = assumptionsFor(ATWELLS, AS_OF, { 'acquisition.marketCapRate': 0.075, 'acquisition.purchasePrice': 4_000_000 })
     expect(a.acquisition.purchasePrice).toMatchObject({ value: 4_000_000, sourceName: 'Analyst input' })
   })
   it('ignores out-of-range and unknown edits', () => {

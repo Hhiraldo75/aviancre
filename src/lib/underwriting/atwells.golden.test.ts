@@ -19,6 +19,8 @@ const AS_OF = '2026-10-04'
 const DOLLARS = 1
 const RATE = 0.0001
 const DSCR = 0.01
+/** Years. WALT runs from the analysis start (Nov 1, 2026), not the Oct 4 analysis date. */
+const WALT = 0.01
 
 const ATWELLS = SAMPLE_PROPERTIES.find((p) => p.id === 'sample-atwells-retail-row')
 if (!ATWELLS) throw new Error('missing sample-atwells-retail-row')
@@ -161,6 +163,11 @@ function goldenChecks(r: UnderwritingResult) {
     expect(Math.abs(m.unleveredIRR! - percent(metricValue('Unlevered IRR')))).toBeLessThanOrEqual(RATE)
     expect(Math.abs(m.leveredIRR! - percent(metricValue('Levered IRR')))).toBeLessThanOrEqual(RATE)
     expect(Math.abs(m.minimumDSCR! - Number(metricValue('Minimum DSCR').replace('x', '')))).toBeLessThanOrEqual(DSCR)
+  })
+
+  it('matches WALT within 0.01 years, measured from the analysis start', () => {
+    expect(r.assumptions.acquisition.analysisStartDate).toBe('2026-11-01')
+    expect(Math.abs(r.metrics.walt! - Number(metricValue('WALT (years)')))).toBeLessThanOrEqual(WALT)
   })
 }
 

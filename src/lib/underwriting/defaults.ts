@@ -112,7 +112,8 @@ function unusedTerms(): LeasingTerms {
 
 /**
  * Default assumptions for a property. The purchase price defaults to
- * year-1 NOI ÷ market cap rate, so this runs the operating cash flows once.
+ * year-1 NOI ÷ market cap rate at these defaults, so this runs the operating
+ * cash flows once.
  */
 export function defaultAssumptions(property: Property, asOf: ISODate): UnderwritingAssumptions {
   const s = SHARED_DEFAULTS
@@ -129,6 +130,7 @@ export function defaultAssumptions(property: Property, asOf: ISODate): Underwrit
     scenario: 'base',
     acquisition: {
       purchasePrice: estimate(0, 'Pending: year-1 NOI ÷ market cap rate'),
+      marketCapRate: marketCap,
       closingCostsPct: rot(s.closingCostsPct),
       analysisStartDate: analysisStartFor(asOf),
       holdYears: estimate(s.holdYears, INVESTOR_TARGET),
@@ -198,12 +200,21 @@ export function defaultAssumptions(property: Property, asOf: ISODate): Underwrit
   return assumptions
 }
 
-/** Default purchase price: year-1 NOI under `a` ÷ market cap rate. */
-export function estimatedPrice(property: Property, a: UnderwritingAssumptions, asOf: ISODate): Sourced<number> {
-  const marketCap = property.market.marketCapRate
-  const noi1 = operatingCashFlows(property, a, asOf).years[0].netOperatingIncome
-  return estimate(noi1 / marketCap.value, 'Year-1 NOI ÷ market cap rate', {
-    notes: `Market cap rate ${(marketCap.value * 100).toFixed(2)}% from ${marketCap.sourceName}`,
+/**
+ * Estimated purchase price: year-1 NOI under the default assumptions ÷ the
+ * market cap rate. Anchored to defaults, so editing other assumptions moves
+ * the going-in cap and returns rather than the price.
+ */
+export function estimatedPrice(
+  property: Property,
+  defaults: UnderwritingAssumptions,
+  asOf: ISODate,
+  marketCap: Sourced<number> = defaults.acquisition.marketCapRate,
+): Sourced<number> {
+  const noi1 = operatingCashFlows(property, defaults, asOf).years[0].netOperatingIncome
+  const capSource = marketCap.sourceName === ANALYST_INPUT ? '(analyst input)' : `from ${marketCap.sourceName}`
+  return estimate(noi1 / marketCap.value, 'Default year-1 NOI ÷ market cap rate', {
+    notes: `Market cap rate ${(marketCap.value * 100).toFixed(2)}% ${capSource}`,
   })
 }
 
