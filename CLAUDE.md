@@ -9,6 +9,8 @@ AVIANCRE is a browser-only (no backend) 3D commercial real estate app for Provid
 - `npm test` — Vitest suite (tests are colocated `*.test.ts`; single file: `npx vitest run src/lib/metrics.test.ts`)
 - `npm run build` — `tsc -b && vite build`; this is the only type check
 - `npm run dev` — app at http://localhost:5173 (also serves the `/pvdgis` proxy)
+- `npm run underwrite -- <id> [--as-of YYYY-MM-DD] [--price N] [--json]` — prints one property's underwriting; writes `docs/underwriting-<id>.csv`, or with `--json` the AI analyst's input `docs/underwriting/<id>.json`
+- `/underwriting-analyst <id>` (project skill) — runs the tests and the JSON export, reviews it, and writes an IC memo to `docs/memos/<id>.md`. The engine does all math; the memo only quotes the JSON. Details in `docs/UNDERWRITING.md`.
 
 Before calling a change done, run `npm test` and `npm run build`. For UI changes, also check it in `npm run dev`.
 

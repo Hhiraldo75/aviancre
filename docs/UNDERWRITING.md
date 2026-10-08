@@ -30,7 +30,7 @@ Office / Retail / Industrial:
 All: 5% general vacancy, 1% credit loss, 3% expense growth, 3% management fee of EGI.
 Multifamily: 5% vacancy, 3% rent growth, $300 per unit per year reserves.
 Loan: 60% LTV, 6.5% fixed (placeholder), 30-year amortization, 2 years interest-only, 1% fee.
-Exit: 10-year hold, exit cap = market cap + 0.25%, 2% selling costs, 8% discount rate.
+Exit: 10-year hold, exit cap = market cap + 0.25%, 2% selling costs, 8% discount rate, 10% target levered IRR (for the max bid).
 
 Defaults added during implementation (not in the original spec): closing costs 1.5%; new-lease escalation 3%/yr; multifamily turnover 50%/yr at $1,000 per move-out; initial capex $0.
 
@@ -41,14 +41,39 @@ Going-in cap, raw and normalized year-11 NOI, in-place vs market rent, unlevered
 
 **Sensitivity** (`src/lib/underwriting/sensitivity.ts`, top of the Returns tab): two 5×5 grids, exit cap (±25/50 bps) × market rent growth (±1/2 points, floored at 0%) and purchase price (±5/10%) × exit cap, each showing levered IRR, unlevered IRR or levered equity multiple. Every cell is a full engine run on the current assumptions, analyst edits included, with only its two inputs changed; there is no interpolation. The center cell reuses the current run, so it equals the headline figures exactly. If rent growth is edited below 1%, columns the 0% floor makes identical are shown once, and a negative edited growth is never floored. Grids are cached per assumptions object and built only while the Returns tab is open.
 
+**Max bid** (`src/lib/underwriting/maxBid.ts`): the purchase price at which the levered IRR equals the *Target levered IRR* assumption (default 10%, EST "Placeholder – replace with investor return target", editable in the Exit group). Each trial is a full engine run with only the price changed: the loan stays at LTV × price, and closing costs and the loan fee scale with price. Operating cash flows don't depend on price, so they are computed once per solve. The solver bisects on the NPV of the levered cash flows at the target rate, which is zero exactly where IRR = target. Unlike the IRR, that NPV is defined at every price, and it falls as price rises. The search runs from 25% to 400% of the current price and stops when the bracket is under $1. It reports the price, $/SF, implied going-in cap, % vs the current price, and the levered IRR at the bid. It reports no solution, with a plain reason, when debt is off, when the target isn't reached even at 25% of the price, or when it is still exceeded at 4×. Shown as "Max bid at 10% levered IRR" on the summary card (Pricing) and in the Returns tab's Returns card, and cached per assumptions object.
+
 ### Checks
 - Unit tests for each piece (escalations, rollover blending, recoveries, vacancy floor, loan amortization, IRR, sale) with hand-checkable numbers.
 - `npm run underwrite -- <property-id>` prints the annual cash flow table and metrics, and writes them to `docs/underwriting-<property-id>.csv` for comparison against an Excel model.
+- `npm run underwrite -- <property-id> --json` writes `docs/underwriting/<property-id>.json` instead of the CSV, for the AI analyst (`src/lib/underwriting/analystExport.ts`). It has:
+  - `meta`: the AI label, as-of date and analysis start
+  - `property`
+  - `rentRoll`: occupancy, WALT, in-place vs market, the lease rows as the Rent roll tab shows them, expirations, the largest rollover year vs 25%, and above-market renewal options
+  - `assumptions`: every editable assumption with its value, source label, EST flag and default, plus model settings
+  - `cashFlows`: Year 0 to the normalized Year 11, in whole dollars
+  - `returns`
+  - `debt`: including negative leverage and the 1.25x DSCR and 9% debt yield floors
+  - `warnings` and `notes`
+  - `sensitivity`: both grids as levered IRR, with each grid's center, low and high cell
+  - `maxBid`
+
+  Each figure is `{ value, display }`, with the display string the app shows. Spreads and differences the review needs are pre-computed: levered IRR vs target, exit vs going-in cap, Year-11 normalization, and going-in cap vs loan constant. The analyst quotes them and never calculates. The file carries a `generatedAt` timestamp and is regenerated on every run.
 - **Golden test.** `src/lib/underwriting/atwells.golden.test.ts` runs Atwells Retail Row (base scenario, as of 2026-10-04) and compares it against the frozen fixture `src/lib/underwriting/__fixtures__/atwells-benchmark.csv`. It checks every cash-flow line in every year, including both Year-11 columns, within $1. It also checks purchase price, loan amount, equity, net sale proceeds and loan payoff within $1, both IRRs within 0.0001, minimum DSCR within 0.01, and WALT within 0.01 years. The same checks also run after an assumption edit and Reset. The fixture was independently validated against the Excel benchmark (`AVIANCRE_Atwells_Underwriting_Benchmark_v2.xlsx`, matched to the cent on Oct 8, 2026).
   - No script writes to the fixture. `npm run underwrite` writes to `docs/`, and that file can change freely.
   - **Update the fixture only on purpose,** when an assumption or modeling method changes. Re-check the new numbers against Excel first. Then regenerate with `npm run underwrite -- sample-atwells-retail-row --as-of 2026-10-04` and copy `docs/underwriting-sample-atwells-retail-row.csv` over the fixture in the same commit as the change. Never update it just to make a failing test pass.
   - Oct 8, 2026 (V4 step 3B): the `WALT (years)` line changed from 2.26 to 2.19 because WALT is now measured from the analysis start (Nov 1, 2026) instead of the Oct 4 analysis date. Only that line was edited; no cash flow, price, loan, sale or return figure changed, so the Excel match still holds.
 - `npm run rent-roll -- <property-id> [--out path]` exports every lease and vacant-suite field the engine reads, including the renewal option rent (default `docs/rent-roll-<property-id>.csv`; the Atwells export is `docs/atwells-rent-roll.csv`).
+
+## AI underwriting analyst
+
+`/underwriting-analyst <property-id>` (`.claude/skills/underwriting-analyst/SKILL.md`) has Claude Code act as the analyst. The engine does all of the math; the AI only interprets it.
+1. Run `npm test`, and stop if anything fails: no memo on a broken engine.
+2. Run `npm run underwrite -- <id> --json`, then read the JSON and this document.
+3. Report a 12-item review checklist as OK or FLAG: in-place vs market, above-market options, rollover concentration, WALT, Year-11 normalization, going-in vs exit cap, negative leverage, DSCR vs 1.25x, debt yield vs 9%, IRR vs target, sensitivity range, and EST placeholders.
+4. Write an investment committee memo to `docs/memos/<id>.md`.
+
+Every number in the memo is quoted from the JSON's display strings, and the memo is labeled "AI-generated analysis of sample data. All figures from the AVIANCRE engine." The skill only runs when invoked by name.
 
 ## Modeling conventions
 
