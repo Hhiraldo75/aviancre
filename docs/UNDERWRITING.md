@@ -42,6 +42,9 @@ Going-in cap, raw and normalized year-11 NOI, in-place vs market rent, unlevered
 ### Checks
 - Unit tests for each piece (escalations, rollover blending, recoveries, vacancy floor, loan amortization, IRR, sale) with hand-checkable numbers.
 - `npm run underwrite -- <property-id>` prints the annual cash flow table and metrics, and writes them to `docs/underwriting-<property-id>.csv` for comparison against an Excel model.
+- **Golden test.** `src/lib/underwriting/atwells.golden.test.ts` runs Atwells Retail Row (base scenario, as of 2026-10-04) and compares it against the frozen fixture `src/lib/underwriting/__fixtures__/atwells-benchmark.csv`. It checks every cash-flow line in every year, including both Year-11 columns, within $1. It also checks purchase price, loan amount, equity, net sale proceeds and loan payoff within $1, both IRRs within 0.0001, and minimum DSCR within 0.01. The fixture was independently validated against the Excel benchmark (`AVIANCRE_Atwells_Underwriting_Benchmark_v2.xlsx`, matched to the cent on Oct 8, 2026).
+  - No script writes to the fixture. `npm run underwrite` writes to `docs/`, and that file can change freely.
+  - **Update the fixture only on purpose,** when an assumption or modeling method changes. Re-check the new numbers against Excel first. Then regenerate with `npm run underwrite -- sample-atwells-retail-row --as-of 2026-10-04` and copy `docs/underwriting-sample-atwells-retail-row.csv` over the fixture in the same commit as the change. Never update it just to make a failing test pass.
 - `npm run rent-roll -- <property-id> [--out path]` exports every lease and vacant-suite field the engine reads, including the renewal option rent (default `docs/rent-roll-<property-id>.csv`; the Atwells export is `docs/atwells-rent-roll.csv`).
 
 ## Modeling conventions
