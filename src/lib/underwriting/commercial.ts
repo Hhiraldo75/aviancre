@@ -35,6 +35,8 @@ export interface CommercialMonths {
   months: MonthRow[]
   /** SF whose lease ends in each analysis year (index 0 = year 1), in-place and speculative. */
   expiringSFByYear: number[]
+  /** The in-place leases' share of `expiringSFByYear`. */
+  inPlaceExpiringSFByYear: number[]
   /** Fixed renewal options above market at expiration, within the modeled horizon. */
   aboveMarketOptions: AboveMarketOption[]
 }
@@ -87,10 +89,14 @@ export function commercialMonths(property: Property, a: UnderwritingAssumptions,
     totalExpenses: (totalYear1 / 12) * growthFactor(m),
   }))
   const expiringSFByYear = Array.from({ length: holdYears + 1 }, () => 0)
+  const inPlaceExpiringSFByYear = Array.from({ length: holdYears + 1 }, () => 0)
   const aboveMarketOptions: AboveMarketOption[] = []
-  const recordExpiration = (endMonth: number, sf: number) => {
+  const recordExpiration = (endMonth: number, sf: number, inPlace = false) => {
     // endMonth is the first month no longer covered; the lease's last month is endMonth − 1.
-    if (endMonth >= 1 && endMonth <= N) expiringSFByYear[analysisYear(endMonth - 1) - 1] += sf
+    if (endMonth < 1 || endMonth > N) return
+    const i = analysisYear(endMonth - 1) - 1
+    expiringSFByYear[i] += sf
+    if (inPlace) inPlaceExpiringSFByYear[i] += sf
   }
   const recoveryFor = (recovery: Recovery, sf: number, m: number) => {
     const base = recovery.method === 'base-year' ? baseYearMonthly(recovery.baseYear) : 0
@@ -175,7 +181,7 @@ export function commercialMonths(property: Property, a: UnderwritingAssumptions,
       row.potentialSF += lease.leasedSF
       row.occupiedSF += lease.leasedSF
     }
-    recordExpiration(endMonth, lease.leasedSF)
+    recordExpiration(endMonth, lease.leasedSF, true)
     const option = renewalOption(lease, leasing, analysisYear(endMonth))
     if (option?.aboveMarket && endMonth < N) {
       aboveMarketOptions.push({
@@ -207,7 +213,7 @@ export function commercialMonths(property: Property, a: UnderwritingAssumptions,
     })
   }
 
-  return { months, expiringSFByYear, aboveMarketOptions }
+  return { months, expiringSFByYear, inPlaceExpiringSFByYear, aboveMarketOptions }
 }
 
 export interface RenewalOptionTerms {

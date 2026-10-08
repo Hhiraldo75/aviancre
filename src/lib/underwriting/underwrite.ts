@@ -34,13 +34,14 @@ export function underwrite(
 ): UnderwritingResult {
   const a = assumptions
   const H = a.acquisition.holdYears.value
-  const { years, expiringSFByYear, aboveMarketOptions } = operatingCashFlows(property, a, asOf)
+  const { years, expiringSFByYear, inPlaceExpiringSFByYear, aboveMarketOptions } = operatingCashFlows(property, a, asOf)
   const hold = years.slice(0, H)
   const forward = years[H]
 
   // ---- acquisition ----
   const price = a.acquisition.purchasePrice.value
-  const totalCost = price * (1 + a.acquisition.closingCostsPct.value) + a.acquisition.initialCapex.value
+  const closingCosts = price * a.acquisition.closingCostsPct.value
+  const totalCost = price + closingCosts + a.acquisition.initialCapex.value
 
   // ---- debt ----
   if (a.debt.rate.type !== 'fixed') throw new Error('Floating-rate debt is not supported yet')
@@ -93,16 +94,20 @@ export function underwrite(
   const dscrByYear = hasDebt ? cashFlows.map((c) => c.netOperatingIncome / c.debtService) : []
   const cashOnCashByYear = cashFlows.map((c) => c.cashFlowAfterDebt / equity)
 
+  const loanConstant = hasDebt ? payment(1, rate / 12, amortMonths) * 12 : null
   const inPlaceRent = averageInPlaceRent(property, asOf)
   const marketRent = a.leasing.marketRent.value
 
   const metrics: UnderwritingMetrics = {
     purchasePrice: price,
     totalCost,
+    closingCosts,
+    loanFee,
     goingInCapRate: noi1 / price,
     exitNOIRaw: exitYear.netOperatingIncome,
     exitNOI: normalizedExit.netOperatingIncome,
     exitValue: sale.gross,
+    sellingCosts: sale.gross - sale.net,
     netSaleProceeds: sale.net,
     pricePerSF: price / property.physical.rentableSF.value,
     unleveredIRR: irr(unlevered),
@@ -114,6 +119,7 @@ export function underwrite(
     dscrByYear,
     minimumDSCR: hasDebt ? Math.min(...dscrByYear) : null,
     debtYield: hasDebt ? noi1 / loanAmount : null,
+    loanConstant,
     loanAmount,
     loanPayoff,
     equityRequired: equity,
@@ -124,8 +130,7 @@ export function underwrite(
     inPlaceVsMarket: inPlaceRent !== null && marketRent ? inPlaceRent / marketRent - 1 : null,
   }
 
-  const loanConstant = hasDebt ? (payment(1, rate / 12, amortMonths) * 12) : null
-  const warnings = buildWarnings(property, a, metrics, cashFlows, expiringSFByYear, loanConstant, aboveMarketOptions)
+  const warnings = buildWarnings(property, metrics, cashFlows, expiringSFByYear, aboveMarketOptions)
 
   return {
     propertyId: property.id,
@@ -136,6 +141,8 @@ export function underwrite(
     metrics,
     generatedAt: new Date().toISOString(),
     warnings,
+    notes: buildNotes(a),
+    expirations: { inPlaceSF: inPlaceExpiringSFByYear.slice(0, H), totalSF: expiringSFByYear.slice(0, H) },
   }
 }
 
@@ -172,11 +179,9 @@ const pct = (x: number, digits = 1) => `${(x * 100).toFixed(digits)}%`
 
 function buildWarnings(
   property: Property,
-  a: UnderwritingAssumptions,
   m: UnderwritingMetrics,
   cashFlows: AnnualCashFlow[],
   expiringSFByYear: number[],
-  loanConstant: number | null,
   aboveMarketOptions: AboveMarketOption[],
 ): string[] {
   const out: string[] = []
@@ -199,10 +204,11 @@ function buildWarnings(
     })
   }
 
-  if (loanConstant !== null && m.goingInCapRate < loanConstant) {
+  if (m.loanConstant !== null && m.goingInCapRate < m.loanConstant) {
     out.push(
-      `Negative leverage: the ${pct(m.goingInCapRate, 2)} going-in cap rate is below the ${pct(loanConstant, 2)} ` +
-        `loan constant, so debt lowers the cash yield once the loan amortizes.`,
+      `Negative leverage: the ${pct(m.goingInCapRate, 2)} going-in cap rate is below the ${pct(m.loanConstant, 2)} ` +
+        'loan constant, so debt lowers the yearly cash yield. ' +
+        'The levered IRR can still be higher because the sale gain goes to a smaller equity check.',
     )
   }
 
@@ -233,12 +239,16 @@ function buildWarnings(
     out.push(`Year-1 occupancy averages ${pct(occ1)}, below ${pct(LOW_OCCUPANCY, 0)}. Lease-up drives returns.`)
   }
 
+  return out
+}
+
+function buildNotes(a: UnderwritingAssumptions): string[] {
+  const out: string[] = []
   if (a.acquisition.purchasePrice.source === 'estimated') {
     out.push(
       'Purchase price is a model estimate (year-1 NOI ÷ market cap rate), not an asking price or offer. ' +
         'At this price the going-in cap equals the market cap by construction.',
     )
   }
-
   return out
 }

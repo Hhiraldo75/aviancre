@@ -1,4 +1,4 @@
-import type { ISODate, Property, Sourced, UnderwritingAssumptions } from '../../types'
+import type { ISODate, Property, Sourced, UnderwritingAssumptions, UnderwritingResult } from '../../types'
 import { fmt } from '../format'
 import { estimate } from '../sourced'
 import { defaultAssumptions, isEstimate } from './defaults'
@@ -55,8 +55,6 @@ export type UnderwritingSummary =
   | { status: 'unavailable'; reason: string }
 
 export const PRICE_ESTIMATE_HINT = 'Model estimate: Year-1 NOI ÷ market cap'
-
-const unavailable = (reason: string): UnderwritingSummary => ({ status: 'unavailable', reason })
 
 /** First sentence of a warning: splits at a period followed by a capitalized word. */
 const firstSentence = (text: string) => text.split(/(?<=\.)\s+(?=[A-Z])/)[0]
@@ -141,38 +139,37 @@ function estimatedFrom(...groups: Driver[][]): Sourced<unknown> | undefined {
   })
 }
 
+export type UnderwritingRun = { status: 'ok'; result: UnderwritingResult } | { status: 'unavailable'; reason: string }
+
 /**
  * Runs the engine (base scenario unless `assumptions` says otherwise) and
- * maps the result to card stats. Returns `unavailable` with a plain reason
+ * checks its headline figures. Returns `unavailable` with a plain reason
  * instead of throwing or producing NaN.
  */
-export function underwritingSummary(
-  property: Property,
-  asOf: ISODate,
-  assumptions?: UnderwritingAssumptions,
-): UnderwritingSummary {
+export function runUnderwriting(property: Property, asOf: ISODate, assumptions?: UnderwritingAssumptions): UnderwritingRun {
   const missing = missingData(property)
-  if (missing) return unavailable(missing)
+  if (missing) return { status: 'unavailable', reason: missing }
 
   let result
   try {
     result = underwrite(property, asOf, assumptions ?? defaultAssumptions(property, asOf))
   } catch (e) {
-    return unavailable(`The underwriting model couldn’t run: ${e instanceof Error ? e.message : String(e)}`)
+    return { status: 'unavailable', reason: `The underwriting model couldn’t run: ${e instanceof Error ? e.message : String(e)}` }
   }
 
   const a = result.assumptions
   const m = result.metrics
   const noi1 = result.cashFlows[0]?.netOperatingIncome ?? NaN
-  const priceIsEstimate = isEstimate(a.acquisition.purchasePrice)
 
   if (!(m.purchasePrice > 0)) {
-    return unavailable(
-      priceIsEstimate && noi1 <= 0
-        ? `Year-1 NOI is negative (${fmt.usd(noi1)}), so the model can’t estimate a price from NOI ÷ market cap. ` +
+    return {
+      status: 'unavailable',
+      reason:
+        isEstimate(a.acquisition.purchasePrice) && noi1 <= 0
+          ? `Year-1 NOI is negative (${fmt.usd(noi1)}), so the model can’t estimate a price from NOI ÷ market cap. ` +
             'Enter a purchase price in full underwriting.'
-        : 'The purchase price must be greater than zero.',
-    )
+          : 'The purchase price must be greater than zero.',
+    }
   }
 
   const headline = [
@@ -190,8 +187,39 @@ export function underwritingSummary(
     m.averageCashOnCash,
   ]
   if (headline.some((x) => x !== null && !Number.isFinite(x))) {
-    return unavailable('The underwriting model produced invalid figures for this property. Check its rent roll and market data.')
+    return {
+      status: 'unavailable',
+      reason: 'The underwriting model produced invalid figures for this property. Check its rent roll and market data.',
+    }
   }
+  return { status: 'ok', result }
+}
+
+/** EST source listing every estimated assumption behind the results, or undefined if none are. */
+export function assumptionEstimates(property: Property, a: UnderwritingAssumptions): Sourced<unknown> | undefined {
+  const d = driverGroups(property, a)
+  // Every stat's drivers fall within these groups.
+  return estimatedFrom(d.basis, d.noiOverHold, d.sale, d.debt)
+}
+
+/** Engine warnings as bullets: first sentence shown, full text kept for the tooltip. */
+export function summaryWarnings(warnings: string[]): SummaryWarning[] {
+  return warnings.map((full) => ({ short: firstSentence(full), full }))
+}
+
+/** Runs the engine and maps the result to card stats. */
+export function underwritingSummary(
+  property: Property,
+  asOf: ISODate,
+  assumptions?: UnderwritingAssumptions,
+): UnderwritingSummary {
+  const run = runUnderwriting(property, asOf, assumptions)
+  if (run.status === 'unavailable') return run
+  const result = run.result
+  const a = result.assumptions
+  const m = result.metrics
+  const noi1 = result.cashFlows[0].netOperatingIncome
+  const priceIsEstimate = isEstimate(a.acquisition.purchasePrice)
 
   const d = driverGroups(property, a)
   const H = a.acquisition.holdYears.value
@@ -265,10 +293,9 @@ export function underwritingSummary(
     isSample: property.isSample,
     scenario: a.scenario,
     holdYears: H,
-    // Every stat's drivers fall within these groups.
-    estimates: estimatedFrom(d.basis, d.noiOverHold, d.sale, d.debt),
+    estimates: assumptionEstimates(property, a),
     sections,
-    warnings: result.warnings.map((full) => ({ short: firstSentence(full), full })),
+    warnings: summaryWarnings(result.warnings),
     noiByYear: result.cashFlows.map((c) => {
       const lost = c.absorptionTurnoverVacancy + c.freeRent
       return {

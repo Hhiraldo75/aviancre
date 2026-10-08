@@ -146,6 +146,9 @@ export interface UnderwritingMetrics {
   purchasePrice: USD
   /** Price + closing costs + initial capex. */
   totalCost: USD
+  closingCosts: USD
+  /** Lender fee on the loan amount; paid from equity. */
+  loanFee: USD
   goingInCapRate: Pct
   /** Exit-year NOI as modeled, including rollover vacancy and free rent. */
   exitNOIRaw: USD
@@ -153,6 +156,7 @@ export interface UnderwritingMetrics {
   exitNOI: USD
   /** Gross sale value: normalized exit NOI ÷ exit cap. */
   exitValue: USD
+  sellingCosts: USD
   /** Sale value after selling costs, before loan payoff. */
   netSaleProceeds: USD
   pricePerSF: USD
@@ -169,6 +173,8 @@ export interface UnderwritingMetrics {
   minimumDSCR: number | null
   /** Year-1 NOI / loan amount. */
   debtYield: Pct | null
+  /** Annual amortizing debt service ÷ loan amount. */
+  loanConstant: Pct | null
   loanAmount: USD
   /** Loan balance repaid at sale. */
   loanPayoff: USD
@@ -197,6 +203,15 @@ export interface UnderwritingResult {
   generatedAt: string
   /** Plain-language flags, e.g. "DSCR below 1.25x in year 3". */
   warnings: string[]
+  /** Context that isn't a risk flag, e.g. that the price is a model estimate. */
+  notes: string[]
+  /** SF whose lease ends in each hold year (commercial; zeros for multifamily). */
+  expirations: {
+    /** In-place leases only. */
+    inPlaceSF: number[]
+    /** In-place plus modeled re-leased space that rolls again within the hold. */
+    totalSF: number[]
+  }
 }
 
 /** Variables an analyst can flex in a sensitivity grid. */

@@ -3,7 +3,13 @@ import { fmt } from '../../lib/format'
 import { Card, Chip, Stat, StatGrid } from '../ui/Card'
 
 /** Base-scenario underwriting results; renders the mapped summary only, no math. */
-export default function UnderwritingSummaryCard({ summary: s }: { summary: UnderwritingSummary }) {
+export default function UnderwritingSummaryCard({
+  summary: s,
+  onOpenFull,
+}: {
+  summary: UnderwritingSummary
+  onOpenFull: () => void
+}) {
   const aside =
     s.status === 'ok' ? (
       <div className="flex gap-1 text-[9px] font-semibold uppercase tracking-wide">
@@ -47,16 +53,18 @@ export default function UnderwritingSummaryCard({ summary: s }: { summary: Under
           )}
         </div>
       )}
-      <div className="mt-4 border-t border-slate-700 pt-3">
-        <span
-          role="link"
-          aria-disabled="true"
-          title="Step 3: full cash flow, assumptions and sensitivities"
-          className="cursor-not-allowed text-xs text-slate-500"
-        >
-          Full underwriting (coming soon) →
-        </span>
-      </div>
+      {s.status === 'ok' && (
+        <div className="mt-4 border-t border-slate-700 pt-3">
+          <button
+            type="button"
+            onClick={onOpenFull}
+            title="Annual cash flow, rent roll, returns and assumptions"
+            className="text-xs font-medium text-sky-300 hover:text-sky-200"
+          >
+            Full underwriting →
+          </button>
+        </div>
+      )}
     </Card>
   )
 }

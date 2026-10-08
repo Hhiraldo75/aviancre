@@ -23,11 +23,15 @@ interface AppState {
   asOf: ISODate
   /** Which professional lens the sidebar shows. */
   activePersona: Persona
+  /** Whether the full underwriting panel is open over the map (selected property only). */
+  underwritingOpen: boolean
   select: (id: string | null) => void
   lookupParcel: (lng: number, lat: number) => Promise<void>
   clearSelection: () => void
   setAsOf: (date: ISODate) => void
   setPersona: (persona: Persona) => void
+  openUnderwriting: () => void
+  closeUnderwriting: () => void
 }
 
 /** In-flight parcel request; a newer click aborts the older one. */
@@ -44,10 +48,11 @@ export const useAppStore = create<AppState>()((set) => ({
   parcel: { status: 'idle' },
   asOf: todayISO(),
   activePersona: 'Analyst',
+  underwritingOpen: false,
 
   select: (id) => {
     cancelInFlight()
-    set({ selectedId: id, parcel: { status: 'idle' } })
+    set({ selectedId: id, parcel: { status: 'idle' }, underwritingOpen: false })
   },
 
   /**
@@ -60,7 +65,7 @@ export const useAppStore = create<AppState>()((set) => ({
     const controller = new AbortController()
     inFlight = controller
     const current = () => inFlight === controller
-    set({ selectedId: null, parcel: { status: 'loading', lng, lat } })
+    set({ selectedId: null, parcel: { status: 'loading', lng, lat }, underwritingOpen: false })
 
     const gisController = new AbortController()
     controller.signal.addEventListener('abort', () => gisController.abort())
@@ -102,11 +107,13 @@ export const useAppStore = create<AppState>()((set) => ({
 
   clearSelection: () => {
     cancelInFlight()
-    set({ selectedId: null, parcel: { status: 'idle' } })
+    set({ selectedId: null, parcel: { status: 'idle' }, underwritingOpen: false })
   },
 
   setAsOf: (date) => set({ asOf: date }),
   setPersona: (persona) => set({ activePersona: persona }),
+  openUnderwriting: () => set({ underwritingOpen: true }),
+  closeUnderwriting: () => set({ underwritingOpen: false }),
 }))
 
 export const useSelectedProperty = () =>

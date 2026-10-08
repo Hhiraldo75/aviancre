@@ -402,5 +402,6 @@ describe('underwrite (integration)', () => {
     expect(csv).toContain('Net operating income,')
     expect(csv).toContain('Unlevered IRR,')
     expect(csv).toContain('Industry rule of thumb – replace with market report')
+    expect(csv).toContain('\nNote\n"Purchase price is a model estimate')
   })
 })

@@ -66,10 +66,9 @@ describe('underwriting summary (Atwells, base scenario)', () => {
     expect(ok(s).warnings.map((w) => w.full)).toEqual(engine)
     expect(ok(s).warnings.map((w) => w.short)).toEqual([
       '36% of rentable SF rolls in year 2.',
-      'Negative leverage: the 7.00% going-in cap rate is below the 7.58% loan constant, so debt lowers the cash yield once the loan amortizes.',
+      'Negative leverage: the 7.00% going-in cap rate is below the 7.58% loan constant, so debt lowers the yearly cash yield.',
       'In-place rents are 32% above market; income declines as leases roll.',
       'Casa Lucenti Trattoria (suite 101) has a $30.00/SF renewal option, above the projected $23.35/SF market rent at its 2030-02-28 expiration.',
-      'Purchase price is a model estimate (year-1 NOI ÷ market cap rate), not an asking price or offer.',
     ])
   })
   it('flags sample data and returns NOI for each hold year', () => {

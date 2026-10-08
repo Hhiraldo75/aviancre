@@ -5,6 +5,9 @@ const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFra
 
 export const fmt = {
   usd: (n: number) => usd0.format(n),
+  usdCents: (n: number) => usd2.format(n),
+  /** Statement style: 1,234; negatives in parentheses; a dash for zero. */
+  accounting: (n: number) => (Math.round(n) === 0 ? '–' : n < 0 ? `(${int.format(-n)})` : int.format(n)),
   usdCompact: (n: number) => '$' + compact.format(n),
   /** $4.15M from $1M up, full dollars with commas below that. */
   money: (n: number) => (Math.abs(n) >= 1e6 ? `${n < 0 ? '-' : ''}$${(Math.abs(n) / 1e6).toFixed(2)}M` : usd0.format(n)),
@@ -16,6 +19,7 @@ export const fmt = {
   pct: (n: number, digits = 1) => `${(n * 100).toFixed(digits)}%`,
   signedPct: (n: number, digits = 1) => `${n >= 0 ? '+' : '−'}${Math.abs(n * 100).toFixed(digits)}%`,
   years: (n: number) => `${n.toFixed(1)} yrs`,
+  multiple: (x: number) => `${x.toFixed(2)}x`,
   monthYear: (iso: string) =>
     new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' }),
   label: (s: string) => s.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),

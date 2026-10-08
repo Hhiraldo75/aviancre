@@ -7,11 +7,12 @@ import UnderwritingSummaryCard from '../underwriting/UnderwritingSummaryCard'
 
 export default function InvestmentView({ property: p }: { property: Property }) {
   const asOf = useAppStore((s) => s.asOf)
+  const openUnderwriting = useAppStore((s) => s.openUnderwriting)
   const summary = useMemo(() => underwritingSummary(p, asOf), [p, asOf])
 
   return (
     <div className="space-y-4">
-      <UnderwritingSummaryCard summary={summary} />
+      <UnderwritingSummaryCard summary={summary} onOpenFull={openUnderwriting} />
 
       {summary.status === 'ok' && <NOIChart noiByYear={summary.noiByYear} />}
     </div>

@@ -2,7 +2,7 @@ import type { AnnualCashFlow, Escalation, Lease, Property, UnderwritingAssumptio
 
 /** Plain-text and CSV renderings of an underwriting result, for the CLI and Excel checks. */
 
-type LineKey = Exclude<keyof AnnualCashFlow, 'year' | 'occupancy'>
+export type LineKey = Exclude<keyof AnnualCashFlow, 'year' | 'occupancy'>
 
 /** Waterfall lines in report order. Losses and costs are positive amounts. */
 function lines(isMultifamily: boolean): [label: string, key: LineKey][] {
@@ -40,6 +40,8 @@ function yearZero(r: UnderwritingResult, key: LineKey): number | null {
 
 export interface ReportRow {
   label: string
+  /** The cash flow field; undefined for the occupancy row. */
+  key?: LineKey
   /** Year 0, years 1..N, the forward year, then the normalized exit year. */
   values: (number | null)[]
 }
@@ -54,6 +56,7 @@ export function cashFlowRows(r: UnderwritingResult): ReportRow[] {
     occupancy,
     ...lines(isMF).map(([label, key]) => ({
       label,
+      key,
       values: [
         yearZero(r, key),
         ...r.cashFlows.map((c) => c[key]),
@@ -211,6 +214,9 @@ export function toCSV(r: UnderwritingResult, propertyName: string): string {
   out.push([])
   out.push(['Warning'])
   for (const w of r.warnings) out.push([w])
+  out.push([])
+  out.push(['Note'])
+  for (const n of r.notes) out.push([n])
   out.push([])
   out.push(['Assumption', 'Value', 'Source', 'Source type'])
   for (const a of assumptionRows(r.assumptions)) out.push([a.path, a.value, a.sourceName, a.source])
