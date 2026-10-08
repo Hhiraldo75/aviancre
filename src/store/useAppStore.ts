@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { GisDetails, ISODate, ParcelLookup, Persona, Property, TaxRecord } from '../types'
 import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
 import { todayISO } from '../lib/metrics'
+import type { AssumptionEdits } from '../lib/underwriting/edits'
 import { lookupParcelAt } from '../services/providenceGis'
 import { lookupTaxRecord } from '../services/providenceOpenData'
 
@@ -25,6 +26,8 @@ interface AppState {
   activePersona: Persona
   /** Whether the full underwriting panel is open over the map (selected property only). */
   underwritingOpen: boolean
+  /** Analyst edits to the default underwriting assumptions, by property id; kept for the session. */
+  assumptionEdits: Record<string, AssumptionEdits>
   select: (id: string | null) => void
   lookupParcel: (lng: number, lat: number) => Promise<void>
   clearSelection: () => void
@@ -32,6 +35,10 @@ interface AppState {
   setPersona: (persona: Persona) => void
   openUnderwriting: () => void
   closeUnderwriting: () => void
+  /** `value` in engine units (Pct as a decimal); callers validate it first. */
+  setAssumption: (propertyId: string, key: string, value: number) => void
+  resetAssumption: (propertyId: string, key: string) => void
+  resetAssumptions: (propertyId: string) => void
 }
 
 /** In-flight parcel request; a newer click aborts the older one. */
@@ -49,6 +56,7 @@ export const useAppStore = create<AppState>()((set) => ({
   asOf: todayISO(),
   activePersona: 'Analyst',
   underwritingOpen: false,
+  assumptionEdits: {},
 
   select: (id) => {
     cancelInFlight()
@@ -114,7 +122,29 @@ export const useAppStore = create<AppState>()((set) => ({
   setPersona: (persona) => set({ activePersona: persona }),
   openUnderwriting: () => set({ underwritingOpen: true }),
   closeUnderwriting: () => set({ underwritingOpen: false }),
+
+  setAssumption: (propertyId, key, value) =>
+    set((s) => ({
+      assumptionEdits: { ...s.assumptionEdits, [propertyId]: { ...s.assumptionEdits[propertyId], [key]: value } },
+    })),
+  resetAssumption: (propertyId, key) =>
+    set((s) => {
+      const current = s.assumptionEdits[propertyId]
+      if (!current || !(key in current)) return {}
+      const { [key]: _removed, ...rest } = current
+      return { assumptionEdits: { ...s.assumptionEdits, [propertyId]: rest } }
+    }),
+  resetAssumptions: (propertyId) =>
+    set((s) => {
+      const { [propertyId]: _removed, ...rest } = s.assumptionEdits
+      return { assumptionEdits: rest }
+    }),
 }))
+
+const NO_EDITS: AssumptionEdits = {}
+
+/** The analyst's assumption edits for a property; a stable empty object when there are none. */
+export const useAssumptionEdits = (propertyId: string) => useAppStore((s) => s.assumptionEdits[propertyId] ?? NO_EDITS)
 
 export const useSelectedProperty = () =>
   useAppStore((s) => s.properties.find((p) => p.id === s.selectedId) ?? null)

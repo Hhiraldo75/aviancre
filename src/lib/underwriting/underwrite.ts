@@ -124,7 +124,7 @@ export function underwrite(
     loanPayoff,
     equityRequired: equity,
     npv: npv(a.discountRate.value, unlevered),
-    walt: walt(property, asOf),
+    walt: walt(property, asOf, a.acquisition.analysisStartDate),
     inPlaceRent,
     marketRent,
     inPlaceVsMarket: inPlaceRent !== null && marketRent ? inPlaceRent / marketRent - 1 : null,

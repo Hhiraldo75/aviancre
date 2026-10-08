@@ -104,12 +104,15 @@ export function markToMarket(property: Property, asOf: ISODate): number | null {
   return property.market.marketRent.value / inPlace - 1
 }
 
-/** Weighted average lease term remaining, in years, weighted by SF. Commercial only. */
-export function walt(property: Property, asOf: ISODate): number | null {
+/**
+ * Weighted average lease term remaining, in years, weighted by SF. Commercial only.
+ * Leases active on `asOf`; term measured from `from` (e.g. the analysis start), never below zero.
+ */
+export function walt(property: Property, asOf: ISODate, from: ISODate = asOf): number | null {
   const leases = activeLeases(property, asOf)
   const totalSF = leases.reduce((s, l) => s + l.leasedSF, 0)
   if (!totalSF) return null
-  return leases.reduce((s, l) => s + l.leasedSF * yearsBetween(asOf, l.expirationDate), 0) / totalSF
+  return leases.reduce((s, l) => s + l.leasedSF * Math.max(0, yearsBetween(from, l.expirationDate)), 0) / totalSF
 }
 
 export function monthsUntil(asOf: ISODate, date: ISODate): number {

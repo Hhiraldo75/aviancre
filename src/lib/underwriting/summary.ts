@@ -1,7 +1,8 @@
 import type { ISODate, Property, Sourced, UnderwritingAssumptions, UnderwritingResult } from '../../types'
 import { fmt } from '../format'
 import { estimate } from '../sourced'
-import { defaultAssumptions, isEstimate } from './defaults'
+import { isEstimate } from './defaults'
+import { assumptionChanges, assumptionsFor, defaultsFor, type AssumptionEdits } from './edits'
 import { DSCR_FLOOR, underwrite } from './underwrite'
 
 /**
@@ -47,6 +48,8 @@ export type UnderwritingSummary =
       holdYears: number
       /** Set when any result depends on an estimated assumption; lists them. */
       estimates?: Sourced<unknown>
+      /** Edited assumptions, e.g. "Exit cap rate 7.50% (default 7.25%)"; empty at defaults. */
+      changes: string[]
       sections: SummarySection[]
       warnings: SummaryWarning[]
       /** NOI by hold year, for the projection chart. */
@@ -141,20 +144,47 @@ function estimatedFrom(...groups: Driver[][]): Sourced<unknown> | undefined {
 
 export type UnderwritingRun = { status: 'ok'; result: UnderwritingResult } | { status: 'unavailable'; reason: string }
 
+/** Full assumptions, or analyst edits to apply to the defaults. */
+export type AssumptionsInput = UnderwritingAssumptions | AssumptionEdits
+
+const isAssumptions = (x: AssumptionsInput): x is UnderwritingAssumptions => 'acquisition' in x && typeof x.acquisition === 'object'
+
+/** Last run per assumptions object, so views sharing assumptions share one engine run. */
+const runCache = new WeakMap<UnderwritingAssumptions, { property: Property; asOf: ISODate; run: UnderwritingRun }>()
+
 /**
- * Runs the engine (base scenario unless `assumptions` says otherwise) and
+ * Runs the engine (base scenario unless the assumptions say otherwise) and
  * checks its headline figures. Returns `unavailable` with a plain reason
  * instead of throwing or producing NaN.
  */
-export function runUnderwriting(property: Property, asOf: ISODate, assumptions?: UnderwritingAssumptions): UnderwritingRun {
+export function runUnderwriting(property: Property, asOf: ISODate, input: AssumptionsInput = {}): UnderwritingRun {
   const missing = missingData(property)
   if (missing) return { status: 'unavailable', reason: missing }
 
+  let a: UnderwritingAssumptions
+  try {
+    a = isAssumptions(input) ? input : assumptionsFor(property, asOf, input)
+  } catch (e) {
+    return engineError(e)
+  }
+  const hit = runCache.get(a)
+  if (hit && hit.property === property && hit.asOf === asOf) return hit.run
+  const run = checkedRun(property, asOf, a)
+  runCache.set(a, { property, asOf, run })
+  return run
+}
+
+const engineError = (e: unknown): UnderwritingRun => ({
+  status: 'unavailable',
+  reason: `The underwriting model couldn’t run: ${e instanceof Error ? e.message : String(e)}`,
+})
+
+function checkedRun(property: Property, asOf: ISODate, assumptions: UnderwritingAssumptions): UnderwritingRun {
   let result
   try {
-    result = underwrite(property, asOf, assumptions ?? defaultAssumptions(property, asOf))
+    result = underwrite(property, asOf, assumptions)
   } catch (e) {
-    return { status: 'unavailable', reason: `The underwriting model couldn’t run: ${e instanceof Error ? e.message : String(e)}` }
+    return engineError(e)
   }
 
   const a = result.assumptions
@@ -202,18 +232,19 @@ export function assumptionEstimates(property: Property, a: UnderwritingAssumptio
   return estimatedFrom(d.basis, d.noiOverHold, d.sale, d.debt)
 }
 
+/** Edited assumptions with their defaults, for the "Assumptions changed" chip. */
+export function changesFrom(property: Property, asOf: ISODate, a: UnderwritingAssumptions): string[] {
+  return assumptionChanges(a, defaultsFor(property, asOf))
+}
+
 /** Engine warnings as bullets: first sentence shown, full text kept for the tooltip. */
 export function summaryWarnings(warnings: string[]): SummaryWarning[] {
   return warnings.map((full) => ({ short: firstSentence(full), full }))
 }
 
 /** Runs the engine and maps the result to card stats. */
-export function underwritingSummary(
-  property: Property,
-  asOf: ISODate,
-  assumptions?: UnderwritingAssumptions,
-): UnderwritingSummary {
-  const run = runUnderwriting(property, asOf, assumptions)
+export function underwritingSummary(property: Property, asOf: ISODate, input?: AssumptionsInput): UnderwritingSummary {
+  const run = runUnderwriting(property, asOf, input)
   if (run.status === 'unavailable') return run
   const result = run.result
   const a = result.assumptions
@@ -294,6 +325,7 @@ export function underwritingSummary(
     scenario: a.scenario,
     holdYears: H,
     estimates: assumptionEstimates(property, a),
+    changes: changesFrom(property, asOf, a),
     sections,
     warnings: summaryWarnings(result.warnings),
     noiByYear: result.cashFlows.map((c) => {

@@ -11,15 +11,21 @@ import type {
 } from '../../types'
 import { fmt } from '../format'
 import { activeLeases, currentRentPerSF, occupancy, yearsBetween } from '../metrics'
+import { RULE_OF_THUMB } from './defaults'
+import { defaultsFor, editableFields, fieldValue, formatInput, isEdited, type AssumptionField, type AssumptionGroupTitle } from './edits'
 import { cashFlowRows, type LineKey } from './report'
+import { marketRentInYear } from './rollover'
 import {
   PRICE_ESTIMATE_HINT,
   assumptionEstimates,
+  changesFrom,
   runUnderwriting,
   summaryWarnings,
+  type AssumptionsInput,
   type SummaryStat,
   type SummaryWarning,
 } from './summary'
+import { analysisYear, monthAfter } from './timeline'
 import { DSCR_FLOOR } from './underwrite'
 
 /**
@@ -42,6 +48,8 @@ export interface CashFlowRow extends TableRow {
 export interface CashFlowTable {
   columns: string[]
   rows: CashFlowRow[]
+  /** The year after the hold, shown raw and normalized. */
+  exitYear: number
 }
 
 export interface RentRollRow {
@@ -53,10 +61,11 @@ export interface RentRollRow {
   pctOfBuilding: string
   start: string
   end: string
-  /** Remaining term for a lease; lease-up months for a vacant suite. */
+  /** Remaining term from the analysis start for a lease; lease-up months for a vacant suite. */
   remaining: string
   rent: string
-  market: string
+  /** Market rent in the year the lease expires (the lease-up year for a vacant suite). */
+  marketAtExpiration: string
   vsMarket: string
   vsMarketTone?: 'above' | 'below'
   escalation: string
@@ -76,7 +85,16 @@ export type RentRollView =
   | {
       kind: 'commercial'
       rows: RentRollRow[]
-      totals: { sf: string; pctOfBuilding: string; occupancy: string; walt: string; rent: string; market: string; vsMarket: string }
+      totals: {
+        sf: string
+        pctOfBuilding: string
+        occupancy: string
+        walt: string
+        rent: string
+        /** Year-1 market rent, which "vs market" compares against. */
+        market: string
+        vsMarket: string
+      }
       expirations: ExpirationRow[]
     }
   | { kind: 'unit-mix'; rentRoll: MultifamilyRentRoll }
@@ -99,16 +117,33 @@ export interface ReturnsView {
   cashFlows: { columns: string[]; rows: TableRow[] }
 }
 
+export interface AssumptionEdit {
+  field: AssumptionField
+  /** Current engine value. */
+  value: number
+  defaultValue: number
+  /** What the input box shows for the current value. */
+  input: string
+  /** e.g. "default 7.25%" */
+  defaultText: string
+  edited: boolean
+}
+
 export interface AssumptionItem {
   label: string
   value: string
   /** Absent for plain model settings, which carry no source badge. */
   src?: Sourced<unknown>
+  /** Source note; empty when the legend or the group note already says it. */
   note: string
+  /** Present for editable numeric assumptions. */
+  edit?: AssumptionEdit
 }
 
 export interface AssumptionGroup {
-  title: 'Acquisition' | 'Leasing' | 'Operating' | 'Debt' | 'Exit'
+  title: AssumptionGroupTitle
+  /** A source note shared by several items in the group, shown once. */
+  note?: string
   items: AssumptionItem[]
 }
 
@@ -121,6 +156,8 @@ export type FullUnderwriting =
         scenario: UnderwritingAssumptions['scenario']
         isSample: boolean
         estimates?: Sourced<unknown>
+        /** Edited assumptions with their defaults; empty at defaults. */
+        changes: string[]
         metrics: SummaryStat[]
         warnings: SummaryWarning[]
         /** Footnotes, e.g. that the price is a model estimate. */
@@ -151,12 +188,11 @@ const DEDUCTIONS: LineKey[] = [
 
 const cell = (key: LineKey, v: number | null) => (v === null ? '' : fmt.accounting(DEDUCTIONS.includes(key) ? -v : v))
 const pctOrDash = (x: number | null, digits = 2) => (x === null ? '—' : fmt.pct(x, digits))
-/** Percent with trailing zeros dropped: 1.5%, 6.5%, 7.25%. */
-const pctShort = (x: number) => `${Number((x * 100).toFixed(2))}%`
+const pctShort = fmt.pctShort
 
-/** Runs the engine and maps the result to the four tabs. */
-export function fullUnderwriting(property: Property, asOf: ISODate, assumptions?: UnderwritingAssumptions): FullUnderwriting {
-  const run = runUnderwriting(property, asOf, assumptions)
+/** Runs the engine (defaults plus any analyst edits) and maps the result to the four tabs. */
+export function fullUnderwriting(property: Property, asOf: ISODate, input?: AssumptionsInput): FullUnderwriting {
+  const run = runUnderwriting(property, asOf, input)
   if (run.status === 'unavailable') return run
   const r = run.result
   const a = r.assumptions
@@ -171,6 +207,7 @@ export function fullUnderwriting(property: Property, asOf: ISODate, assumptions?
       scenario: a.scenario,
       isSample: property.isSample,
       estimates: assumptionEstimates(property, a),
+      changes: changesFrom(property, asOf, a),
       metrics: [
         {
           label: 'Purchase price',
@@ -193,7 +230,7 @@ export function fullUnderwriting(property: Property, asOf: ISODate, assumptions?
     cashFlow: cashFlowTable(r),
     rentRoll: rentRollView(property, r, asOf),
     returns: returnsView(r),
-    assumptions: assumptionGroups(a),
+    assumptions: assumptionGroups(a, defaultsFor(property, asOf)),
   }
 }
 
@@ -219,6 +256,7 @@ export function cashFlowTable(r: UnderwritingResult): CashFlowTable {
   return {
     columns: [...r.cashFlows.map((c) => `Year ${c.year}`), `Year ${H + 1} raw`, `Year ${r.normalizedExitYear.year} normalized`],
     rows,
+    exitYear: H + 1,
   }
 }
 
@@ -261,10 +299,14 @@ export function rentRollView(property: Property, r: UnderwritingResult, asOf: IS
   const rr = property.rentRoll
   if (rr.kind === 'multifamily') return { kind: 'unit-mix', rentRoll: rr }
   const m = r.metrics
+  const { leasing, acquisition } = r.assumptions
+  const start = acquisition.analysisStartDate
   const rsf = property.physical.rentableSF.value
-  const market = r.assumptions.leasing.marketRent.value
+  const market = leasing.marketRent.value
   const share = (sf: number) => fmt.pct(sf / rsf, 1)
   const leases = activeLeases(property, asOf)
+  /** Market rent in the analysis year of month m, as the engine prices rollover. */
+  const marketInMonth = (m: number) => fmt.usdCents(marketRentInYear(leasing, analysisYear(Math.max(0, Math.floor(m)))))
 
   const leaseRows = leases.map((l): RentRollRow => {
     const rent = currentRentPerSF(l, asOf)
@@ -278,9 +320,10 @@ export function rentRollView(property: Property, r: UnderwritingResult, asOf: IS
       pctOfBuilding: share(l.leasedSF),
       start: fmt.monthYear(l.commencementDate),
       end: fmt.monthYear(l.expirationDate),
-      remaining: fmt.years(yearsBetween(asOf, l.expirationDate)),
+      remaining: fmt.years(Math.max(0, yearsBetween(start, l.expirationDate))),
       rent: fmt.usdCents(rent),
-      market: fmt.usdCents(market),
+      // The first month the lease no longer covers: when the space re-leases.
+      marketAtExpiration: marketInMonth(monthAfter(start, l.expirationDate)),
       vsMarket: fmt.signedPct(vs),
       vsMarketTone: vs > 0 ? 'above' : vs < 0 ? 'below' : undefined,
       escalation: escalationText(l.escalation),
@@ -288,8 +331,9 @@ export function rentRollView(property: Property, r: UnderwritingResult, asOf: IS
       renewalOption: renewalOptionText(l),
     }
   })
-  const vacantRows = rr.vacancies.map(
-    (v): RentRollRow => ({
+  const vacantRows = rr.vacancies.map((v): RentRollRow => {
+    const leaseUp = v.expectedLeaseUpMonths ?? leasing.downtimeMonths.value
+    return {
       id: v.id,
       vacant: true,
       suite: v.suite,
@@ -298,15 +342,15 @@ export function rentRollView(property: Property, r: UnderwritingResult, asOf: IS
       pctOfBuilding: share(v.sf),
       start: '—',
       end: '—',
-      remaining: `Lease-up ${v.expectedLeaseUpMonths ?? r.assumptions.leasing.downtimeMonths.value} mo`,
+      remaining: `Lease-up ${leaseUp} mo`,
       rent: v.askingRentPerSF ? `${fmt.usdCents(v.askingRentPerSF.value)} ask` : '—',
-      market: fmt.usdCents(market),
+      marketAtExpiration: marketInMonth(leaseUp),
       vsMarket: '—',
       escalation: '—',
       recovery: '—',
       renewalOption: '—',
-    }),
-  )
+    }
+  })
 
   const totalSF = leases.reduce((s, l) => s + l.leasedSF, 0) + rr.vacancies.reduce((s, v) => s + v.sf, 0)
   return {
@@ -318,7 +362,7 @@ export function rentRollView(property: Property, r: UnderwritingResult, asOf: IS
       occupancy: fmt.pct(occupancy(property, asOf), 1),
       walt: m.walt === null ? '—' : fmt.years(m.walt),
       rent: m.inPlaceRent === null ? '—' : fmt.usdCents(m.inPlaceRent),
-      market: fmt.usdCents(m.marketRent),
+      market: `Yr 1 ${fmt.usdCents(m.marketRent)}`,
       vsMarket: m.inPlaceVsMarket === null ? '—' : fmt.signedPct(m.inPlaceVsMarket),
     },
     expirations: r.expirations.totalSF.map((total, i) => {
@@ -383,6 +427,7 @@ export function returnsView(r: UnderwritingResult): ReturnsView {
       { label: `Less: selling costs (${pctShort(a.exit.sellingCostsPct.value)})`, value: neg(m.sellingCosts), kind: 'deduction' },
       { label: 'Net sale proceeds', value: usd(m.netSaleProceeds), kind: 'total' },
       { label: 'Less: loan payoff', value: hasDebt ? neg(m.loanPayoff) : '—', kind: 'deduction' },
+      { label: 'Net proceeds to equity', value: usd(m.netSaleProceeds - m.loanPayoff), kind: 'total' },
     ],
     returns: [
       { label: 'Unlevered IRR', value: pctOrDash(m.unleveredIRR) },
@@ -402,95 +447,58 @@ export function returnsView(r: UnderwritingResult): ReturnsView {
 }
 
 const note = (s: Sourced<unknown>) => [s.sourceName, s.notes].filter(Boolean).join(' · ')
-const sourced = (label: string, s: Sourced<number>, format: (x: number) => string): AssumptionItem => ({
-  label,
-  value: format(s.value),
-  src: s,
-  note: note(s),
-})
 const setting = (label: string, value: string): AssumptionItem => ({ label, value, note: 'Model setting' })
-const months = (x: number) => `${Number(x.toFixed(1))} mo`
-const years = (x: number) => `${x} yrs`
 
-/** Every assumption the engine reads, grouped for the read-only Assumptions tab. */
-export function assumptionGroups(a: UnderwritingAssumptions): AssumptionGroup[] {
-  const isMF = a.multifamily !== undefined
-  const rent = (x: number) => (isMF ? fmt.rentPerUnit(x) : `${fmt.usdCents(x)}/SF/yr`)
-  const { acquisition: acq, leasing: l, operating: op, debt, exit } = a
+/**
+ * Every assumption the engine reads, grouped for the Assumptions tab. Numeric
+ * ones carry what the input needs; notes come from the defaults so they don't
+ * shift while editing. Rule-of-thumb notes are left to the tab's legend, and a
+ * note several items in a group share moves to the group.
+ */
+export function assumptionGroups(a: UnderwritingAssumptions, defaults: UnderwritingAssumptions = a): AssumptionGroup[] {
+  const groups: AssumptionGroup[] = (['Acquisition', 'Leasing', 'Operating', 'Debt', 'Exit'] as const).map((title) => ({
+    title,
+    items: [],
+  }))
+  const group = (title: AssumptionGroupTitle) => groups.find((g) => g.title === title)!
 
-  const leasing: AssumptionItem[] = [
-    sourced('Market rent (Year 1)', l.marketRent, rent),
-    sourced('Market rent growth', l.marketRentGrowth, pctShort),
-  ]
-  if (a.multifamily) {
-    leasing.push(
-      sourced('Turnover rate', a.multifamily.turnoverRate, pctShort),
-      sourced('Turnover cost', a.multifamily.turnoverCostPerUnit, (x) => `${fmt.usd(x)}/move-out`),
-    )
-  } else {
-    const terms = (who: string, t: typeof l.newLease): AssumptionItem[] => [
-      sourced(`${who} term`, t.termMonths, (x) => years(x / 12)),
-      sourced(`${who} free rent`, t.freeRentMonths, months),
-      sourced(`${who} TI`, t.tiPerSF, (x) => `${fmt.usdCents(x)}/SF`),
-      sourced(`${who} leasing commission`, t.leasingCommissionPct, pctShort),
-    ]
-    leasing.push(
-      sourced('New-lease escalation', l.newLeaseEscalationPct, (x) => `${pctShort(x)}/yr`),
-      sourced('Renewal probability', l.renewalProbability, pctShort),
-      sourced('Downtime (new tenant)', l.downtimeMonths, months),
-      ...terms('New lease', l.newLease),
-      ...terms('Renewal', l.renewal),
-      setting('Vacant space recovery', fmt.label(l.vacantSpaceRecovery)),
-    )
+  for (const f of editableFields(a)) {
+    const src = fieldValue(a, f.key)
+    const dflt = fieldValue(defaults, f.key)
+    let n = note(dflt)
+    const expense = /^operating\.expenses\.(\d+)\./.exec(f.key)
+    if (expense) n += ` · ${a.operating.expenses[Number(expense[1])].recoverable ? 'recoverable' : 'not recoverable'}`
+    group(f.group).items.push({
+      label: f.label,
+      value: f.format(src.value),
+      src,
+      note: n,
+      edit: {
+        field: f,
+        value: src.value,
+        defaultValue: dflt.value,
+        input: formatInput(f, src.value),
+        defaultText: `default ${f.format(dflt.value)}`,
+        edited: isEdited(src),
+      },
+    })
   }
 
-  return [
-    {
-      title: 'Acquisition',
-      items: [
-        sourced('Purchase price', acq.purchasePrice, fmt.usd),
-        sourced('Closing costs', acq.closingCostsPct, pctShort),
-        sourced('Initial capex', acq.initialCapex, fmt.usd),
-        sourced('Hold period', acq.holdYears, years),
-        setting('Analysis start', fmt.monthYear(acq.analysisStartDate)),
-      ],
-    },
-    { title: 'Leasing', items: leasing },
-    {
-      title: 'Operating',
-      items: [
-        sourced('General vacancy', op.generalVacancyPct, pctShort),
-        sourced('Credit loss', op.creditLossPct, pctShort),
-        ...op.expenses.map((e) => ({
-          ...sourced(e.label, e.annualAmount, (x) => `${fmt.usd(x)}/yr`),
-          note: `${note(e.annualAmount)} · ${e.recoverable ? 'recoverable' : 'not recoverable'}`,
-        })),
-        sourced('Expense growth', op.expenseGrowth, pctShort),
-        sourced('Management fee (% of EGI)', op.managementFeePct, pctShort),
-        sourced('Capital reserves', op.capitalReservesPerYear, (x) => (isMF ? `${fmt.usd(x)}/unit/yr` : `${fmt.usdCents(x)}/SF/yr`)),
-      ],
-    },
-    {
-      title: 'Debt',
-      items: [
-        setting('Debt', debt.enabled ? 'On' : 'Off'),
-        sourced('Loan-to-value', debt.ltv, pctShort),
-        debt.rate.type === 'fixed'
-          ? sourced('Interest rate (fixed)', debt.rate.rate, (x) => fmt.pct(x, 2))
-          : sourced(`Spread over ${debt.rate.index}`, debt.rate.spreadBps, (x) => `${x} bps`),
-        sourced('Amortization', debt.amortizationYears, years),
-        sourced('Interest-only period', debt.interestOnlyYears, years),
-        sourced('Loan fees', debt.loanFeesPct, pctShort),
-      ],
-    },
-    {
-      title: 'Exit',
-      items: [
-        sourced('Exit cap rate', exit.exitCapRate, (x) => fmt.pct(x, 2)),
-        sourced('Selling costs', exit.sellingCostsPct, pctShort),
-        setting('Exit NOI', exit.capForwardNOI ? 'Forward year (hold + 1)' : 'Final hold year'),
-        sourced('Discount rate (NPV)', a.discountRate, pctShort),
-      ],
-    },
-  ]
+  group('Acquisition').items.push(setting('Analysis start', fmt.monthYear(a.acquisition.analysisStartDate)))
+  if (!a.multifamily) group('Leasing').items.push(setting('Vacant space recovery', fmt.label(a.leasing.vacantSpaceRecovery)))
+  group('Debt').items.unshift(setting('Debt', a.debt.enabled ? 'On' : 'Off'))
+  const exit = group('Exit').items
+  exit.splice(2, 0, setting('Exit NOI', a.exit.capForwardNOI ? 'Forward year (hold + 1)' : 'Final hold year'))
+
+  for (const g of groups) {
+    for (const x of g.items) if (x.note === RULE_OF_THUMB) x.note = ''
+    const counts = new Map<string, number>()
+    for (const x of g.items) if (x.note) counts.set(x.note, (counts.get(x.note) ?? 0) + 1)
+    const shared = [...counts].filter(([, c]) => c > 1).map(([n]) => n)
+    if (shared.length) {
+      g.note = shared.join(' · ')
+      for (const x of g.items) if (shared.includes(x.note)) x.note = ''
+    }
+  }
+  return groups
 }

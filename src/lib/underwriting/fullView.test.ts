@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { AnnualCashFlow } from '../../types'
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties'
-import { activeLeases, occupancy } from '../metrics'
+import { activeLeases, occupancy, yearsBetween } from '../metrics'
+import { RULE_OF_THUMB } from './defaults'
 import { fullUnderwriting, type FullUnderwriting } from './fullView'
 import { underwrite } from './underwrite'
 
@@ -39,6 +40,12 @@ describe('full underwriting: cash flow tab (Atwells)', () => {
   it('has Years 1-10 plus Year 11 raw and normalized', () => {
     expect(t.columns).toEqual([...Array.from({ length: 10 }, (_, i) => `Year ${i + 1}`), 'Year 11 raw', 'Year 11 normalized'])
     for (const x of t.rows) expect(x.cells, x.label).toHaveLength(12)
+    expect(t.exitYear).toBe(11)
+  })
+  it('follows an edited hold period', () => {
+    const short = ok(fullUnderwriting(ATWELLS, AS_OF, { 'acquisition.holdYears': 7 })).cashFlow
+    expect(short.columns.slice(-3)).toEqual(['Year 7', 'Year 8 raw', 'Year 8 normalized'])
+    expect(short.exitYear).toBe(8)
   })
   it('runs from gross potential rent through cash flow after debt, with the CSV labels', () => {
     expect(t.rows[0].label).toBe('Gross potential rent')
@@ -93,7 +100,8 @@ describe('full underwriting: rent roll tab', () => {
       pctOfBuilding: '23.6%',
       start: 'Mar 2015',
       end: 'Feb 2030',
-      market: '$22.00',
+      remaining: '3.3 yrs', // from the Nov 1, 2026 analysis start, not the Oct 4 analysis date
+      marketAtExpiration: '$23.35', // $22.00 grown 2%/yr to Year 4, when the space re-leases
       escalation: '3%/yr',
       recovery: 'NNN · Net + 10% admin',
       renewalOption: '5 yr at $30.00/SF',
@@ -108,6 +116,15 @@ describe('full underwriting: rent roll tab', () => {
     expect(rr.totals.sf).toBe('14,400')
     expect(rr.totals.occupancy).toBe(`${(occupancy(ATWELLS, AS_OF) * 100).toFixed(1)}%`)
     expect(rr.totals.walt).toBe(`${r.metrics.walt!.toFixed(1)} yrs`)
+    expect(rr.totals.market).toBe('Yr 1 $22.00')
+  })
+  it('measures WALT from the analysis start', () => {
+    const start = r.assumptions.acquisition.analysisStartDate
+    expect(start).toBe('2026-11-01')
+    const leases = activeLeases(ATWELLS, AS_OF)
+    const sf = leases.reduce((s, l) => s + l.leasedSF, 0)
+    const expected = leases.reduce((s, l) => s + l.leasedSF * yearsBetween(start, l.expirationDate), 0) / sf
+    expect(r.metrics.walt).toBeCloseTo(expected, 10)
     expect(rr.totals.vsMarket).toBe('+31.5%')
   })
   it('schedules expirations for each hold year, matching the rollover warning', () => {
@@ -134,6 +151,11 @@ describe('full underwriting: returns tab', () => {
     expect(value(ret.sale, 'Year-11 NOI (normalized')).toBe('$341,402')
     expect(value(ret.sale, 'Less: selling costs')).toBe(`($${Math.round(m.sellingCosts).toLocaleString('en-US')})`)
     expect(value(ret.sale, 'Net sale proceeds')).toBe(`$${Math.round(m.netSaleProceeds).toLocaleString('en-US')}`)
+    expect(ret.sale.at(-1)).toEqual({
+      label: 'Net proceeds to equity',
+      value: `$${Math.round(m.netSaleProceeds - m.loanPayoff).toLocaleString('en-US')}`,
+      kind: 'total',
+    })
     expect(value(ret.returns, 'Unlevered IRR')).toBe('6.69%')
     expect(value(ret.returns, 'Levered IRR')).toBe('6.78%')
     expect(value(ret.returns, 'NPV @ 8.00%')).toBe('-$391,990')
@@ -155,7 +177,28 @@ describe('full underwriting: assumptions tab', () => {
     const price = v.assumptions[0].items.find((x) => x.label === 'Purchase price')!
     expect(price.src?.source).toBe('estimated')
     expect(price.note).toContain('Year-1 NOI ÷ market cap rate')
-    for (const g of v.assumptions) for (const x of g.items) if (x.src) expect(x.note, x.label).not.toBe('')
+  })
+  it('leaves rule-of-thumb notes to the legend and lifts shared notes to the group', () => {
+    const items = v.assumptions.flatMap((g) => g.items)
+    expect(items.some((x) => x.note === RULE_OF_THUMB)).toBe(false)
+    const debt = v.assumptions.find((g) => g.title === 'Debt')!
+    expect(debt.note).toBe('Placeholder – replace with lender term sheet')
+    expect(debt.items.filter((x) => x.src).every((x) => x.note === '')).toBe(true)
+    for (const g of v.assumptions) {
+      const notes = g.items.map((x) => x.note).filter(Boolean)
+      expect(new Set(notes).size, g.title).toBe(notes.length)
+    }
+  })
+  it('makes every sourced number editable, with its default', () => {
+    for (const g of v.assumptions) for (const x of g.items) expect(!!x.edit, x.label).toBe(!!x.src)
+    const exitCap = v.assumptions.flatMap((g) => g.items).find((x) => x.label === 'Exit cap rate')!.edit!
+    expect(exitCap).toMatchObject({ input: '7.25', defaultText: 'default 7.25%', edited: false })
+    const edited = ok(fullUnderwriting(ATWELLS, AS_OF, { 'exit.exitCapRate': 0.075 }))
+    const item = edited.assumptions.flatMap((g) => g.items).find((x) => x.label === 'Exit cap rate')!
+    expect(item.edit).toMatchObject({ input: '7.5', defaultText: 'default 7.25%', edited: true })
+    expect(item.src?.sourceName).toBe('Analyst input')
+    expect(edited.header.changes).toEqual(['Exit cap rate 7.50% (default 7.25%)'])
+    expect(v.header.changes).toEqual([])
   })
   it('lists multifamily turnover instead of commercial leasing terms', () => {
     const items = ok(fullUnderwriting(FEDERAL_HILL, AS_OF)).assumptions.flatMap((g) => g.items)

@@ -8,9 +8,11 @@
  * No script writes to the fixture; `npm run underwrite` writes to docs/ instead.
  */
 import { describe, expect, it } from 'vitest'
-import type { AnnualCashFlow } from '../../types'
+import type { AnnualCashFlow, UnderwritingResult } from '../../types'
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties'
+import { useAppStore } from '../../store/useAppStore'
 import fixture from './__fixtures__/atwells-benchmark.csv?raw'
+import { assumptionsFor } from './edits'
 import { underwrite } from './underwrite'
 
 const AS_OF = '2026-10-04'
@@ -20,7 +22,7 @@ const DSCR = 0.01
 
 const ATWELLS = SAMPLE_PROPERTIES.find((p) => p.id === 'sample-atwells-retail-row')
 if (!ATWELLS) throw new Error('missing sample-atwells-retail-row')
-const r = underwrite(ATWELLS, AS_OF)
+const defaultRun = underwrite(ATWELLS, AS_OF)
 
 /** Minimal CSV parser: commas, double-quoted cells, "" escapes. */
 function parseCSV(text: string): string[][] {
@@ -96,7 +98,7 @@ const LINES: Record<string, keyof Omit<AnnualCashFlow, 'year'>> = {
 }
 
 /** Engine value for a fixture column: Year 0, Years 1–10, then both Year-11 columns. */
-function engineValue(key: keyof Omit<AnnualCashFlow, 'year'>, column: number): number | null {
+function engineValue(r: UnderwritingResult, key: keyof Omit<AnnualCashFlow, 'year'>, column: number): number | null {
   if (column === 0) {
     if (key === 'unleveredCashFlow') return -r.metrics.totalCost
     if (key === 'leveredCashFlow') return -r.metrics.equityRequired
@@ -106,7 +108,8 @@ function engineValue(key: keyof Omit<AnnualCashFlow, 'year'>, column: number): n
   return (column === r.cashFlows.length + 1 ? r.forwardYear : r.normalizedExitYear)[key]
 }
 
-describe('Atwells golden benchmark', () => {
+/** Every fixture check, against one engine result. */
+function goldenChecks(r: UnderwritingResult) {
   it('has the expected fixture shape', () => {
     expect(header).toEqual([
       'Line',
@@ -128,7 +131,7 @@ describe('Atwells golden benchmark', () => {
       let compared = 0
       cells.forEach((cell, column) => {
         if (cell === '') return // not applicable in this column (e.g. debt lines in year 11)
-        const actual = engineValue(key, column)
+        const actual = engineValue(r, key, column)
         expect(actual, `${label.trim()}, ${header[column + 1]}`).not.toBeNull()
         expect(Math.abs(actual! - Number(cell)), `${label.trim()}, ${header[column + 1]}`).toBeLessThanOrEqual(tolerance)
         compared++
@@ -159,4 +162,49 @@ describe('Atwells golden benchmark', () => {
     expect(Math.abs(m.leveredIRR! - percent(metricValue('Levered IRR')))).toBeLessThanOrEqual(RATE)
     expect(Math.abs(m.minimumDSCR! - Number(metricValue('Minimum DSCR').replace('x', '')))).toBeLessThanOrEqual(DSCR)
   })
+}
+
+describe('Atwells golden benchmark', () => {
+  goldenChecks(defaultRun)
+})
+
+/** Runs the engine on Atwells with whatever edits the store holds, as the UI does. */
+const runFromStore = () => underwrite(ATWELLS, AS_OF, assumptionsFor(ATWELLS, AS_OF, useAppStore.getState().assumptionEdits[ATWELLS.id]))
+const store = useAppStore.getState()
+
+describe('Atwells with an edited exit cap', () => {
+  store.setAssumption(ATWELLS.id, 'exit.exitCapRate', 0.075)
+  const edited = runFromStore()
+
+  it('starts from a 7.25% exit cap', () => {
+    expect(defaultRun.assumptions.exit.exitCapRate.value).toBeCloseTo(0.0725, 12)
+    expect(edited.assumptions.exit.exitCapRate).toMatchObject({ value: 0.075, source: 'imported', sourceName: 'Analyst input' })
+  })
+  it('lowers both IRRs at 7.50%', () => {
+    expect(edited.metrics.unleveredIRR!).toBeLessThan(defaultRun.metrics.unleveredIRR!)
+    expect(edited.metrics.leveredIRR!).toBeLessThan(defaultRun.metrics.leveredIRR!)
+  })
+  it('changes only the sale, not the price or operations', () => {
+    expect(edited.metrics.purchasePrice).toBe(defaultRun.metrics.purchasePrice)
+    expect(edited.cashFlows.map((c) => c.netOperatingIncome)).toEqual(defaultRun.cashFlows.map((c) => c.netOperatingIncome))
+    expect(edited.metrics.exitValue).toBeLessThan(defaultRun.metrics.exitValue)
+  })
+})
+
+describe('Atwells golden benchmark after Reset', () => {
+  store.setAssumption(ATWELLS.id, 'exit.exitCapRate', 0.075)
+  store.setAssumption(ATWELLS.id, 'operating.generalVacancyPct', 0.07)
+  store.resetAssumption(ATWELLS.id, 'operating.generalVacancyPct')
+  store.resetAssumptions(ATWELLS.id)
+  const reset = runFromStore()
+
+  it('clears every edit', () => {
+    expect(useAppStore.getState().assumptionEdits[ATWELLS.id]).toBeUndefined()
+  })
+  it('restores the default results exactly', () => {
+    const { generatedAt: _a, ...expected } = defaultRun
+    const { generatedAt: _b, ...actual } = reset
+    expect(actual).toEqual(expected)
+  })
+  goldenChecks(reset)
 })

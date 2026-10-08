@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Property } from '../../types'
 import { fmt } from '../../lib/format'
 import { fullUnderwriting, toCSV } from '../../lib/underwriting'
-import { useAppStore } from '../../store/useAppStore'
+import { useAppStore, useAssumptionEdits } from '../../store/useAppStore'
 import { Chip, Stat } from '../ui/Card'
 import AssumptionsTab from './AssumptionsTab'
+import ChangedChip from './ChangedChip'
 import CashFlowTab from './CashFlowTab'
 import RentRollTab from './RentRollTab'
 import ReturnsTab from './ReturnsTab'
@@ -21,11 +22,15 @@ function downloadCSV(filename: string, csv: string) {
   URL.revokeObjectURL(url)
 }
 
-/** Read-only full underwriting over the map; renders the mapped view only, no math. */
+/** Full underwriting over the map; renders the mapped view only, no math. Assumption edits recalculate everything. */
 export default function FullUnderwritingPanel({ property: p }: { property: Property }) {
   const asOf = useAppStore((s) => s.asOf)
   const close = useAppStore((s) => s.closeUnderwriting)
-  const view = useMemo(() => fullUnderwriting(p, asOf), [p, asOf])
+  const setAssumption = useAppStore((s) => s.setAssumption)
+  const resetAssumption = useAppStore((s) => s.resetAssumption)
+  const resetAssumptions = useAppStore((s) => s.resetAssumptions)
+  const edits = useAssumptionEdits(p.id)
+  const view = useMemo(() => fullUnderwriting(p, asOf, edits), [p, asOf, edits])
   const [tab, setTab] = useState<Tab>('Cash flow')
   const closeRef = useRef<HTMLButtonElement>(null)
 
@@ -51,6 +56,7 @@ export default function FullUnderwritingPanel({ property: p }: { property: Prope
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide">
                 <Chip>{fmt.label(view.header.scenario)} case</Chip>
                 {view.header.isSample && <Chip tone="amber">Sample data</Chip>}
+                <ChangedChip changes={view.header.changes} />
                 {view.header.estimates && (
                   <span title={view.header.estimates.notes} className="cursor-help text-[10px] font-normal normal-case tracking-normal text-slate-400">
                     Results use estimated market assumptions (EST)
@@ -125,7 +131,15 @@ export default function FullUnderwritingPanel({ property: p }: { property: Prope
             )}
             {tab === 'Rent roll' && <RentRollTab rentRoll={view.rentRoll} />}
             {tab === 'Returns' && <ReturnsTab returns={view.returns} />}
-            {tab === 'Assumptions' && <AssumptionsTab groups={view.assumptions} />}
+            {tab === 'Assumptions' && (
+              <AssumptionsTab
+                groups={view.assumptions}
+                changed={view.header.changes.length > 0}
+                onSet={(key, value) => setAssumption(p.id, key, value)}
+                onReset={(key) => resetAssumption(p.id, key)}
+                onResetAll={() => resetAssumptions(p.id)}
+              />
+            )}
             {view.header.notes.length > 0 && (
               <div className="mt-6 space-y-1 border-t border-slate-700 pt-3 text-[10px] leading-snug text-slate-500">
                 {view.header.notes.map((n) => (

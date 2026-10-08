@@ -6,8 +6,8 @@ export default function CashFlowTab({ table, onDownload }: { table: CashFlowTabl
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-[10px] text-slate-400">
-          USD. Costs and losses in parentheses. Year 11 is modeled only to value the exit; the normalized column replaces
-          rollover vacancy and free rent with general vacancy and is the NOI the sale uses.
+          USD. Costs and losses in parentheses. Year {table.exitYear} is modeled only to value the exit; the normalized
+          column replaces rollover vacancy and free rent with general vacancy and is the NOI the sale uses.
         </p>
         <button
           type="button"

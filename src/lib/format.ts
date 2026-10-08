@@ -3,6 +3,9 @@ const usd2 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD'
 const int = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
 
+/** Wraps a formatted negative number in parentheses; "-0.0" counts as zero. */
+const percent = (s: string) => (s.startsWith('-') && Number(s) !== 0 ? `(${s.slice(1)}%)` : `${s.replace(/^-/, '')}%`)
+
 export const fmt = {
   usd: (n: number) => usd0.format(n),
   usdCents: (n: number) => usd2.format(n),
@@ -16,8 +19,15 @@ export const fmt = {
   rentPerUnit: (n: number) => `${usd0.format(n)}/unit/mo`,
   sf: (n: number) => `${int.format(n)} SF`,
   int: (n: number) => int.format(n),
-  pct: (n: number, digits = 1) => `${(n * 100).toFixed(digits)}%`,
-  signedPct: (n: number, digits = 1) => `${n >= 0 ? '+' : '−'}${Math.abs(n * 100).toFixed(digits)}%`,
+  /** 6.5%; negatives in parentheses: (2.1%). */
+  pct: (n: number, digits = 1) => percent((n * 100).toFixed(digits)),
+  /** Percent with trailing zeros dropped: 1.5%, 6.5%, 7.25%, (2%). */
+  pctShort: (n: number) => percent(String(Number((n * 100).toFixed(2)))),
+  /** +31.5% or (12.0%). */
+  signedPct: (n: number, digits = 1) => {
+    const s = (n * 100).toFixed(digits)
+    return s.startsWith('-') ? percent(s) : `+${s}%`
+  },
   years: (n: number) => `${n.toFixed(1)} yrs`,
   multiple: (x: number) => `${x.toFixed(2)}x`,
   monthYear: (iso: string) =>

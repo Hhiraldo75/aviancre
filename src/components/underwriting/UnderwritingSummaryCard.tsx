@@ -1,8 +1,9 @@
 import type { UnderwritingSummary } from '../../lib/underwriting'
 import { fmt } from '../../lib/format'
 import { Card, Chip, Stat, StatGrid } from '../ui/Card'
+import ChangedChip from './ChangedChip'
 
-/** Base-scenario underwriting results; renders the mapped summary only, no math. */
+/** Base-scenario underwriting results, with any assumption edits; renders the mapped summary only, no math. */
 export default function UnderwritingSummaryCard({
   summary: s,
   onOpenFull,
@@ -15,6 +16,7 @@ export default function UnderwritingSummaryCard({
       <div className="flex gap-1 text-[9px] font-semibold uppercase tracking-wide">
         <Chip>{fmt.label(s.scenario)} case</Chip>
         {s.isSample && <Chip tone="amber">Sample data</Chip>}
+        <ChangedChip changes={s.changes} />
       </div>
     ) : undefined
 

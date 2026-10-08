@@ -194,11 +194,17 @@ export function defaultAssumptions(property: Property, asOf: ISODate): Underwrit
     discountRate: estimate(s.discountRate, INVESTOR_TARGET),
   }
 
-  const noi1 = operatingCashFlows(property, assumptions, asOf).years[0].netOperatingIncome
-  assumptions.acquisition.purchasePrice = estimate(noi1 / marketCap.value, 'Year-1 NOI ÷ market cap rate', {
+  assumptions.acquisition.purchasePrice = estimatedPrice(property, assumptions, asOf)
+  return assumptions
+}
+
+/** Default purchase price: year-1 NOI under `a` ÷ market cap rate. */
+export function estimatedPrice(property: Property, a: UnderwritingAssumptions, asOf: ISODate): Sourced<number> {
+  const marketCap = property.market.marketCapRate
+  const noi1 = operatingCashFlows(property, a, asOf).years[0].netOperatingIncome
+  return estimate(noi1 / marketCap.value, 'Year-1 NOI ÷ market cap rate', {
     notes: `Market cap rate ${(marketCap.value * 100).toFixed(2)}% from ${marketCap.sourceName}`,
   })
-  return assumptions
 }
 
 /** Replaces the purchase price with an analyst's figure. */

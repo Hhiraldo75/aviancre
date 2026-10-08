@@ -10,7 +10,7 @@ const COLUMNS: [label: string, key: keyof RentRollRow, align: 'left' | 'right'][
   ['End', 'end', 'right'],
   ['Remaining', 'remaining', 'right'],
   ['Rent $/SF', 'rent', 'right'],
-  ['Market $/SF', 'market', 'right'],
+  ['Market at exp. $/SF', 'marketAtExpiration', 'right'],
   ['vs market', 'vsMarket', 'right'],
   ['Escalation', 'escalation', 'left'],
   ['Recovery', 'recovery', 'left'],
@@ -38,7 +38,9 @@ export default function RentRollTab({ rentRoll: rr }: { rentRoll: RentRollView }
     <div className="space-y-6">
       <div>
         <p className="mb-2 text-[10px] text-slate-400">
-          Rents are annual $/SF on the analysis date. Market is the Year-1 market rent; vs market is in-place ÷ market − 1.
+          Rents are annual $/SF on the analysis date; remaining term runs from the analysis start. Market at expiration is
+          the market rent in the year the space re-leases (lease-up year for vacant suites). vs market is in-place ÷ Year-1
+          market − 1.
         </p>
         <div className="overflow-x-auto rounded border border-slate-700">
           <table className="w-full border-collapse text-xs tabular-nums">

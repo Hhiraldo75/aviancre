@@ -44,9 +44,18 @@ export function StatGrid({ children }: { children: ReactNode }) {
   return <div className="grid grid-cols-2 gap-x-4 gap-y-3">{children}</div>
 }
 
-export function Chip({ children, tone = 'slate' }: { children: ReactNode; tone?: 'slate' | 'amber' }) {
-  const cls = tone === 'amber' ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-700 text-slate-200'
-  return <span className={`rounded px-1.5 py-0.5 ${cls}`}>{children}</span>
+const CHIP_TONES = {
+  slate: 'bg-slate-700 text-slate-200',
+  amber: 'bg-amber-500/15 text-amber-300',
+  violet: 'bg-violet-500/15 text-violet-300',
+} as const
+
+export function Chip({ children, tone = 'slate', title }: { children: ReactNode; tone?: keyof typeof CHIP_TONES; title?: string }) {
+  return (
+    <span title={title} className={`rounded px-1.5 py-0.5 ${CHIP_TONES[tone]} ${title ? 'cursor-help' : ''}`}>
+      {children}
+    </span>
+  )
 }
 
 export function Note({ children }: { children: ReactNode }) {
