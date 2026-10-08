@@ -1,0 +1,102 @@
+AVIANCRE underwriting: Westminster Office Tower (Sample)
+Analysis start 2026-11-01; losses and costs are positive amounts
+
+Line,Year 0,Year 1,Year 2,Year 3,Year 4,Year 5,Year 6,Year 7,Year 8,Year 9,Year 10,"Year 11 (forward, raw)",Year 11 (normalized for sale)
+Occupancy,,0.7434,0.8986,1,0.9137,0.9608,1,0.9668,0.9549,0.9414,0.9102,0.9643,
+Gross potential rent,,10660194.3079,10718408.6141,10885190.4531,10702633.2364,10708835.5777,10845340.5729,11090140.914,11294855.1071,11357026.3416,11364123.0275,11555164.9044,11555164.9044
+Less: absorption & turnover vacancy,,2543887.5,1007362.125,0,884465.0507,407591.2431,0,355198.2103,490315.6095,646483.5346,1007351.6872,405438.5639,0
+Less: free rent,,350625,1593524.625,0,861198.9247,357340.1013,176061.4181,383388.5444,529229.5467,659881.7558,979582.1589,496302.866,0
+Expense recoveries,,424424.0688,410004.2829,473929.9476,328706.1993,311985.0111,362964.8494,420791.5986,451082.5516,396683.4409,268171.8514,306822.224,306822.224
+Other income,,0,0,0,0,0,0,0,0,0,0,0,0
+Less: general vacancy,,0,0,567956.02,0,143449.7863,560415.2711,220348.4154,96981.2735,0,0,187660.7925,593099.3564
+Less: credit loss,,81901.0588,85275.2615,107911.6438,92856.7546,101124.3946,104718.2873,105519.9734,106294.1123,104473.4449,96453.6103,107725.8491,112688.8777
+Effective gross income,,8108204.818,8442250.8855,10683252.7368,9192818.7057,10011315.0635,10367110.4459,10446477.3691,10523117.1168,10342871.0472,9548907.4224,10664859.0569,11156198.8943
+Operating expenses (incl. mgmt),,3980196.1445,4102326.0266,4285027.8371,4359250.7238,4506309.5994,4643162.5653,4775508.0506,4911670.6549,5044142.5871,5162339.372,5342094.0855,5356834.2806
+  of which management fee,,243246.1445,253267.5266,320497.5821,275784.5612,300339.4519,311013.3134,313394.3211,315693.5135,310286.1314,286467.2227,319945.7717,334685.9668
+Net operating income,,4128008.6735,4339924.8589,6398224.8997,4833567.9819,5505005.464,5723947.8805,5670969.3185,5611446.4619,5298728.4602,4386568.0504,5322764.9714,5799364.6137
+Tenant improvements,,1530000,6850800,0,3593800,2193000,0,1530000,2080800,2703000,3593800,2193000,2193000
+Leasing commissions,,327244.3194,1471928.3873,0,803771.7105,497832.7763,0,357823.0968,493939.0028,651260.9964,878878.7626,544351.8959,544351.8959
+Capital reserves,,88975,88975,88975,88975,88975,88975,88975,88975,88975,88975,88975,88975
+Cash flow before debt,,2181789.354,-4071778.5284,6309249.8997,347021.2713,2725197.6877,5634972.8805,3694171.2218,2947732.4592,1855492.4638,-175085.7122,2496438.0756,2973037.7178
+Debt service,,1839912.4373,1839912.4373,2146984.2787,2146984.2787,2146984.2787,2146984.2787,2146984.2787,2146984.2787,2146984.2787,2146984.2787,,
+Cash flow after debt,,341876.9167,-5911690.9657,4162265.621,-1799963.0074,578213.4089,3487988.6018,1547186.943,800748.1804,-291491.815,-2322069.991,,
+Net sale proceeds,,0,0,0,0,0,0,0,0,0,63148636.9046,,
+Loan payoff,,0,0,0,0,0,0,0,0,0,25095465.1606,,
+Unlevered cash flow,-47884900.6121,2181789.354,-4071778.5284,6309249.8997,347021.2713,2725197.6877,5634972.8805,3694171.2218,2947732.4592,1855492.4638,62973551.1923,,
+Levered cash flow,-19861618.8746,341876.9167,-5911690.9657,4162265.621,-1799963.0074,578213.4089,3487988.6018,1547186.943,800748.1804,-291491.815,35731101.753,,
+
+Metric,Value
+Purchase price,"$47,177,242"
+Price per SF,$133
+"Total cost (incl. closing, capex)","$47,884,901"
+Going-in cap rate,8.75%
+Loan amount,"$28,306,345"
+Equity required,"$19,861,619"
+Year-11 NOI (raw),"$5,322,765"
+"Year-11 NOI (normalized, used for sale)","$5,799,365"
+Exit value (gross),"$64,437,385"
+Net sale proceeds,"$63,148,637"
+Loan payoff at sale,"$25,095,465"
+Unlevered IRR,6.67%
+Levered IRR,6.73%
+Unlevered equity multiple,1.77x
+Levered equity multiple,1.95x
+NPV (unlevered),"$-4,841,121"
+Debt yield (year-1 NOI / loan),14.58%
+Minimum DSCR,2.04x
+DSCR by year,2.24 | 2.36 | 2.98 | 2.25 | 2.56 | 2.67 | 2.64 | 2.61 | 2.47 | 2.04
+Average cash-on-cash,0.30%
+Cash-on-cash by year,1.7% | -29.8% | 21.0% | -9.1% | 2.9% | 17.6% | 7.8% | 4.0% | -1.5% | -11.7%
+WALT (years),2.59
+In-place vs market rent,$30.49 vs $27.50/SF/yr (+10.9%)
+
+Warning
+35% of rentable SF rolls in year 4. That year's cash flow depends on renewals.
+35% of rentable SF rolls in year 10. That year's cash flow depends on renewals.
+In-place rents are 11% above market; income declines as leases roll.
+"Year-1 occupancy averages 74.3%, below 80%. Lease-up drives returns."
+
+Note
+"Purchase price is a model estimate at default assumptions (default year-1 NOI ÷ market cap rate), not an asking price or offer. At defaults the going-in cap equals the market cap by construction; other assumption edits move the going-in cap and returns, not the price."
+
+Assumption,Value,Source,Source type
+scenario,base,,
+acquisition.purchasePrice,47177241.9824,Default year-1 NOI ÷ market cap rate,estimated
+acquisition.marketCapRate,0.0875,Placeholder benchmark – replace with quarterly market report,estimated
+acquisition.closingCostsPct,0.015,Industry rule of thumb – replace with market report,estimated
+acquisition.analysisStartDate,2026-11-01,,
+acquisition.holdYears,10,Placeholder – replace with investor return target,estimated
+acquisition.initialCapex,0,Placeholder – replace with capital plan,estimated
+leasing.marketRent,27.5,Submarket benchmark × class A (1.25×),estimated
+leasing.marketRentGrowth,0.015,Industry rule of thumb – replace with market report,estimated
+leasing.renewalProbability,0.65,Industry rule of thumb – replace with market report,estimated
+leasing.downtimeMonths,9,Industry rule of thumb – replace with market report,estimated
+leasing.newLease.termMonths,84,Industry rule of thumb – replace with market report,estimated
+leasing.newLease.freeRentMonths,6,Industry rule of thumb – replace with market report,estimated
+leasing.newLease.tiPerSF,60,Industry rule of thumb – replace with market report,estimated
+leasing.newLease.leasingCommissionPct,0.06,Industry rule of thumb – replace with market report,estimated
+leasing.renewal.termMonths,60,Industry rule of thumb – replace with market report,estimated
+leasing.renewal.freeRentMonths,2,Industry rule of thumb – replace with market report,estimated
+leasing.renewal.tiPerSF,20,Industry rule of thumb – replace with market report,estimated
+leasing.renewal.leasingCommissionPct,0.03,Industry rule of thumb – replace with market report,estimated
+leasing.newLeaseEscalationPct,0.03,Industry rule of thumb – replace with market report,estimated
+leasing.vacantSpaceRecovery,base-year,,
+operating.generalVacancyPct,0.05,Industry rule of thumb – replace with market report,estimated
+operating.creditLossPct,0.01,Industry rule of thumb – replace with market report,estimated
+"operating.expenses[Operating expenses (taxes, insurance, CAM)].annualAmount",3736950,Placeholder benchmark – replace with quarterly market report × rentable SF,estimated
+"operating.expenses[Operating expenses (taxes, insurance, CAM)].recoverable",true,,
+operating.expenseGrowth,0.03,Industry rule of thumb – replace with market report,estimated
+operating.managementFeePct,0.03,Industry rule of thumb – replace with market report,estimated
+operating.capitalReservesPerYear,0.25,Industry rule of thumb – replace with market report,estimated
+debt.enabled,true,,
+debt.ltv,0.6,Placeholder – replace with lender term sheet,estimated
+debt.rate.type,fixed,,
+debt.rate.rate,0.065,Placeholder – replace with lender term sheet,estimated
+debt.amortizationYears,30,Placeholder – replace with lender term sheet,estimated
+debt.interestOnlyYears,2,Placeholder – replace with lender term sheet,estimated
+debt.loanFeesPct,0.01,Placeholder – replace with lender term sheet,estimated
+exit.exitCapRate,0.09,"Market cap rate + 25 bps – rule of thumb, replace with broker opinion of value",estimated
+exit.sellingCostsPct,0.02,Industry rule of thumb – replace with market report,estimated
+exit.capForwardNOI,true,,
+discountRate,0.08,Placeholder – replace with investor return target,estimated
+targetLeveredIRR,0.1,Placeholder – replace with investor return target,estimated
