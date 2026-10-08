@@ -1,0 +1,93 @@
+AVIANCRE underwriting: Atwells Retail Row (Sample)
+Analysis start 2026-11-01; losses and costs are positive amounts
+
+Line,Year 0,Year 1,Year 2,Year 3,Year 4,Year 5,Year 6,Year 7,Year 8,Year 9,Year 10,Year 11 (forward)
+Occupancy,,0.8125,0.9188,0.9656,0.9469,1,1,1,0.9789,0.9398,0.9656,0.8906
+Gross potential rent,,397004.8487,384871.3828,379016.0047,361754.6072,361254.2662,372091.8942,383254.651,394443.489,399691.2464,408310.5898,393731.4888
+Less: absorption & turnover vacancy,,59400,26254.8,11329.956,21423.0392,0,0,0,7818.8736,22339.6389,13014.5581,42238.1567
+Less: free rent,,19800,15558.4,6714.048,12695.1343,0,0,0,0,17871.7111,7712.3307,14571.0466
+Expense recoveries,,89460,102331.53,110915.5036,111971.1893,121960.1347,125618.9387,129387.5069,130396.5567,128813.627,136412.0792,130090.4336
+Other income,,0,0,0,0,0,0,0,0,0,0,0
+Less: general vacancy,,0,0,13166.6194,2263.2506,24160.72,24885.5416,25632.1079,18423.1287,4085.6048,14221.5754,0
+Less: credit loss,,4072.6485,4453.8971,4587.2088,4373.4437,4590.5368,4728.2529,4870.1005,4985.9804,4842.0792,5097.742,4670.1272
+Effective gross income,,403192.2002,440935.8156,454133.6761,432970.9286,454463.144,468097.0383,482139.9495,493612.0629,479365.8394,504676.4628,462342.5919
+Operating expenses (incl. mgmt),,112895.766,117052.0745,120562.7303,123136.0095,127085.1824,130897.7378,134824.67,138779.6475,142071.3994,146661.4308,149337.0488
+  of which management fee,,12095.766,13228.0745,13624.0103,12989.1279,13633.8943,14042.9112,14464.1985,14808.3619,14380.9752,15140.2939,13870.2778
+Net operating income,,290296.4342,323883.7412,333570.9458,309834.9192,327377.9616,337199.3005,347315.2795,354832.4154,337294.44,358015.032,313005.5431
+Tenant improvements,,108000,83200,35200,54400,0,0,0,0,83200,35200,112000
+Leasing commissions,,54476.3545,37088.3099,16005.0322,27751.8795,0,0,0,0,42602.81,18384.7511,59666.874
+Capital reserves,,3600,3600,3600,3600,3600,3600,3600,3600,3600,3600,3600
+Cash flow before debt,,124220.0797,199995.4312,278765.9136,224083.0397,323777.9616,333599.3005,343715.2795,351232.4154,207891.63,300830.2809,137738.6691
+Debt service,,161736.5848,161736.5848,188729.5818,188729.5818,188729.5818,188729.5818,188729.5818,188729.5818,188729.5818,188729.5818,
+Cash flow after debt,,-37516.505,38258.8465,90036.3318,35353.4579,135048.3799,144869.7187,154985.6977,162502.8336,19162.0482,112100.6991,
+Net sale proceeds,,0,0,0,0,0,0,0,0,0,4230971.4791,
+Loan payoff,,0,0,0,0,0,0,0,0,0,2206004.3437,
+Unlevered cash flow,-4209298.2963,124220.0797,199995.4312,278765.9136,224083.0397,323777.9616,333599.3005,343715.2795,351232.4154,207891.63,4531801.76,
+Levered cash flow,-1745925.6973,-37516.505,38258.8465,90036.3318,35353.4579,135048.3799,144869.7187,154985.6977,162502.8336,19162.0482,2137067.8345,
+
+Metric,Value
+Purchase price,"$4,147,092"
+Price per SF,$288
+"Total cost (incl. closing, capex)","$4,209,298"
+Going-in cap rate,7.00%
+Loan amount,"$2,488,255"
+Equity required,"$1,745,926"
+Exit value (gross),"$4,317,318"
+Net sale proceeds,"$4,230,971"
+Loan payoff at sale,"$2,206,004"
+Unlevered IRR,6.24%
+Levered IRR,5.78%
+Unlevered equity multiple,1.64x
+Levered equity multiple,1.65x
+NPV (unlevered),"$-512,820"
+Debt yield (year-1 NOI / loan),11.67%
+Minimum DSCR,1.64x
+DSCR by year,1.79 | 2.00 | 1.77 | 1.64 | 1.73 | 1.79 | 1.84 | 1.88 | 1.79 | 1.90
+Average cash-on-cash,4.90%
+Cash-on-cash by year,-2.1% | 2.2% | 5.2% | 2.0% | 7.7% | 8.3% | 8.9% | 9.3% | 1.1% | 6.4%
+WALT (years),2.26
+
+Warning
+36% of rentable SF rolls in year 2. That year's cash flow depends on renewals.
+"Negative leverage: the 7.00% going-in cap rate is below the 7.58% loan constant, so debt lowers the cash yield once the loan amortizes."
+"Purchase price is a model estimate (year-1 NOI ÷ market cap rate), not an asking price or offer. At this price the going-in cap equals the market cap by construction."
+
+Assumption,Value,Source,Source type
+scenario,base,,
+acquisition.purchasePrice,4147091.9176,Year-1 NOI ÷ market cap rate,estimated
+acquisition.closingCostsPct,0.015,Industry rule of thumb – replace with market report,estimated
+acquisition.analysisStartDate,2026-11-01,,
+acquisition.holdYears,10,Placeholder – replace with investor return target,estimated
+acquisition.initialCapex,0,Placeholder – replace with capital plan,estimated
+leasing.marketRent,22,Submarket benchmark × class B (1×),estimated
+leasing.marketRentGrowth,0.02,Industry rule of thumb – replace with market report,estimated
+leasing.renewalProbability,0.7,Industry rule of thumb – replace with market report,estimated
+leasing.downtimeMonths,9,Industry rule of thumb – replace with market report,estimated
+leasing.newLease.termMonths,120,Industry rule of thumb – replace with market report,estimated
+leasing.newLease.freeRentMonths,3,Industry rule of thumb – replace with market report,estimated
+leasing.newLease.tiPerSF,30,Industry rule of thumb – replace with market report,estimated
+leasing.newLease.leasingCommissionPct,0.06,Industry rule of thumb – replace with market report,estimated
+leasing.renewal.termMonths,60,Industry rule of thumb – replace with market report,estimated
+leasing.renewal.freeRentMonths,1,Industry rule of thumb – replace with market report,estimated
+leasing.renewal.tiPerSF,10,Industry rule of thumb – replace with market report,estimated
+leasing.renewal.leasingCommissionPct,0.03,Industry rule of thumb – replace with market report,estimated
+leasing.newLeaseEscalationPct,0.03,Industry rule of thumb – replace with market report,estimated
+leasing.vacantSpaceRecovery,net,,
+operating.generalVacancyPct,0.05,Industry rule of thumb – replace with market report,estimated
+operating.creditLossPct,0.01,Industry rule of thumb – replace with market report,estimated
+"operating.expenses[Operating expenses (taxes, insurance, CAM)].annualAmount",100800,Placeholder benchmark – replace with quarterly market report × rentable SF,estimated
+"operating.expenses[Operating expenses (taxes, insurance, CAM)].recoverable",true,,
+operating.expenseGrowth,0.03,Industry rule of thumb – replace with market report,estimated
+operating.managementFeePct,0.03,Industry rule of thumb – replace with market report,estimated
+operating.capitalReservesPerYear,0.25,Industry rule of thumb – replace with market report,estimated
+debt.enabled,true,,
+debt.ltv,0.6,Placeholder – replace with lender term sheet,estimated
+debt.rate.type,fixed,,
+debt.rate.rate,0.065,Placeholder – replace with lender term sheet,estimated
+debt.amortizationYears,30,Placeholder – replace with lender term sheet,estimated
+debt.interestOnlyYears,2,Placeholder – replace with lender term sheet,estimated
+debt.loanFeesPct,0.01,Placeholder – replace with lender term sheet,estimated
+exit.exitCapRate,0.0725,"Market cap rate + 25 bps – rule of thumb, replace with broker opinion of value",estimated
+exit.sellingCostsPct,0.02,Industry rule of thumb – replace with market report,estimated
+exit.capForwardNOI,true,,
+discountRate,0.08,Placeholder – replace with investor return target,estimated

@@ -1,6 +1,9 @@
 import type { ISODate, LeaseType, Property } from '../types'
 import { SUBMARKETS } from '../data/submarkets'
 import { activeLeases, inPlaceAnnualRent } from './metrics'
+import { irr } from './underwriting/finance'
+
+export { irr }
 
 /**
  * QUICK, SIMPLIFIED financials for the Investment view.
@@ -57,24 +60,6 @@ export function yearOneNOI(p: Property, asOf: ISODate): YearOneNOI {
 
   const managementFee = grossRevenue * QUICK_ASSUMPTIONS.managementFeePct
   return { grossRevenue, landlordOpex, managementFee, noi: grossRevenue - landlordOpex - managementFee }
-}
-
-/** Internal rate of return via bisection. Returns null if there's no sign change. */
-export function irr(cashFlows: number[], lo = -0.99, hi = 1): number | null {
-  const npv = (r: number) => cashFlows.reduce((s, cf, t) => s + cf / Math.pow(1 + r, t), 0)
-  let fLo = npv(lo)
-  if (fLo * npv(hi) > 0) return null
-  for (let i = 0; i < 200; i++) {
-    const mid = (lo + hi) / 2
-    const fMid = npv(mid)
-    if (Math.abs(fMid) < 1e-7) return mid
-    if (fLo * fMid < 0) hi = mid
-    else {
-      lo = mid
-      fLo = fMid
-    }
-  }
-  return (lo + hi) / 2
 }
 
 export interface QuickFinancials extends YearOneNOI {
