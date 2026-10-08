@@ -183,6 +183,30 @@ describe('expense recoveries', () => {
   it('full-service gross with no recovery pays nothing', () => {
     expect(monthlyRecovery({ method: 'none' }, 1_000, 10_000, 5_000)).toBe(0)
   })
+
+  describe('base-year expense amount', () => {
+    // 1,200 of 12,000 SF (10% share); the in-place lease ends with analysis year 1 (Oct 2027).
+    const lease = (baseYearExpenses?: number) =>
+      testLease(
+        { type: 'none' },
+        { leaseType: 'full-service-gross', expirationDate: '2027-10-31', recovery: { method: 'base-year', baseYear: 2020, baseYearExpenses } },
+      )
+    const run = (baseYearExpenses?: number) => monthsFor(withRentRoll([lease(baseYearExpenses)], [], 12_000))
+    const estimated = run()
+    const year1 = estimated[0].recoverableExpenses * 12
+    const entered = run(year1 / 2)
+
+    it('blank: estimated as year-1 expenses × (1+g)^(base year − 2026)', () => {
+      expect(estimated[0].expenseRecoveries).toBeCloseTo(0.1 * (year1 / 12) * (1 - Math.pow(1.03, 2020 - 2026)), 6)
+    })
+    it('entered: replaces the estimate', () => {
+      expect(entered[0].expenseRecoveries).toBeCloseTo(0.1 * (year1 / 2 / 12), 6)
+      expect(entered[11].expenseRecoveries).toBeCloseTo(0.1 * (year1 / 12 - year1 / 2 / 12), 6)
+    })
+    it('does not carry over to the rolled lease, which uses the opex of the year it starts in', () => {
+      for (let m = 12; m < estimated.length; m++) expect(entered[m].expenseRecoveries).toBe(estimated[m].expenseRecoveries)
+    })
+  })
 })
 
 describe('general vacancy floor', () => {
@@ -396,6 +420,25 @@ describe('underwrite (integration)', () => {
     expect(col).toBeGreaterThan(0)
     expect(casa[col]).toBe('30')
     expect(lines.find((l) => l.startsWith('Hill Street'))!.split(',')[col]).toBe('')
+  })
+  it('exports the base-year expense amount, blank when not entered', () => {
+    const westminster = byId('sample-westminster-tower')
+    const header = (csv: string) => csv.split('\n').find((l) => l.startsWith('Tenant,'))!.split(',')
+    const weybridge = (csv: string) => csv.split('\n').find((l) => l.startsWith('Weybridge'))!.split(',')
+    const col = header(rentRollCSV(westminster)).indexOf('Base-year expense amount ($/yr)')
+    expect(col).toBeGreaterThan(0)
+    expect(weybridge(rentRollCSV(westminster))[col]).toBe('')
+    if (westminster.rentRoll.kind !== 'commercial') throw new Error('expected commercial')
+    const withAmount: Property = {
+      ...westminster,
+      rentRoll: {
+        ...westminster.rentRoll,
+        leases: westminster.rentRoll.leases.map((l) =>
+          l.tenantName.startsWith('Weybridge') ? { ...l, recovery: { method: 'base-year', baseYear: 2019, baseYearExpenses: 3_100_000 } } : l,
+        ),
+      },
+    }
+    expect(weybridge(rentRollCSV(withAmount))[col]).toBe('3100000')
   })
   it('writes a CSV with cash flows, metrics and sourced assumptions', () => {
     const csv = toCSV(r, ATWELLS.name)

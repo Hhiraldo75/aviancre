@@ -1,0 +1,17 @@
+Westminster Office Tower (Sample): rent roll (fictional sample data)
+Rentable SF 355900; rents are annual $/SF; percentages are decimals
+
+Leases
+Tenant,Suite,SF,Start,End,Starting rent ($/SF/yr),Escalation type,Escalation value,Lease type,Recovery method,Admin fee,Free rent (months),Renewal option rent ($/SF/yr),Base-year expense amount ($/yr)
+Weybridge Insurance Services,Fl 19–25,105700,2019-01-01,2029-12-31,26,fixed % per year,0.025,full-service-gross,base-year (2019),,,,
+Meridian Health Administration,Fl 7–10,61200,2020-01-01,2028-03-31,25.5,fixed % per year,0.025,full-service-gross,base-year (2020),,,,
+Harborline Legal Partners,Fl 26–28,46700,2021-06-01,2031-05-31,27.5,fixed % per year,0.025,full-service-gross,base-year (2021),,6,,
+Kestrel Analytics,Fl 14–15,31700,2018-03-01,2027-02-28,24,fixed $/SF per year,0.5,full-service-gross,base-year (2018),,,,
+Larkfield Architects,Fl 2–3,17800,2023-09-01,2030-08-31,27,fixed % per year,0.03,full-service-gross,base-year (2023),,4,,
+Cobblestone Community Bank,Ground,13300,2016-07-01,2026-12-31,30,fixed % per year,0.02,full-service-gross,base-year (2016),,,,
+
+Vacant suites
+Suite,SF,Expected lease-up (months),Asking rent ($/SF/yr)
+Fl 4–6,26700,18,none (market rent)
+Fl 11–13,26700,15,none (market rent)
+Fl 16–18,26100,12,none (market rent)

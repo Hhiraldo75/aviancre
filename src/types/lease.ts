@@ -18,7 +18,15 @@ export type LeaseType = 'NNN' | 'modified-gross' | 'full-service-gross'
 export type Recovery =
   | { method: 'none' }
   | { method: 'net'; adminFeePct?: Pct }
-  | { method: 'base-year'; baseYear: number }
+  | {
+      method: 'base-year'
+      baseYear: number
+      /**
+       * Building-wide recoverable expenses in the base year, $/yr, from the lease
+       * abstract. Omitted = estimated from year-1 expenses grown at expense growth.
+       */
+      baseYearExpenses?: USD
+    }
   | { method: 'expense-stop'; stopPerSF: USD }
 
 /** A scheduled rent change on a specific date. */

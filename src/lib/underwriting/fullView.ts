@@ -311,7 +311,9 @@ function recoveryText(r: Recovery): string {
     case 'net':
       return r.adminFeePct ? `Net + ${pctShort(r.adminFeePct)} admin` : 'Net'
     case 'base-year':
-      return `Base year ${r.baseYear}`
+      return r.baseYearExpenses === undefined
+        ? `Base year ${r.baseYear}`
+        : `Base year ${r.baseYear} (${fmt.usdCompact(r.baseYearExpenses)})`
     case 'expense-stop':
       return `Stop ${fmt.usdCents(r.stopPerSF)}/SF`
     case 'none':

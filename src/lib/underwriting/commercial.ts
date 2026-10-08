@@ -99,7 +99,12 @@ export function commercialMonths(property: Property, a: UnderwritingAssumptions,
     if (inPlace) inPlaceExpiringSFByYear[i] += sf
   }
   const recoveryFor = (recovery: Recovery, sf: number, m: number) => {
-    const base = recovery.method === 'base-year' ? baseYearMonthly(recovery.baseYear) : 0
+    const base =
+      recovery.method === 'base-year'
+        ? recovery.baseYearExpenses !== undefined
+          ? recovery.baseYearExpenses / 12
+          : baseYearMonthly(recovery.baseYear)
+        : 0
     return monthlyRecovery(recovery, sf, rsf, months[m].recoverableExpenses, base)
   }
 

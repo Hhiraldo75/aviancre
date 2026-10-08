@@ -276,6 +276,7 @@ export function rentRollCSV(property: Property): string {
       'Admin fee',
       'Free rent (months)',
       'Renewal option rent ($/SF/yr)',
+      'Base-year expense amount ($/yr)',
     ],
   ]
   for (const l of rr.leases) {
@@ -294,6 +295,7 @@ export function rentRollCSV(property: Property): string {
       l.recovery.method === 'net' ? l.recovery.adminFeePct : undefined,
       l.freeRentMonths,
       renewalOptionCell(l),
+      l.recovery.method === 'base-year' ? l.recovery.baseYearExpenses : undefined,
     ])
   }
   out.push([], ['Vacant suites'], ['Suite', 'SF', 'Expected lease-up (months)', 'Asking rent ($/SF/yr)'])
