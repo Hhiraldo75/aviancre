@@ -28,8 +28,10 @@ export interface SummaryWarning {
 export interface NOIYear {
   year: number
   noi: number
-  /** The engine shows rollover vacancy or free rent this year. */
-  rollover: boolean
+  /** Income lost to lease rollover: absorption/turnover vacancy plus free rent. */
+  lostToRollover: number
+  /** e.g. "Year 4: NOI $302,232 · lost to rollover $28,444" */
+  tooltip: string
 }
 
 export interface SummarySection {
@@ -202,12 +204,12 @@ export function underwritingSummary(
       stats: [
         {
           label: 'Purchase price',
-          value: fmt.usdMillions(m.purchasePrice),
+          value: fmt.money(m.purchasePrice),
           hint: priceIsEstimate ? PRICE_ESTIMATE_HINT : a.acquisition.purchasePrice.sourceName,
         },
         { label: 'Price / SF', value: `${fmt.usd(m.pricePerSF)}/SF` },
         { label: 'Going-in cap', value: fmt.pct(m.goingInCapRate, 2), src: estimatedFrom(d.price, d.yearOneNOI) },
-        { label: 'Year-1 NOI', value: fmt.usdMillions(noi1) },
+        { label: 'Year-1 NOI', value: fmt.money(noi1) },
       ],
     },
     {
@@ -245,13 +247,13 @@ export function underwritingSummary(
       stats: [
         {
           label: `Normalized Year-${result.normalizedExitYear.year} NOI`,
-          value: fmt.usdMillions(m.exitNOI),
+          value: fmt.money(m.exitNOI),
           hint: 'General vacancy replaces rollover',
         },
         { label: 'Exit cap', value: fmt.pct(a.exit.exitCapRate.value, 2), src: estimatedFrom(d.exitCap) },
         {
           label: 'Net sale proceeds',
-          value: fmt.usdMillions(m.netSaleProceeds),
+          value: fmt.money(m.netSaleProceeds),
           hint: `After ${fmt.pct(a.exit.sellingCostsPct.value, 0)} selling costs`,
         },
       ],
@@ -267,10 +269,14 @@ export function underwritingSummary(
     estimates: estimatedFrom(d.basis, d.noiOverHold, d.sale, d.debt),
     sections,
     warnings: result.warnings.map((full) => ({ short: firstSentence(full), full })),
-    noiByYear: result.cashFlows.map((c) => ({
-      year: c.year,
-      noi: c.netOperatingIncome,
-      rollover: c.absorptionTurnoverVacancy > 0 || c.freeRent > 0,
-    })),
+    noiByYear: result.cashFlows.map((c) => {
+      const lost = c.absorptionTurnoverVacancy + c.freeRent
+      return {
+        year: c.year,
+        noi: c.netOperatingIncome,
+        lostToRollover: lost,
+        tooltip: `Year ${c.year}: NOI ${fmt.money(c.netOperatingIncome)}${lost > 0 ? ` · lost to rollover ${fmt.money(lost)}` : ''}`,
+      }
+    }),
   }
 }

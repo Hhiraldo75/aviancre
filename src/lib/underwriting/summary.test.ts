@@ -38,12 +38,13 @@ describe('underwriting summary (Atwells, base scenario)', () => {
     expect(stat(s, 'Going-in cap').value).toBe(`${(m.goingInCapRate * 100).toFixed(2)}%`)
     expect(stat(s, 'Unlevered multiple').value).toBe(`${m.unleveredEquityMultiple.toFixed(2)}x`)
     expect(stat(s, 'Levered multiple').value).toBe(`${m.equityMultiple.toFixed(2)}x`)
-    expect(stat(s, 'Year-1 NOI').value).toBe('$0.29M')
-    expect(stat(s, 'Normalized Year-11 NOI').value).toBe(`$${(m.exitNOI / 1e6).toFixed(2)}M`)
+    expect(m.exitNOI).toBeGreaterThan(0)
   })
-  it('shows dollar totals in millions with 2 decimals', () => {
+  it('shows $X.XXM from $1M up and full dollars below', () => {
     expect(stat(s, 'Purchase price').value).toBe('$4.15M')
-    expect(stat(s, 'Net sale proceeds').value).toMatch(/^\$\d+\.\d{2}M$/)
+    expect(stat(s, 'Net sale proceeds').value).toBe('$4.61M')
+    expect(stat(s, 'Year-1 NOI').value).toBe('$290,296')
+    expect(stat(s, 'Normalized Year-11 NOI').value).toBe('$341,402')
     expect(stat(s, 'Price / SF').value).toBe('$288/SF')
   })
   it('labels the price as a model estimate, not an asking price', () => {
@@ -76,19 +77,21 @@ describe('underwriting summary (Atwells, base scenario)', () => {
     expect(ok(s).scenario).toBe('base')
     expect(ok(s).noiByYear.map((y) => y.year)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
   })
-  it('marks rollover years where the engine shows rollover vacancy or free rent', () => {
+  it('stacks income lost to rollover on NOI, straight from the engine cash flows', () => {
     const r = underwrite(ATWELLS, AS_OF)
     expect(ok(s).noiByYear.map((y) => y.noi)).toEqual(r.cashFlows.map((c) => c.netOperatingIncome))
-    expect(ok(s).noiByYear.map((y) => y.rollover)).toEqual(
-      r.cashFlows.map((c) => c.absorptionTurnoverVacancy > 0 || c.freeRent > 0),
+    expect(ok(s).noiByYear.map((y) => y.lostToRollover)).toEqual(
+      r.cashFlows.map((c) => c.absorptionTurnoverVacancy + c.freeRent),
     )
-    expect(ok(s).noiByYear[4].rollover).toBe(false) // year 5: nothing rolls
-    expect(ok(s).noiByYear[1].rollover).toBe(true) // year 2: 36% rolls
+    expect(ok(s).noiByYear[3].tooltip).toBe('Year 4: NOI $302,232 · lost to rollover $28,444')
+    expect(ok(s).noiByYear[4].tooltip).toBe('Year 5: NOI $312,751') // nothing rolls
   })
   it('drops the EST badge on price once an analyst enters it', () => {
     const a = withPurchasePrice(defaultAssumptions(ATWELLS, AS_OF), 4_000_000)
     const priced = underwritingSummary(ATWELLS, AS_OF, a)
     expect(stat(priced, 'Purchase price').value).toBe('$4.00M')
+    const small = underwritingSummary(ATWELLS, AS_OF, withPurchasePrice(defaultAssumptions(ATWELLS, AS_OF), 999_999))
+    expect(stat(small, 'Purchase price').value).toBe('$999,999')
     expect(stat(priced, 'Purchase price').hint).toBe('Analyst input')
     expect(ok(priced).estimates?.sourceName).not.toMatch(/purchase price/)
     expect(stat(priced, 'Going-in cap').src?.sourceName).not.toMatch(/purchase price/)
@@ -101,7 +104,7 @@ describe('underwriting summary across samples', () => {
       const s = underwritingSummary(byId(id), AS_OF)
       expect(s.status, id).toBe('ok')
       expect(stat(s, 'Levered IRR').value).toMatch(/^\d+\.\d{2}%$/)
-      expect(ok(s).noiByYear.some((y) => y.rollover), id).toBe(false)
+      expect(ok(s).noiByYear.every((y) => y.lostToRollover === 0), id).toBe(true)
     }
   })
   it('never shows NaN, Infinity or undefined', () => {
@@ -109,7 +112,8 @@ describe('underwriting summary across samples', () => {
       const s = underwritingSummary(p, AS_OF)
       if (s.status !== 'ok') continue
       for (const x of stats(s)) expect(`${x.value} ${x.hint ?? ''}`, `${p.id} ${x.label}`).not.toMatch(/NaN|Infinity|undefined/)
-      expect(s.noiByYear.every((y) => Number.isFinite(y.noi)), p.id).toBe(true)
+      expect(s.noiByYear.every((y) => Number.isFinite(y.noi) && Number.isFinite(y.lostToRollover)), p.id).toBe(true)
+      for (const y of s.noiByYear) expect(y.tooltip, p.id).not.toMatch(/NaN|Infinity|undefined/)
     }
   })
 })
