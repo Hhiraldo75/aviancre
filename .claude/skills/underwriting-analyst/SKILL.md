@@ -24,7 +24,7 @@ If no property id was given, list the ids from `src/data/sampleProperties.ts` an
 
 | # | Check | JSON fields | FLAG when |
 |---|---|---|---|
-| 1 | In-place rents vs market | `rentRoll.inPlaceRent`, `rentRoll.marketRent`, `rentRoll.inPlaceVsMarket`, `rentRoll.markToMarketThreshold`; per lease `rentRoll.leases[].vsMarket` | In-place is more than the threshold above market (income falls as leases roll) or below it (upside depends on re-leasing) |
+| 1 | In-place rents vs market | `rentRoll.inPlaceRent`, `rentRoll.marketRent`, `rentRoll.inPlaceVsMarket`, `rentRoll.markToMarketThreshold`; per lease `rentRoll.leases[].vsMarket` (current rent vs **Year-1** market, not vs `marketAtExpiration`) | In-place is more than the threshold above market (income falls as leases roll) or below it (upside depends on re-leasing) |
 | 2 | Above-market renewal options | `rentRoll.aboveMarketRenewalOptions` | Any listed: the model assumes renewal at market, so the option is income the tenant can walk away from |
 | 3 | Rollover concentration | `rentRoll.largestRollover` (`year`, `shareOfBuilding`, `threshold`, `yearsAboveThreshold`), `rentRoll.expirations` | Any year above the 25% threshold |
 | 4 | WALT | `rentRoll.walt`, `meta.holdYears`, `rentRoll.expirations` | WALT is short against the hold, so most of today's income re-leases before exit |
@@ -45,10 +45,12 @@ The first line is `meta.label`, verbatim, in italics. For sample data that is: *
 
 Then a title (`# <property.name>: Investment memo`) and a line with `meta.asOf`, the scenario and the hold. Then these sections, in this order:
 
-1. **Recommendation.** One of **Pursue**, **Pass**, or **Pursue at a lower price**. For a lower price, name the bid: the `maxBid` price and its label (e.g. "Max bid at <target> levered IRR: <maxBid.priceShort>"). Follow with two or three sentences on why.
+1. **Recommendation.** One of **Pursue**, **Pass**, or **Pursue at a lower price**. For a lower price, name the bid: the `maxBid` price and its label (e.g. "Max bid at <target> levered IRR: <maxBid.priceShort>"). Follow with two or three sentences on why. Whenever you cite the max bid:
+   - Say once that it depends on the target levered IRR (`maxBid.target`), and that the target is a placeholder if `targetLeveredIRR` is EST (quote its `sourceName`).
+   - If `maxBid.goingInCapRate` differs from `returns.exit.exitCapRate` by more than 25 bps, explain why, so it doesn't read as assumed cap compression (or expansion). The going-in cap is measured on Year-1 NOI, while the exit is capped on normalized Year-11 NOI. Use the JSON's evidence: above-market in-place rents that mark down at rollover (`rentRoll.inPlaceVsMarket`), re-leasing costs that put cash flow before debt well below NOI, lease-up vacancy in Year 1, and the Year-11 normalization.
 2. **Deal snapshot.** A two-column table: property and address, asset type and rentable SF, purchase price and $/SF (say if it is a model estimate, from `returns.purchasePriceSource`), going-in cap, Year-1 NOI, occupancy, WALT, in-place vs market rent, unlevered IRR, levered IRR (with target), levered multiple, minimum DSCR, debt yield, exit cap, and max bid.
 3. **Investment thesis.** What has to be true for this to work, in a few sentences.
-4. **Rent roll and rollover risk.** Name the tenants that matter, when they roll, their rent vs projected market at expiration, any above-market options, and the rollover peak.
+4. **Rent roll and rollover risk.** Name the tenants that matter, when they roll, their rent vs market, any above-market options, and the rollover peak. In a rent roll table, label the `vsMarket` column "vs Year-1 market", and never describe that percentage as the gap to market at expiration. To compare with market at expiration, quote `rent` and `marketAtExpiration` side by side.
 5. **Underwriting assumptions.** Which drivers are estimates (`EST`) and what would replace each one (quote the `sourceName`). Note analyst edits from `assumptions.edited`, if any.
 6. **Returns and sensitivity.** Headline returns, then cite grid cells by their row and column labels, in the form "at <row label> and <column label>, the levered IRR is <cell>" (from `low.row`, `low.column`, `low.display`). Name the low and high cells of each grid.
 7. **Debt.** Loan, LTV, rate, DSCR path and minimum, debt yield, negative leverage.
@@ -58,7 +60,8 @@ Then a title (`# <property.name>: Investment memo`) and a line with `meta.asOf`,
 
 ## Rules
 
-- **Every number comes from the JSON, quoted as-is.** Use the `display` strings exactly. Never compute, round, convert, sum, average or approximate a figure, not even "about a third" or "roughly $X". If a figure you want isn't in the JSON, describe it in words or leave it out.
+- **Every number comes from the JSON.** Quote `display` strings exactly. The one exception: a simple difference or ratio between two JSON figures (a bps gap, a % difference) is allowed, but only when both inputs appear next to it (e.g. "the 7.86% going-in cap is 61 bps above the 7.25% exit cap"). Nothing else: never sum, average, round, convert, chain calculations or approximate a figure, not even "about a third" or "roughly $X". If a figure you want isn't in the JSON, describe it in words or leave it out.
+- **No double negatives with signed numbers.** When a word gives the direction, drop the sign: "58 bps below", "322 bps short of target", "10.9% below the current price", not "−58 bps below" or "(10.9%) below". Keep the signed display in tables or where no direction word is used.
 - Cite the engine's warnings rather than rephrasing them into new numbers.
 - About two pages. Write for an investment committee: direct, specific, no hype, no filler. Prefer short paragraphs and tables over long bullets.
 - Do not edit the engine, the sample data or the JSON. If the output looks wrong, say so in the reply and in the memo; don't work around it.
