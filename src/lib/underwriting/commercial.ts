@@ -22,10 +22,21 @@ export interface MonthRow {
   occupiedSF: number
 }
 
+/** A fixed renewal option priced above market when the lease expires (the tenant won't exercise it). */
+export interface AboveMarketOption {
+  tenant: string
+  suite: string
+  expirationDate: ISODate
+  optionRentPerSF: number
+  marketRentPerSF: number
+}
+
 export interface CommercialMonths {
   months: MonthRow[]
   /** SF whose lease ends in each analysis year (index 0 = year 1), in-place and speculative. */
   expiringSFByYear: number[]
+  /** Fixed renewal options above market at expiration, within the modeled horizon. */
+  aboveMarketOptions: AboveMarketOption[]
 }
 
 const emptyRow = (): MonthRow => ({
@@ -76,6 +87,7 @@ export function commercialMonths(property: Property, a: UnderwritingAssumptions,
     totalExpenses: (totalYear1 / 12) * growthFactor(m),
   }))
   const expiringSFByYear = Array.from({ length: holdYears + 1 }, () => 0)
+  const aboveMarketOptions: AboveMarketOption[] = []
   const recordExpiration = (endMonth: number, sf: number) => {
     // endMonth is the first month no longer covered; the lease's last month is endMonth − 1.
     if (endMonth >= 1 && endMonth <= N) expiringSFByYear[analysisYear(endMonth - 1) - 1] += sf
@@ -94,7 +106,14 @@ export function commercialMonths(property: Property, a: UnderwritingAssumptions,
     sf: number,
     s: number,
     recovery: Recovery,
-    first: { downtimeMonths: number; renewalProbability: number; rentPerSF?: number; renewalRentPerSF?: number },
+    first: {
+      downtimeMonths: number
+      renewalProbability: number
+      rentPerSF?: number
+      renewalRentPerSF?: number
+      /** Escalation of the renewal leg for the LC calculation; defaults to the new-lease rate. */
+      renewalEscalationPct?: number
+    },
   ) => {
     let next = first
     while (s < N) {
@@ -110,6 +129,7 @@ export function commercialMonths(property: Property, a: UnderwritingAssumptions,
         newRent,
         next.renewalRentPerSF ?? newRent,
         escalation,
+        next.renewalEscalationPct,
       )
       if (lease.termMonths < 1) break
       const occEnd = occStart + lease.termMonths
@@ -156,10 +176,21 @@ export function commercialMonths(property: Property, a: UnderwritingAssumptions,
       row.occupiedSF += lease.leasedSF
     }
     recordExpiration(endMonth, lease.leasedSF)
+    const option = renewalOption(lease, leasing, analysisYear(endMonth))
+    if (option?.aboveMarket && endMonth < N) {
+      aboveMarketOptions.push({
+        tenant: lease.tenantName,
+        suite: lease.suite,
+        expirationDate: lease.expirationDate,
+        optionRentPerSF: option.optionRentPerSF,
+        marketRentPerSF: option.marketRentPerSF,
+      })
+    }
     rollChain(lease.leasedSF, endMonth, lease.recovery, {
       downtimeMonths: leasing.downtimeMonths.value,
       renewalProbability: leasing.renewalProbability.value,
-      renewalRentPerSF: renewalOptionRent(lease, leasing, analysisYear(endMonth)),
+      renewalRentPerSF: option?.rentPerSF,
+      renewalEscalationPct: option?.escalationPct,
     })
   }
 
@@ -176,16 +207,45 @@ export function commercialMonths(property: Property, a: UnderwritingAssumptions,
     })
   }
 
-  return { months, expiringSFByYear }
+  return { months, expiringSFByYear, aboveMarketOptions }
 }
 
-/** Renewal rent set by the expiring lease's first renewal option, if it has one. */
-function renewalOptionRent(
+export interface RenewalOptionTerms {
+  /** Renewal rent the model uses. */
+  rentPerSF: number
+  /** Escalation of the renewal leg; undefined = the normal new-lease rate. */
+  escalationPct?: number
+  optionRentPerSF: number
+  marketRentPerSF: number
+  aboveMarket: boolean
+}
+
+/**
+ * Renewal terms from the expiring lease's first renewal option, if it has one.
+ * A fixed option is exercised only when it's at or below market; then it is
+ * flat unless the option says it escalates. Above market, the tenant renews at
+ * market like any other renewal.
+ */
+export function renewalOption(
   lease: Lease,
   leasing: UnderwritingAssumptions['leasing'],
   year: number,
-): number | undefined {
+): RenewalOptionTerms | undefined {
   const option = lease.renewalOptions?.[0]
   if (!option) return undefined
-  return option.rentBasis === 'fixed' ? option.value : option.value * marketRentInYear(leasing, year)
+  const market = marketRentInYear(leasing, year)
+  if (option.rentBasis === 'percent-of-market') {
+    const rent = option.value * market
+    return { rentPerSF: rent, optionRentPerSF: rent, marketRentPerSF: market, aboveMarket: false }
+  }
+  const aboveMarket = option.value > market
+  return aboveMarket
+    ? { rentPerSF: market, optionRentPerSF: option.value, marketRentPerSF: market, aboveMarket }
+    : {
+        rentPerSF: option.value,
+        escalationPct: option.annualEscalationPct ?? 0,
+        optionRentPerSF: option.value,
+        marketRentPerSF: market,
+        aboveMarket,
+      }
 }

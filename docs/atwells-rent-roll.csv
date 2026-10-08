@@ -1,0 +1,13 @@
+Atwells Retail Row (Sample): rent roll (fictional sample data)
+Rentable SF 14400; rents are annual $/SF; percentages are decimals
+
+Leases
+Tenant,Suite,SF,Start,End,Starting rent ($/SF/yr),Escalation type,Escalation value,Lease type,Recovery method,Admin fee,Free rent (months),Renewal option rent ($/SF/yr)
+Casa Lucenti Trattoria,101,3400,2015-03-01,2030-02-28,24,fixed % per year,0.03,NNN,net,0.1,,30
+Hill Street Wine & Spirits,103,2800,2021-01-01,2027-12-31,21,fixed % per year,0.03,NNN,net,0.1,,
+Cobblestone Community Bank,105,2400,2018-04-01,2028-03-31,26,fixed % per year,0.02,NNN,net,0.1,,
+Bellamonte Bakery,102,2200,2019-06-01,2029-05-31,23,fixed $/SF per year,0.5,NNN,net,0.1,,
+
+Vacant suites
+Suite,SF,Expected lease-up (months),Asking rent ($/SF/yr)
+200,3600,9,none (market rent)

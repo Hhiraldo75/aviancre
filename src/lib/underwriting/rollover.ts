@@ -50,6 +50,8 @@ export function leaseValuePerSF(rentPerSF: number, termMonths: number, escalatio
  * Weighted-average terms for the lease that follows an expiration.
  * Downtime, free rent, TI and rent are blended directly; leasing commissions
  * are blended in dollars because new and renewal leases have different values.
+ * `renewalEscalationPct` values the renewal leg (e.g. a flat fixed-rent option);
+ * it defaults to the new-lease escalation.
  */
 export function blendTerms(
   renewalProbability: number,
@@ -59,11 +61,12 @@ export function blendTerms(
   newRentPerSF: number,
   renewalRentPerSF: number,
   escalationPct: number,
+  renewalEscalationPct = escalationPct,
 ): BlendedLease {
   const p = renewalProbability
   const w = (renewalValue: number, newValue: number) => p * renewalValue + (1 - p) * newValue
   const newLC = newLease.leasingCommissionPct * leaseValuePerSF(newRentPerSF, newLease.termMonths, escalationPct)
-  const renewalLC = renewal.leasingCommissionPct * leaseValuePerSF(renewalRentPerSF, renewal.termMonths, escalationPct)
+  const renewalLC = renewal.leasingCommissionPct * leaseValuePerSF(renewalRentPerSF, renewal.termMonths, renewalEscalationPct)
   return {
     downtimeMonths: w(0, downtimeMonths),
     freeRentMonths: w(renewal.freeRentMonths, newLease.freeRentMonths),

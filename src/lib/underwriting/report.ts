@@ -1,4 +1,4 @@
-import type { AnnualCashFlow, UnderwritingAssumptions, UnderwritingResult } from '../../types'
+import type { AnnualCashFlow, Escalation, Lease, Property, UnderwritingAssumptions, UnderwritingResult } from '../../types'
 
 /** Plain-text and CSV renderings of an underwriting result, for the CLI and Excel checks. */
 
@@ -214,5 +214,85 @@ export function toCSV(r: UnderwritingResult, propertyName: string): string {
   out.push([])
   out.push(['Assumption', 'Value', 'Source', 'Source type'])
   for (const a of assumptionRows(r.assumptions)) out.push([a.path, a.value, a.sourceName, a.source])
+  return out.map((cells) => cells.map(csvCell).join(',')).join('\n') + '\n'
+}
+
+function escalationCells(e: Escalation): [type: string, value: string | number] {
+  switch (e.type) {
+    case 'fixed-percent':
+      return ['fixed % per year', e.annualPct]
+    case 'fixed-amount':
+      return ['fixed $/SF per year', e.annualPerSF]
+    case 'steps':
+      return ['steps', e.steps.map((s) => `${s.effectiveDate}: $${s.annualRentPerSF.toFixed(2)}`).join('; ')]
+    case 'none':
+      return ['none', '']
+  }
+}
+
+function recoveryCell(l: Lease): string {
+  const r = l.recovery
+  if (r.method === 'base-year') return `base-year (${r.baseYear})`
+  if (r.method === 'expense-stop') return `expense-stop ($${r.stopPerSF}/SF)`
+  return r.method
+}
+
+/** The option the engine prices at renewal: a fixed $/SF, or a share of market. */
+function renewalOptionCell(l: Lease): string | number {
+  const o = l.renewalOptions?.[0]
+  if (!o) return ''
+  return o.rentBasis === 'fixed' ? o.value : `${Math.round(o.value * 100)}% of market`
+}
+
+/**
+ * Rent roll as CSV: every lease and vacant-suite field the underwriting engine
+ * reads, so an Excel model can be built from the same inputs.
+ */
+export function rentRollCSV(property: Property): string {
+  const rr = property.rentRoll
+  if (rr.kind !== 'commercial') throw new Error(`${property.id} is not a commercial rent roll`)
+  const out: (string | number | boolean | null | undefined)[][] = [
+    [`${property.name}: rent roll${property.isSample ? ' (fictional sample data)' : ''}`],
+    [`Rentable SF ${property.physical.rentableSF.value}; rents are annual $/SF; percentages are decimals`],
+    [],
+    ['Leases'],
+    [
+      'Tenant',
+      'Suite',
+      'SF',
+      'Start',
+      'End',
+      'Starting rent ($/SF/yr)',
+      'Escalation type',
+      'Escalation value',
+      'Lease type',
+      'Recovery method',
+      'Admin fee',
+      'Free rent (months)',
+      'Renewal option rent ($/SF/yr)',
+    ],
+  ]
+  for (const l of rr.leases) {
+    const [escType, escValue] = escalationCells(l.escalation)
+    out.push([
+      l.tenantName,
+      l.suite,
+      l.leasedSF,
+      l.commencementDate,
+      l.expirationDate,
+      l.startingRentPerSF,
+      escType,
+      escValue,
+      l.leaseType,
+      recoveryCell(l),
+      l.recovery.method === 'net' ? l.recovery.adminFeePct : undefined,
+      l.freeRentMonths,
+      renewalOptionCell(l),
+    ])
+  }
+  out.push([], ['Vacant suites'], ['Suite', 'SF', 'Expected lease-up (months)', 'Asking rent ($/SF/yr)'])
+  for (const v of rr.vacancies) {
+    out.push([v.suite, v.sf, v.expectedLeaseUpMonths, v.askingRentPerSF?.value ?? 'none (market rent)'])
+  }
   return out.map((cells) => cells.map(csvCell).join(',')).join('\n') + '\n'
 }

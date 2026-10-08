@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { Escalation, Lease, Property, VacantSpace } from '../../types'
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties'
 import { estimate } from '../sourced'
-import { commercialMonths } from './commercial'
+import { commercialMonths, renewalOption } from './commercial'
 import { defaultAssumptions, withPurchasePrice } from './defaults'
 import { irr, loanSchedule, npv, payment } from './finance'
 import { monthlyRecovery } from './recoveries'
-import { assumptionRows, toCSV } from './report'
+import { assumptionRows, rentRollCSV, toCSV } from './report'
 import { blendTerms, leaseValuePerSF } from './rollover'
 import { analysisStartFor, monthAfter } from './timeline'
 import { saleProceeds, underwrite } from './underwrite'
@@ -124,6 +124,46 @@ describe('rollover blending', () => {
     expect(m[6].freeRent).toBe(0)
     // TI ($30) and LC are booked in the first occupied month.
     expect(m[2].tenantImprovements).toBeCloseTo(30 * 1_000, 6)
+  })
+})
+
+describe('renewal options', () => {
+  const leasing = defaultAssumptions(ATWELLS, AS_OF).leasing
+  const casa = (ATWELLS.rentRoll.kind === 'commercial' ? ATWELLS.rentRoll.leases : []).find((l) =>
+    l.tenantName.startsWith('Casa Lucenti'),
+  )!
+  const withOption = (value: number, annualEscalationPct?: number): Lease =>
+    testLease({ type: 'none' }, { renewalOptions: [{ termMonths: 60, rentBasis: 'fixed', value, annualEscalationPct }] })
+
+  it('uses market when a fixed option is above market (tenant would not exercise it)', () => {
+    expect(leasing.marketRent.value).toBe(22)
+    // Casa expires Feb 2030 = analysis year 4 → market $22 × 1.02³ = $23.35
+    const o = renewalOption(casa, leasing, 4)!
+    expect(o.marketRentPerSF).toBeCloseTo(22 * 1.02 ** 3, 9)
+    expect(o.rentPerSF).toBeCloseTo(22 * 1.02 ** 3, 9)
+    expect(o.aboveMarket).toBe(true)
+    expect(o.escalationPct).toBeUndefined() // a market renewal escalates normally
+  })
+  it('uses a below-market fixed option, flat unless the option escalates', () => {
+    const flat = renewalOption(withOption(20), leasing, 4)!
+    expect(flat.rentPerSF).toBe(20)
+    expect(flat.escalationPct).toBe(0)
+    expect(flat.aboveMarket).toBe(false)
+    expect(renewalOption(withOption(20, 0.025), leasing, 4)!.escalationPct).toBe(0.025)
+  })
+  it('does not escalate a flat option rent in the leasing commission', () => {
+    const newLease = { termMonths: 120, freeRentMonths: 3, tiPerSF: 30, leasingCommissionPct: 0.06 }
+    const renewal = { termMonths: 60, freeRentMonths: 1, tiPerSF: 10, leasingCommissionPct: 0.03 }
+    const b = blendTerms(0.7, 9, newLease, renewal, 20, 20, 0.03, 0)
+    // Renewal leg: $20 × 5 years flat = $100; new leg: 10 years at $20 escalating 3%.
+    expect(b.lcPerSF).toBeCloseTo(0.7 * 0.03 * 100 + 0.3 * 0.06 * leaseValuePerSF(20, 120, 0.03), 9)
+    expect(b.rentPerSF).toBe(20) // the 70/30 blend itself is unchanged
+  })
+  it('warns when an option rent is above market', () => {
+    expect(underwrite(ATWELLS, AS_OF).warnings).toContain(
+      'Casa Lucenti Trattoria (suite 101) has a $30.00/SF renewal option, above the projected $23.35/SF ' +
+        'market rent at its 2030-02-28 expiration. The model assumes renewal at market.',
+    )
   })
 })
 
@@ -347,6 +387,15 @@ describe('underwrite (integration)', () => {
     expect(res.cashFlows[0].grossPotentialRent).toBeCloseTo(764_100, 6)
     // 38 units × 50% turnover × $1,000
     expect(res.cashFlows[0].tenantImprovements).toBeCloseTo(19_000, 6)
+  })
+  it('exports the rent roll with the renewal option rent', () => {
+    const lines = rentRollCSV(ATWELLS).split('\n')
+    const header = lines.find((l) => l.startsWith('Tenant,'))!.split(',')
+    const casa = lines.find((l) => l.startsWith('Casa Lucenti'))!.split(',')
+    const col = header.indexOf('Renewal option rent ($/SF/yr)')
+    expect(col).toBeGreaterThan(0)
+    expect(casa[col]).toBe('30')
+    expect(lines.find((l) => l.startsWith('Hill Street'))!.split(',')[col]).toBe('')
   })
   it('writes a CSV with cash flows, metrics and sourced assumptions', () => {
     const csv = toCSV(r, ATWELLS.name)

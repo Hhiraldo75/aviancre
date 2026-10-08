@@ -7,7 +7,7 @@ Step 1 is the calculation engine only, with no UI changes. Code lives in `src/li
 ### Engine
 - Monthly lease-by-lease cash flows, rolled up to 10 annual periods (plus year 11 for the exit NOI).
 - Rent escalations per lease (fixed %, fixed $/SF, steps).
-- Lease rollover at expiration: blend renewal vs new tenant by renewal probability (Argus-style weighted average of downtime, free rent, TI, LC and rent). New rent = market rent grown to that year. Vacant suites lease up after their expected lease-up months on new-tenant terms.
+- Lease rollover at expiration: blend renewal vs new tenant by renewal probability (Argus-style weighted average of downtime, free rent, TI, LC and rent). New rent = market rent grown to that year. A fixed renewal option is priced at the lower of the option rent and market rent at renewal (a tenant won't exercise an above-market option), with a warning when the option is above market. Vacant suites lease up after their expected lease-up months on new-tenant terms.
 - Expense recoveries by lease type: NNN (pro-rata, admin fee if set), base year, expense stop, full-service gross (none).
 - Waterfall: gross potential rent, absorption/turnover vacancy, free rent, recoveries, general vacancy, credit loss, EGI, operating expenses (incl. management fee), NOI, TI, leasing commissions, capital reserves, cash flow before debt, debt service, levered cash flow.
 - General vacancy is a floor: only add the amount above the vacancy already modeled from rollover and lease-up.
@@ -37,11 +37,12 @@ Defaults added during implementation (not in the original spec): closing costs 1
 Every default is a `Sourced<number>` with a label saying what should replace it (e.g. "Industry rule of thumb – replace with market report"). That lets the UI show an EST badge on each one. Analyst overrides are tagged `fromImport(…, 'Analyst input')`.
 
 ### Outputs
-Going-in cap, raw and normalized year-11 NOI, in-place vs market rent, unlevered and levered IRR, equity multiple, cash-on-cash by year, DSCR by year, minimum DSCR, debt yield, WALT, NPV, plus plain-language warnings (e.g. DSCR below 1.25x, more than 25% of space rolling in one year, in-place rents more than 10% above or below market).
+Going-in cap, raw and normalized year-11 NOI, in-place vs market rent, unlevered and levered IRR, equity multiple, cash-on-cash by year, DSCR by year, minimum DSCR, debt yield, WALT, NPV, plus plain-language warnings (e.g. DSCR below 1.25x, more than 25% of space rolling in one year, in-place rents more than 10% above or below market, a fixed renewal option above market).
 
 ### Checks
 - Unit tests for each piece (escalations, rollover blending, recoveries, vacancy floor, loan amortization, IRR, sale) with hand-checkable numbers.
 - `npm run underwrite -- <property-id>` prints the annual cash flow table and metrics, and writes them to `docs/underwriting-<property-id>.csv` for comparison against an Excel model.
+- `npm run rent-roll -- <property-id> [--out path]` exports every lease and vacant-suite field the engine reads, including the renewal option rent (default `docs/rent-roll-<property-id>.csv`; the Atwells export is `docs/atwells-rent-roll.csv`).
 
 ## Modeling conventions
 
@@ -56,10 +57,14 @@ These are decisions made where the spec is silent. Match them when you rebuild t
    - `none`: 0
 
    Share = leased SF / rentable SF, with no gross-up, so the landlord carries the expenses on vacant space. Base-year expenses = year-1 expenses × (1+g)^(base year − first calendar year of the analysis).
-4. **Rollover (Argus-style blending).** With renewal probability p, each term is the weighted average p × renewal + (1−p) × new: downtime (renewal = 0), free rent months, TI/SF and rent/SF. Leasing commissions are blended in dollars (see 8). Term months are blended the same way and rounded. Renewal rent is market rent, unless the lease has a `RenewalOption` (`fixed` = that $/SF, `percent-of-market` = that share of market). New rent = year-1 market rent × (1+g)^(analysis year in which the next tenant occupies − 1). It steps up once a year, not monthly.
+4. **Rollover (Argus-style blending).** With renewal probability p, each term is the weighted average p × renewal + (1−p) × new: downtime (renewal = 0), free rent months, TI/SF and rent/SF. Leasing commissions are blended in dollars (see 7). Term months are blended the same way and rounded. Renewal rent is market rent, unless the lease has a `RenewalOption`:
+   - `fixed`: the lower of the option rent and market rent in the analysis year of expiration. At or below market, the tenant exercises the option, and the rent is flat unless the option sets `annualEscalationPct`. Above market, the tenant renews at market (escalating normally), and a warning names the tenant, option rent and projected market rent.
+   - `percent-of-market`: that share of market, escalating normally.
+
+   Only the first rollover uses the option; later rollovers renew at market. The blended speculative lease still escalates at the new-lease rate in the cash flow; the option's escalation only affects the renewal leg's lease value for commissions. New rent = year-1 market rent × (1+g)^(analysis year in which the next tenant occupies − 1). It steps up once a year, not monthly.
 5. **Fractional months.** Blended downtime and free rent can come out fractional. For example, 2.7 months of downtime means months 1–2 are vacant and month 3 is 70% occupied.
 6. **Speculative leases** escalate at the new-lease escalation rate on each anniversary of their start. They keep the expiring lease's recovery structure. A base year is reset to the calendar year matching the analysis year the new lease occupies (first calendar year + analysis year − 1). They roll again if they expire within the 132 months. TI and LC are paid in the first occupied month.
-7. **Leasing commissions** = p × (renewal LC % × renewal lease value) + (1−p) × (new LC % × new lease value). Lease value = total scheduled base rent over that term, escalated, before free rent.
+7. **Leasing commissions** = p × (renewal LC % × renewal lease value) + (1−p) × (new LC % × new lease value). Lease value = total scheduled base rent over that term, before free rent. The new leg escalates at the new-lease rate. The renewal leg does too, except for an exercised fixed option, which uses its own escalation (flat by default).
 8. **In-place leases** are those active on `asOf`. Leases that start after `asOf` are not yet modeled.
 9. **Vacant suites** stay vacant for `expectedLeaseUpMonths` (or the asset's downtime if that's missing). They then lease on 100% new-tenant terms, at the asking rent if one is set, otherwise market. Recoveries for these suites: office uses base-year (start year); retail and industrial use net.
 10. **GPR** includes vacant and downtime months at what they would rent for, and the lost rent appears as absorption/turnover vacancy. Free rent abates base rent only. Recoveries are earned only on occupied SF.

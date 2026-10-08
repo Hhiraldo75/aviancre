@@ -40,6 +40,8 @@ export interface RenewalOption {
   /** fixed = a set $/SF; percent-of-market = e.g. 0.95 of market rent at renewal. */
   rentBasis: 'fixed' | 'percent-of-market'
   value: number
+  /** Annual escalation during the option term for a fixed option; omitted = flat rent. */
+  annualEscalationPct?: Pct
   noticeMonths?: number
 }
 

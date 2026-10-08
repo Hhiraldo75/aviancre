@@ -7,6 +7,7 @@ import type {
   UnderwritingResult,
 } from '../../types'
 import { averageInPlaceRent, walt } from '../metrics'
+import type { AboveMarketOption } from './commercial'
 import { defaultAssumptions } from './defaults'
 import { irr, loanSchedule, npv, payment } from './finance'
 import { normalizeForExit, operatingCashFlows, type OperatingYear } from './waterfall'
@@ -33,7 +34,7 @@ export function underwrite(
 ): UnderwritingResult {
   const a = assumptions
   const H = a.acquisition.holdYears.value
-  const { years, expiringSFByYear } = operatingCashFlows(property, a, asOf)
+  const { years, expiringSFByYear, aboveMarketOptions } = operatingCashFlows(property, a, asOf)
   const hold = years.slice(0, H)
   const forward = years[H]
 
@@ -124,7 +125,7 @@ export function underwrite(
   }
 
   const loanConstant = hasDebt ? (payment(1, rate / 12, amortMonths) * 12) : null
-  const warnings = buildWarnings(property, a, metrics, cashFlows, expiringSFByYear, loanConstant)
+  const warnings = buildWarnings(property, a, metrics, cashFlows, expiringSFByYear, loanConstant, aboveMarketOptions)
 
   return {
     propertyId: property.id,
@@ -176,6 +177,7 @@ function buildWarnings(
   cashFlows: AnnualCashFlow[],
   expiringSFByYear: number[],
   loanConstant: number | null,
+  aboveMarketOptions: AboveMarketOption[],
 ): string[] {
   const out: string[] = []
 
@@ -210,6 +212,15 @@ function buildWarnings(
     out.push(
       `In-place rents are ${pct(Math.abs(m.inPlaceVsMarket), 0)} ${above ? 'above' : 'below'} market; ` +
         `income ${above ? 'declines' : 'rises'} as ${turn}.`,
+    )
+  }
+
+  const perSF = (x: number) => `$${x.toFixed(2)}/SF`
+  for (const o of aboveMarketOptions) {
+    out.push(
+      `${o.tenant} (suite ${o.suite}) has a ${perSF(o.optionRentPerSF)} renewal option, above the projected ` +
+        `${perSF(o.marketRentPerSF)} market rent at its ${o.expirationDate} expiration. ` +
+        'The model assumes renewal at market.',
     )
   }
 

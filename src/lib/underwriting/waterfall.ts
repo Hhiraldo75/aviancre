@@ -1,5 +1,5 @@
 import type { ISODate, OperatingAssumptions, Property, UnderwritingAssumptions } from '../../types'
-import { commercialMonths } from './commercial'
+import { commercialMonths, type AboveMarketOption } from './commercial'
 import { multifamilyYears } from './multifamily'
 
 /**
@@ -76,6 +76,7 @@ export interface OperatingResult {
   years: OperatingYear[]
   /** SF rolling in each year (commercial only; zeros for multifamily). */
   expiringSFByYear: number[]
+  aboveMarketOptions: AboveMarketOption[]
 }
 
 /** Property-level cash flows before debt for every year of the hold plus the forward year. */
@@ -83,10 +84,10 @@ export function operatingCashFlows(property: Property, a: UnderwritingAssumption
   const holdYears = a.acquisition.holdYears.value
   if (property.rentRoll.kind === 'multifamily') {
     const years = multifamilyYears(property, a).map((x, i) => applyWaterfall(i + 1, x, a.operating))
-    return { years, expiringSFByYear: Array.from({ length: holdYears + 1 }, () => 0) }
+    return { years, expiringSFByYear: Array.from({ length: holdYears + 1 }, () => 0), aboveMarketOptions: [] }
   }
 
-  const { months, expiringSFByYear } = commercialMonths(property, a, asOf)
+  const { months, expiringSFByYear, aboveMarketOptions } = commercialMonths(property, a, asOf)
   const rsf = property.physical.rentableSF.value
   const reserves = a.operating.capitalReservesPerYear.value * rsf
   const years = Array.from({ length: holdYears + 1 }, (_, i) => {
@@ -106,5 +107,5 @@ export function operatingCashFlows(property: Property, a: UnderwritingAssumption
     }
     return applyWaterfall(i + 1, inputs, a.operating)
   })
-  return { years, expiringSFByYear }
+  return { years, expiringSFByYear, aboveMarketOptions }
 }
