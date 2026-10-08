@@ -6,6 +6,7 @@ const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFra
 export const fmt = {
   usd: (n: number) => usd0.format(n),
   usdCompact: (n: number) => '$' + compact.format(n),
+  usdMillions: (n: number) => `${n < 0 ? '−' : ''}$${(Math.abs(n) / 1e6).toFixed(2)}M`,
   compact: (n: number) => compact.format(n),
   rentPerSF: (n: number) => `${usd2.format(n)}/SF`,
   rentPerUnit: (n: number) => `${usd0.format(n)}/unit/mo`,

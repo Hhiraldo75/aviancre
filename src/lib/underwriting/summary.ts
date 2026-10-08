@@ -14,8 +14,22 @@ export interface SummaryStat {
   value: string
   hint?: string
   tone?: 'good' | 'warn'
-  /** Set when any assumption behind the value is an estimate (EST badge). */
+  /** EST badge, only on the cap rates; the card notes estimates once for everything else. */
   src?: Sourced<unknown>
+}
+
+export interface SummaryWarning {
+  /** First sentence of the engine warning, for a bullet. */
+  short: string
+  /** The engine warning as written, for the tooltip. */
+  full: string
+}
+
+export interface NOIYear {
+  year: number
+  noi: number
+  /** The engine shows rollover vacancy or free rent this year. */
+  rollover: boolean
 }
 
 export interface SummarySection {
@@ -29,17 +43,21 @@ export type UnderwritingSummary =
       isSample: boolean
       scenario: UnderwritingAssumptions['scenario']
       holdYears: number
+      /** Set when any result depends on an estimated assumption; lists them. */
+      estimates?: Sourced<unknown>
       sections: SummarySection[]
-      /** The engine's plain-language warnings, unchanged. */
-      warnings: string[]
+      warnings: SummaryWarning[]
       /** NOI by hold year, for the projection chart. */
-      noiByYear: number[]
+      noiByYear: NOIYear[]
     }
   | { status: 'unavailable'; reason: string }
 
 export const PRICE_ESTIMATE_HINT = 'Model estimate: Year-1 NOI ÷ market cap'
 
 const unavailable = (reason: string): UnderwritingSummary => ({ status: 'unavailable', reason })
+
+/** First sentence of a warning: splits at a period followed by a capitalized word. */
+const firstSentence = (text: string) => text.split(/(?<=\.)\s+(?=[A-Z])/)[0]
 
 const multiple = (x: number) => `${x.toFixed(2)}x`
 const pctOrDash = (x: number | null, digits = 2) => (x === null ? '—' : fmt.pct(x, digits))
@@ -184,14 +202,12 @@ export function underwritingSummary(
       stats: [
         {
           label: 'Purchase price',
-          value: fmt.usdCompact(m.purchasePrice),
+          value: fmt.usdMillions(m.purchasePrice),
           hint: priceIsEstimate ? PRICE_ESTIMATE_HINT : a.acquisition.purchasePrice.sourceName,
-          tone: priceIsEstimate ? 'warn' : undefined,
-          src: estimatedFrom(d.price),
         },
-        { label: 'Price / SF', value: `${fmt.usd(m.pricePerSF)}/SF`, src: estimatedFrom(d.price) },
+        { label: 'Price / SF', value: `${fmt.usd(m.pricePerSF)}/SF` },
         { label: 'Going-in cap', value: fmt.pct(m.goingInCapRate, 2), src: estimatedFrom(d.price, d.yearOneNOI) },
-        { label: 'Year-1 NOI', value: fmt.usd(noi1), src: estimatedFrom(d.yearOneNOI) },
+        { label: 'Year-1 NOI', value: fmt.usdMillions(noi1) },
       ],
     },
     {
@@ -201,24 +217,14 @@ export function underwritingSummary(
           label: 'Unlevered IRR',
           value: pctOrDash(m.unleveredIRR),
           hint: hold,
-          src: estimatedFrom(d.basis, d.noiOverHold, d.sale),
         },
         {
           label: 'Levered IRR',
           value: pctOrDash(m.leveredIRR),
           hint: hold,
-          src: estimatedFrom(d.basis, d.noiOverHold, d.sale, d.debt),
         },
-        {
-          label: 'Unlevered multiple',
-          value: multiple(m.unleveredEquityMultiple),
-          src: estimatedFrom(d.basis, d.noiOverHold, d.sale),
-        },
-        {
-          label: 'Levered multiple',
-          value: multiple(m.equityMultiple),
-          src: estimatedFrom(d.basis, d.noiOverHold, d.sale, d.debt),
-        },
+        { label: 'Unlevered multiple', value: multiple(m.unleveredEquityMultiple) },
+        { label: 'Levered multiple', value: multiple(m.equityMultiple) },
       ],
     },
     {
@@ -229,15 +235,9 @@ export function underwritingSummary(
           value: m.minimumDSCR === null ? '—' : multiple(m.minimumDSCR),
           hint: lowDSCR ? `Below ${multiple(DSCR_FLOOR)} lender floor` : undefined,
           tone: lowDSCR ? 'warn' : undefined,
-          src: estimatedFrom(d.price, d.noiOverHold, d.debt),
         },
-        { label: 'Debt yield', value: pctOrDash(m.debtYield), src: estimatedFrom(d.price, d.yearOneNOI, d.debt) },
-        {
-          label: 'Avg cash-on-cash',
-          value: pctOrDash(m.averageCashOnCash),
-          hint: hold,
-          src: estimatedFrom(d.basis, d.noiOverHold, d.debt),
-        },
+        { label: 'Debt yield', value: pctOrDash(m.debtYield) },
+        { label: 'Avg cash-on-cash', value: pctOrDash(m.averageCashOnCash), hint: hold },
       ],
     },
     {
@@ -245,16 +245,14 @@ export function underwritingSummary(
       stats: [
         {
           label: `Normalized Year-${result.normalizedExitYear.year} NOI`,
-          value: fmt.usd(m.exitNOI),
+          value: fmt.usdMillions(m.exitNOI),
           hint: 'General vacancy replaces rollover',
-          src: estimatedFrom(d.noiOverHold),
         },
         { label: 'Exit cap', value: fmt.pct(a.exit.exitCapRate.value, 2), src: estimatedFrom(d.exitCap) },
         {
           label: 'Net sale proceeds',
-          value: fmt.usdCompact(m.netSaleProceeds),
+          value: fmt.usdMillions(m.netSaleProceeds),
           hint: `After ${fmt.pct(a.exit.sellingCostsPct.value, 0)} selling costs`,
-          src: estimatedFrom(d.noiOverHold, d.sale),
         },
       ],
     },
@@ -265,8 +263,14 @@ export function underwritingSummary(
     isSample: property.isSample,
     scenario: a.scenario,
     holdYears: H,
+    // Every stat's drivers fall within these groups.
+    estimates: estimatedFrom(d.basis, d.noiOverHold, d.sale, d.debt),
     sections,
-    warnings: result.warnings,
-    noiByYear: result.cashFlows.map((c) => c.netOperatingIncome),
+    warnings: result.warnings.map((full) => ({ short: firstSentence(full), full })),
+    noiByYear: result.cashFlows.map((c) => ({
+      year: c.year,
+      noi: c.netOperatingIncome,
+      rollover: c.absorptionTurnoverVacancy > 0 || c.freeRent > 0,
+    })),
   }
 }

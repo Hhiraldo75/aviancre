@@ -38,37 +38,60 @@ describe('underwriting summary (Atwells, base scenario)', () => {
     expect(stat(s, 'Going-in cap').value).toBe(`${(m.goingInCapRate * 100).toFixed(2)}%`)
     expect(stat(s, 'Unlevered multiple').value).toBe(`${m.unleveredEquityMultiple.toFixed(2)}x`)
     expect(stat(s, 'Levered multiple').value).toBe(`${m.equityMultiple.toFixed(2)}x`)
-    expect(stat(s, 'Year-1 NOI').value).toBe('$290,296')
-    expect(stat(s, 'Normalized Year-11 NOI').value).toBe(`$${Math.round(m.exitNOI).toLocaleString('en-US')}`)
+    expect(stat(s, 'Year-1 NOI').value).toBe('$0.29M')
+    expect(stat(s, 'Normalized Year-11 NOI').value).toBe(`$${(m.exitNOI / 1e6).toFixed(2)}M`)
+  })
+  it('shows dollar totals in millions with 2 decimals', () => {
+    expect(stat(s, 'Purchase price').value).toBe('$4.15M')
+    expect(stat(s, 'Net sale proceeds').value).toMatch(/^\$\d+\.\d{2}M$/)
+    expect(stat(s, 'Price / SF').value).toBe('$288/SF')
   })
   it('labels the price as a model estimate, not an asking price', () => {
     expect(stat(s, 'Purchase price').hint).toBe(PRICE_ESTIMATE_HINT)
     expect(PRICE_ESTIMATE_HINT).toBe('Model estimate: Year-1 NOI ÷ market cap')
   })
-  it('badges every stat EST while all assumptions are defaults', () => {
-    for (const x of stats(s)) {
-      expect(x.src?.source, x.label).toBe('estimated')
-      expect(x.src?.sourceName, x.label).toMatch(/^Driven by estimates: /)
-    }
-    expect(stat(s, 'Exit cap').src?.notes).toMatch(/^Exit cap rate: Market cap rate \+ 25 bps/)
+  it('notes estimates once and badges EST only on the cap rates', () => {
+    expect(ok(s).estimates?.source).toBe('estimated')
+    expect(ok(s).estimates?.notes).toMatch(/Exit cap rate: Market cap rate \+ 25 bps/)
+    const badged = stats(s).filter((x) => x.src).map((x) => x.label)
+    expect(badged).toEqual(['Going-in cap', 'Exit cap'])
+    for (const label of badged) expect(stat(s, label).src?.sourceName).toMatch(/^Driven by estimates: /)
   })
-  it('passes the engine warnings through unchanged', () => {
-    expect(ok(s).warnings).toEqual(underwrite(ATWELLS, AS_OF).warnings)
-    expect(ok(s).warnings.length).toBeGreaterThan(0)
+  it('keeps hints neutral; only a low DSCR gets a tone', () => {
+    for (const x of stats(s)) expect(x.tone, x.label).toBeUndefined()
+  })
+  it('shortens engine warnings to their first sentence, keeping the full text', () => {
+    const engine = underwrite(ATWELLS, AS_OF).warnings
+    expect(ok(s).warnings.map((w) => w.full)).toEqual(engine)
+    expect(ok(s).warnings.map((w) => w.short)).toEqual([
+      '36% of rentable SF rolls in year 2.',
+      'Negative leverage: the 7.00% going-in cap rate is below the 7.58% loan constant, so debt lowers the cash yield once the loan amortizes.',
+      'In-place rents are 32% above market; income declines as leases roll.',
+      'Casa Lucenti Trattoria (suite 101) has a $30.00/SF renewal option, above the projected $23.35/SF market rent at its 2030-02-28 expiration.',
+      'Purchase price is a model estimate (year-1 NOI ÷ market cap rate), not an asking price or offer.',
+    ])
   })
   it('flags sample data and returns NOI for each hold year', () => {
     expect(ok(s).isSample).toBe(true)
     expect(ok(s).scenario).toBe('base')
-    expect(ok(s).noiByYear).toHaveLength(10)
+    expect(ok(s).noiByYear.map((y) => y.year)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+  })
+  it('marks rollover years where the engine shows rollover vacancy or free rent', () => {
+    const r = underwrite(ATWELLS, AS_OF)
+    expect(ok(s).noiByYear.map((y) => y.noi)).toEqual(r.cashFlows.map((c) => c.netOperatingIncome))
+    expect(ok(s).noiByYear.map((y) => y.rollover)).toEqual(
+      r.cashFlows.map((c) => c.absorptionTurnoverVacancy > 0 || c.freeRent > 0),
+    )
+    expect(ok(s).noiByYear[4].rollover).toBe(false) // year 5: nothing rolls
+    expect(ok(s).noiByYear[1].rollover).toBe(true) // year 2: 36% rolls
   })
   it('drops the EST badge on price once an analyst enters it', () => {
     const a = withPurchasePrice(defaultAssumptions(ATWELLS, AS_OF), 4_000_000)
     const priced = underwritingSummary(ATWELLS, AS_OF, a)
-    expect(stat(priced, 'Purchase price').value).toBe('$4M')
-    expect(stat(priced, 'Purchase price').src).toBeUndefined()
+    expect(stat(priced, 'Purchase price').value).toBe('$4.00M')
     expect(stat(priced, 'Purchase price').hint).toBe('Analyst input')
-    expect(stat(priced, 'Price / SF').src).toBeUndefined()
-    expect(stat(priced, 'Unlevered IRR').src?.source).toBe('estimated')
+    expect(ok(priced).estimates?.sourceName).not.toMatch(/purchase price/)
+    expect(stat(priced, 'Going-in cap').src?.sourceName).not.toMatch(/purchase price/)
   })
 })
 
@@ -78,6 +101,7 @@ describe('underwriting summary across samples', () => {
       const s = underwritingSummary(byId(id), AS_OF)
       expect(s.status, id).toBe('ok')
       expect(stat(s, 'Levered IRR').value).toMatch(/^\d+\.\d{2}%$/)
+      expect(ok(s).noiByYear.some((y) => y.rollover), id).toBe(false)
     }
   })
   it('never shows NaN, Infinity or undefined', () => {
@@ -85,7 +109,7 @@ describe('underwriting summary across samples', () => {
       const s = underwritingSummary(p, AS_OF)
       if (s.status !== 'ok') continue
       for (const x of stats(s)) expect(`${x.value} ${x.hint ?? ''}`, `${p.id} ${x.label}`).not.toMatch(/NaN|Infinity|undefined/)
-      expect(s.noiByYear.every(Number.isFinite), p.id).toBe(true)
+      expect(s.noiByYear.every((y) => Number.isFinite(y.noi)), p.id).toBe(true)
     }
   })
 })

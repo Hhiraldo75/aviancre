@@ -18,6 +18,11 @@ export default function UnderwritingSummaryCard({ summary: s }: { summary: Under
         <p className="rounded-md bg-amber-500/10 p-3 text-xs leading-snug text-amber-300">{s.reason}</p>
       ) : (
         <div className="space-y-4">
+          {s.estimates && (
+            <p title={s.estimates.notes} className="-mt-1 cursor-help text-[10px] text-slate-400">
+              Results use estimated market assumptions (EST)
+            </p>
+          )}
           {s.sections.map((section) => (
             <div key={section.title}>
               <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{section.title}</h4>
@@ -33,7 +38,9 @@ export default function UnderwritingSummaryCard({ summary: s }: { summary: Under
               <h4 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Warnings</h4>
               <ul className="list-disc space-y-1 pl-4 text-[11px] leading-snug text-amber-300 marker:text-amber-500">
                 {s.warnings.map((w) => (
-                  <li key={w}>{w}</li>
+                  <li key={w.full} title={w.full}>
+                    {w.short}
+                  </li>
                 ))}
               </ul>
             </div>

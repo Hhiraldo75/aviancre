@@ -27,7 +27,7 @@ export function Stat({
   hint?: string
   tone?: 'good' | 'warn'
 }) {
-  const hintColor = tone === 'warn' ? 'text-amber-300' : 'text-emerald-400'
+  const hintColor = tone === 'warn' ? 'text-amber-300' : tone === 'good' ? 'text-emerald-400' : 'text-slate-400'
   return (
     <div>
       <div className="text-[10px] uppercase tracking-wide text-slate-500">{label}</div>

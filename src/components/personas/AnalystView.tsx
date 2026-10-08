@@ -78,6 +78,7 @@ export default function AnalystView({ property: p }: { property: Property }) {
             label="Mark-to-market"
             value={mtm !== null ? fmt.signedPct(mtm) : '—'}
             hint={mtm !== null && mtm > 0 ? 'In-place below market' : undefined}
+            tone="good"
           />
         </StatGrid>
       </Card>
