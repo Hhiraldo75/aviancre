@@ -64,7 +64,7 @@ export default function ReturnsTab({
       </Card>
 
       <Card title="Returns">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
           {r.returns.map((s) => (
             <Stat key={s.label} {...s} />
           ))}

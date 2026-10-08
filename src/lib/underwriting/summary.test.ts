@@ -47,6 +47,12 @@ describe('underwriting summary (Atwells, base scenario)', () => {
     expect(stat(s, 'Normalized Year-11 NOI').value).toBe('$341,402')
     expect(stat(s, 'Price / SF').value).toBe('$288/SF')
   })
+  it('shows the max bid at the target levered IRR next to the price', () => {
+    const pricing = ok(s).sections[0].stats.map((x) => x.label)
+    expect(pricing.slice(0, 2)).toEqual(['Purchase price', 'Max bid at 10% levered IRR'])
+    expect(stat(s, 'Max bid at 10% levered IRR').value).toMatch(/^\$\d\.\d\dM$/)
+    expect(stat(s, 'Max bid at 10% levered IRR').hint).toMatch(/cap · \(\d+\.\d%\) vs price$/)
+  })
   it('labels the price as a model estimate, not an asking price', () => {
     expect(stat(s, 'Purchase price').hint).toBe(PRICE_ESTIMATE_HINT)
     expect(PRICE_ESTIMATE_HINT).toBe('Model estimate at default assumptions: Year-1 NOI ÷ market cap')

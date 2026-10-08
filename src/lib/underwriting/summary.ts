@@ -3,6 +3,7 @@ import { fmt } from '../format'
 import { estimate } from '../sourced'
 import { isEstimate } from './defaults'
 import { assumptionChanges, assumptionsFor, defaultsFor, type AssumptionEdits } from './edits'
+import { maxBid, type MaxBid } from './maxBid'
 import { DSCR_FLOOR, underwrite } from './underwrite'
 
 /**
@@ -123,6 +124,7 @@ function driverGroups(p: Property, a: UnderwritingAssumptions) {
     ['Hold period', a.acquisition.holdYears],
   ]
   const debt: Driver[] = [
+    ['Target levered IRR', a.targetLeveredIRR],
     ['LTV', a.debt.ltv],
     ...(a.debt.rate.type === 'fixed' ? [['Interest rate', a.debt.rate.rate] as Driver] : []),
     ['Amortization', a.debt.amortizationYears],
@@ -241,6 +243,17 @@ export function changesFrom(property: Property, asOf: ISODate, a: UnderwritingAs
   return assumptionChanges(a, defaultsFor(property, asOf))
 }
 
+/** "Max bid at 10% levered IRR": the price, with $/SF, implied cap and the gap to the current price. */
+export function maxBidStat(bid: MaxBid): SummaryStat {
+  const label = `Max bid at ${fmt.pctShort(bid.target)} levered IRR`
+  if (bid.status === 'none') return { label, value: '—', hint: bid.reason }
+  return {
+    label,
+    value: fmt.money(bid.price),
+    hint: `${fmt.usd(bid.pricePerSF)}/SF · ${fmt.pct(bid.goingInCapRate, 2)} cap · ${fmt.signedPct(bid.vsCurrentPct)} vs price`,
+  }
+}
+
 /** Engine warnings as bullets: first sentence shown, full text kept for the tooltip. */
 export function summaryWarnings(warnings: string[]): SummaryWarning[] {
   return warnings.map((full) => ({ short: firstSentence(full), full }))
@@ -270,6 +283,7 @@ export function underwritingSummary(property: Property, asOf: ISODate, input?: A
           value: fmt.money(m.purchasePrice),
           hint: priceIsEstimate ? PRICE_ESTIMATE_HINT : a.acquisition.purchasePrice.sourceName,
         },
+        maxBidStat(maxBid(property, asOf, a)),
         { label: 'Price / SF', value: `${fmt.usd(m.pricePerSF)}/SF` },
         { label: 'Going-in cap', value: fmt.pct(m.goingInCapRate, 2), src: estimatedFrom(d.price, d.yearOneNOI) },
         { label: 'Year-1 NOI', value: fmt.money(noi1) },

@@ -109,6 +109,7 @@ export function editableFields(a: UnderwritingAssumptions): AssumptionField[] {
   pct('exit.exitCapRate', 'Exit cap rate', 2, 15, (x) => fmt.pct(x, 2))
   pct('exit.sellingCostsPct', 'Selling costs', 0, 10)
   pct('discountRate', 'Discount rate (NPV)', 0, 30)
+  pct('targetLeveredIRR', 'Target levered IRR', 0, 50)
 
   return fields
 }

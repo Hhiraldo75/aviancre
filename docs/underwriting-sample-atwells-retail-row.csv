@@ -99,3 +99,4 @@ exit.exitCapRate,0.0725,"Market cap rate + 25 bps – rule of thumb, replace wit
 exit.sellingCostsPct,0.02,Industry rule of thumb – replace with market report,estimated
 exit.capForwardNOI,true,,
 discountRate,0.08,Placeholder – replace with investor return target,estimated
+targetLeveredIRR,0.1,Placeholder – replace with investor return target,estimated

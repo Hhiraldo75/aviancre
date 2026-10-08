@@ -106,6 +106,8 @@ export interface UnderwritingAssumptions {
   exit: ExitAssumptions
   /** Discount rate for NPV. */
   discountRate: Sourced<Pct>
+  /** Levered IRR the max bid is solved for. */
+  targetLeveredIRR: Sourced<Pct>
 }
 
 /** One year of the cash flow waterfall. All values in USD. */

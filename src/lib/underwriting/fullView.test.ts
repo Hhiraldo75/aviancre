@@ -4,6 +4,8 @@ import { SAMPLE_PROPERTIES } from '../../data/sampleProperties'
 import { activeLeases, occupancy, yearsBetween } from '../metrics'
 import { RULE_OF_THUMB } from './defaults'
 import { fullUnderwriting, type FullUnderwriting } from './fullView'
+import { maxBid } from './maxBid'
+import { maxBidStat } from './summary'
 import { underwrite } from './underwrite'
 
 const AS_OF = '2026-10-04'
@@ -200,6 +202,16 @@ describe('full underwriting: returns tab', () => {
   })
   it('has no DSCR chart without debt', () => {
     expect(ok(fullUnderwriting(ATWELLS, AS_OF, { 'debt.ltv': 0 })).returns.dscrChart).toBeNull()
+  })
+  it('shows the max bid at the target levered IRR', () => {
+    const bid = ret.returns.find((x) => x.label === 'Max bid at 10% levered IRR')!
+    expect(bid).toEqual(maxBidStat(maxBid(ATWELLS, AS_OF, r.assumptions)))
+    expect(bid.value).toMatch(/^\$\d\.\d\dM$/)
+    expect(bid.hint).toMatch(/^\$[\d,]+\/SF · \d+\.\d\d% cap · \(\d+\.\d%\) vs price$/)
+    const twelve = ok(fullUnderwriting(ATWELLS, AS_OF, { targetLeveredIRR: 0.12 })).returns.returns
+    expect(twelve.map((x) => x.label)).toContain('Max bid at 12% levered IRR')
+    const noDebt = ok(fullUnderwriting(ATWELLS, AS_OF, { 'debt.ltv': 0 })).returns.returns.find((x) => x.label.startsWith('Max bid'))!
+    expect(noDebt).toMatchObject({ value: '—', hint: expect.stringMatching(/Debt is off/) })
   })
 })
 

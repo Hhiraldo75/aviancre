@@ -10,7 +10,7 @@ import { averageInPlaceRent, walt } from '../metrics'
 import type { AboveMarketOption } from './commercial'
 import { defaultAssumptions } from './defaults'
 import { irr, loanSchedule, npv, payment } from './finance'
-import { normalizeForExit, operatingCashFlows, type OperatingYear } from './waterfall'
+import { normalizeForExit, operatingCashFlows, type OperatingResult, type OperatingYear } from './waterfall'
 
 export const DSCR_FLOOR = 1.25
 export const ROLLOVER_CONCENTRATION = 0.25
@@ -25,16 +25,18 @@ export function saleProceeds(exitNOI: number, exitCapRate: number, sellingCostsP
 
 /**
  * Full 10-year underwriting: operating cash flows, purchase, loan, sale,
- * returns and plain-language warnings.
+ * returns and plain-language warnings. Operating cash flows don't depend on
+ * the price, so a caller varying only the price can pass them in once.
  */
 export function underwrite(
   property: Property,
   asOf: ISODate,
   assumptions: UnderwritingAssumptions = defaultAssumptions(property, asOf),
+  operating: OperatingResult = operatingCashFlows(property, assumptions, asOf),
 ): UnderwritingResult {
   const a = assumptions
   const H = a.acquisition.holdYears.value
-  const { years, expiringSFByYear, inPlaceExpiringSFByYear, aboveMarketOptions } = operatingCashFlows(property, a, asOf)
+  const { years, expiringSFByYear, inPlaceExpiringSFByYear, aboveMarketOptions } = operating
   const hold = years.slice(0, H)
   const forward = years[H]
 

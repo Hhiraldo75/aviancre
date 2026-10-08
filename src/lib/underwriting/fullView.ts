@@ -14,11 +14,13 @@ import { activeLeases, currentRentPerSF, occupancy, yearsBetween } from '../metr
 import { RULE_OF_THUMB } from './defaults'
 import { defaultsFor, editableFields, fieldValue, formatInput, isEdited, type AssumptionField, type AssumptionGroupTitle } from './edits'
 import { cashFlowRows, type LineKey } from './report'
+import { maxBid, type MaxBid } from './maxBid'
 import { marketRentInYear } from './rollover'
 import {
   PRICE_ESTIMATE_HINT,
   assumptionEstimates,
   changesFrom,
+  maxBidStat,
   runUnderwriting,
   summaryWarnings,
   type AssumptionsInput,
@@ -260,7 +262,7 @@ export function fullUnderwriting(property: Property, asOf: ISODate, input?: Assu
     },
     cashFlow: cashFlowTable(r),
     rentRoll: rentRollView(property, r, asOf),
-    returns: returnsView(r),
+    returns: returnsView(r, maxBid(property, asOf, a)),
     assumptions: assumptionGroups(a, defaultsFor(property, asOf)),
   }
 }
@@ -425,7 +427,7 @@ export function rentRollView(property: Property, r: UnderwritingResult, asOf: IS
   }
 }
 
-export function returnsView(r: UnderwritingResult): ReturnsView {
+export function returnsView(r: UnderwritingResult, bid: MaxBid): ReturnsView {
   const a = r.assumptions
   const m = r.metrics
   const H = r.cashFlows.length
@@ -482,6 +484,7 @@ export function returnsView(r: UnderwritingResult): ReturnsView {
       { label: 'Unlevered multiple', value: fmt.multiple(m.unleveredEquityMultiple) },
       { label: 'Levered multiple', value: fmt.multiple(m.equityMultiple) },
       { label: `NPV @ ${fmt.pct(a.discountRate.value, 2)}`, value: usd(m.npv), hint: 'Unlevered cash flows' },
+      maxBidStat(bid),
     ],
     cashFlows: {
       columns: Array.from({ length: H + 1 }, (_, i) => `Year ${i}`),

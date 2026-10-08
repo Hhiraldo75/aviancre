@@ -83,6 +83,7 @@ export const SHARED_DEFAULTS = {
   exitCapSpread: 0.0025,
   sellingCostsPct: 0.02,
   discountRate: 0.08,
+  targetLeveredIRR: 0.1,
 } as const
 
 export const MULTIFAMILY_DEFAULTS = {
@@ -194,6 +195,7 @@ export function defaultAssumptions(property: Property, asOf: ISODate): Underwrit
       capForwardNOI: true,
     },
     discountRate: estimate(s.discountRate, INVESTOR_TARGET),
+    targetLeveredIRR: estimate(s.targetLeveredIRR, INVESTOR_TARGET),
   }
 
   assumptions.acquisition.purchasePrice = estimatedPrice(property, assumptions, asOf)
