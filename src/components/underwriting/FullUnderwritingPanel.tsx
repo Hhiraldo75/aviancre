@@ -4,13 +4,14 @@ import { fmt } from '../../lib/format'
 import { fullUnderwriting, toCSV } from '../../lib/underwriting'
 import { useAppStore, useAssumptionEdits } from '../../store/useAppStore'
 import { Chip, Stat } from '../ui/Card'
+import AnalystMemoTab from './AnalystMemoTab'
 import AssumptionsTab from './AssumptionsTab'
 import ChangedChip from './ChangedChip'
 import CashFlowTab from './CashFlowTab'
 import RentRollTab from './RentRollTab'
 import ReturnsTab from './ReturnsTab'
 
-const TABS = ['Cash flow', 'Rent roll', 'Returns', 'Assumptions'] as const
+const TABS = ['Cash flow', 'Rent roll', 'Returns', 'Assumptions', 'Analyst memo'] as const
 type Tab = (typeof TABS)[number]
 
 function downloadCSV(filename: string, csv: string) {
@@ -142,6 +143,7 @@ export default function FullUnderwritingPanel({ property: p }: { property: Prope
                 onResetAll={() => resetAssumptions(p.id)}
               />
             )}
+            {tab === 'Analyst memo' && <AnalystMemoTab propertyId={p.id} edited={view.header.changes.length > 0} />}
             {view.header.notes.length > 0 && (
               <div className="mt-6 space-y-1 border-t border-slate-700 pt-3 text-[10px] leading-snug text-slate-500">
                 {view.header.notes.map((n) => (

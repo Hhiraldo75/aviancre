@@ -32,5 +32,7 @@ export const fmt = {
   multiple: (x: number) => `${x.toFixed(2)}x`,
   monthYear: (iso: string) =>
     new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' }),
+  date: (iso: string) =>
+    new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }),
   label: (s: string) => s.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
 }
