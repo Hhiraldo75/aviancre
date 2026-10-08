@@ -78,7 +78,7 @@ Every number in the memo is quoted from the JSON's display strings, and the memo
 
 **Analyst memo tab** (V4 step 5B): Full underwriting shows `docs/memos/<property-id>.md` in an *Analyst memo* tab (`src/components/underwriting/AnalystMemoTab.tsx`).
 - Memos are bundled with `import.meta.glob` (`src/services/analystMemos.ts`). Each memo is its own lazy chunk, fetched when the tab opens. A new or regenerated memo needs a rebuild in production; the dev server picks it up live.
-- The header shows an *AI analyst* chip, "Written by Claude Code from AVIANCRE engine outputs, <date>" (the date from the memo's "As of" line) and "All figures from the engine at default assumptions."
+- The header shows an *AI analyst* chip, "Written by Claude Code from AVIANCRE engine outputs, <date>" (the date from the memo's "As of" line) and "All figures from the engine at default assumptions." Because the header says this, the tab hides the memo's own first line when it is an italic disclaimer (`withoutDisclaimer`). The file in `docs/memos/` keeps it.
 - If any assumption is edited, a banner warns that the memo reflects default assumptions and the other tabs may differ. A property without a memo shows the command that writes one.
 - Markdown is rendered by a small built-in parser (`src/lib/markdown.ts`): headings, paragraphs, bullet and numbered lists, tables, rules, and bold, italic and code. There is no raw HTML. Wide tables scroll horizontally.
 

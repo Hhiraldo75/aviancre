@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fmt } from '../../lib/format'
-import { loadAnalystMemo, memoDate } from '../../services/analystMemos'
+import { loadAnalystMemo, memoDate, withoutDisclaimer } from '../../services/analystMemos'
 import { Chip } from '../ui/Card'
 import Markdown from '../ui/Markdown'
 
@@ -52,7 +52,7 @@ export default function AnalystMemoTab({ propertyId, edited }: { propertyId: str
           This memo reflects default assumptions. Your edits are not included; numbers in the other tabs may differ.
         </p>
       )}
-      <Markdown source={memo.markdown} />
+      <Markdown source={withoutDisclaimer(memo.markdown)} />
     </article>
   )
 }

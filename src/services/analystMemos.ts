@@ -14,3 +14,11 @@ export function loadAnalystMemo(propertyId: string): Promise<string | null> {
 export function memoDate(markdown: string): string | null {
   return /^As of (\d{4}-\d{2}-\d{2})\b/m.exec(markdown)?.[1] ?? null
 }
+
+/**
+ * The memo without its leading italic disclaimer line ("*AI-generated analysis …*"),
+ * which the Analyst memo tab header already states. Anything else is left as is.
+ */
+export function withoutDisclaimer(markdown: string): string {
+  return markdown.replace(/^\s*([*_])[^*_\n].*\1[ \t]*(\n\s*|$)/, '')
+}
