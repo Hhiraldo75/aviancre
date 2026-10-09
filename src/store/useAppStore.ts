@@ -51,6 +51,8 @@ interface AppState {
   /** Portfolio filters; the map and the list show the same matching set. Mirrored in the URL. */
   filters: PropertyFilters
   sort: SortKey
+  /** Bumped by "Zoom to results"; the map fits to the matching buildings on each change. */
+  zoomRequest: number
   select: (id: string | null) => void
   lookupParcel: (lng: number, lat: number) => Promise<void>
   clearSelection: () => void
@@ -67,6 +69,7 @@ interface AppState {
   removeFilter: (chipKey: string) => void
   clearFilters: () => void
   setSort: (sort: SortKey) => void
+  zoomToResults: () => void
 }
 
 /** In-flight parcel request; a newer click aborts the older one. */
@@ -87,6 +90,7 @@ export const useAppStore = create<AppState>()((set) => ({
   assumptionEdits: {},
   filters: initialView.filters,
   sort: initialView.sort,
+  zoomRequest: 0,
 
   select: (id) => {
     cancelInFlight()
@@ -174,6 +178,7 @@ export const useAppStore = create<AppState>()((set) => ({
   removeFilter: (chipKey) => set((s) => ({ filters: withoutFilter(s.filters, chipKey) })),
   clearFilters: () => set({ filters: EMPTY_FILTERS }),
   setSort: (sort) => set({ sort }),
+  zoomToResults: () => set((s) => ({ zoomRequest: s.zoomRequest + 1 })),
 }))
 
 // Keep the URL in step with the filters (replacing, not adding, history entries).

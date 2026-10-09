@@ -13,7 +13,7 @@ import {
   submarketOptions,
   toggleValue,
 } from '../../lib/filters'
-import { useAppStore } from '../../store/useAppStore'
+import { useAppStore, usePropertyView } from '../../store/useAppStore'
 
 function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
   return (
@@ -87,6 +87,8 @@ export default function FilterBar() {
   const setFilter = useAppStore((s) => s.setFilter)
   const removeFilter = useAppStore((s) => s.removeFilter)
   const clearFilters = useAppStore((s) => s.clearFilters)
+  const zoomToResults = useAppStore((s) => s.zoomToResults)
+  const { matching } = usePropertyView()
   const [open, setOpen] = useState(false)
 
   const chips = activeFilterChips(f)
@@ -205,6 +207,15 @@ export default function FilterBar() {
           ))}
           <button type="button" onClick={clearFilters} className="text-[11px] text-slate-400 underline hover:text-slate-100">
             Clear all
+          </button>
+          <button
+            type="button"
+            onClick={zoomToResults}
+            disabled={matching.length === 0}
+            title="Fit the map to the matching sample buildings"
+            className="ml-auto text-[11px] text-blue-300 hover:text-blue-200 disabled:cursor-not-allowed disabled:text-slate-600"
+          >
+            Zoom to results
           </button>
         </div>
       )}

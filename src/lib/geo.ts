@@ -41,6 +41,18 @@ function squareFootprint(lng: number, lat: number, footprintSqFt: number): Polyg
   }
 }
 
+/** South-west and north-east corners around every feature's outline; null when there are none. */
+export function featureBounds(features: Feature<Polygon>[]): [[number, number], [number, number]] | null {
+  const points = features.flatMap((f) => f.geometry.coordinates.flat())
+  if (points.length === 0) return null
+  const lngs = points.map((p) => p[0])
+  const lats = points.map((p) => p[1])
+  return [
+    [Math.min(...lngs), Math.min(...lats)],
+    [Math.max(...lngs), Math.max(...lats)],
+  ]
+}
+
 /** `matchIds` is the filtered set; without it every building matches. */
 export function propertiesToGeoJSON(
   properties: Property[],

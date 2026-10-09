@@ -28,7 +28,7 @@ export default function MapLegend() {
         <span className="inline-block h-3 w-3 rounded-sm border-2 border-blue-600 bg-blue-500/20" />
         Public parcel
       </div>
-      <div className="mt-1 text-[10px] text-slate-400">Colored blocks: sample data · placeholder massing</div>
+      <div className="mt-1 text-[10px] text-slate-400">Colored buildings: sample data on real footprints</div>
     </div>
   )
 }

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import maplibregl, { type GeoJSONSource, type Map as MaplibreMap } from 'maplibre-gl'
-import type { FeatureCollection } from 'geojson'
+import type { Feature, FeatureCollection, Polygon } from 'geojson'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { LAYER_IDS, MAP_CONFIG, SOURCE_IDS } from '../../config/map'
-import { propertiesToGeoJSON } from '../../lib/geo'
+import { hasActiveFilters } from '../../lib/filters'
+import { featureBounds, propertiesToGeoJSON } from '../../lib/geo'
 import { fmt } from '../../lib/format'
 import { useAppStore, usePropertyView } from '../../store/useAppStore'
 import type { ParcelLookup } from '../../types'
@@ -41,6 +42,8 @@ export default function MapView() {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MaplibreMap | null>(null)
   const prevSelectedRef = useRef<string | null>(null)
+  /** Set after "Zoom to results", so clearing the filters zooms back out to all buildings. */
+  const zoomedToResultsRef = useRef(false)
   const [loaded, setLoaded] = useState(false)
 
   const properties = useAppStore((s) => s.properties)
@@ -48,6 +51,8 @@ export default function MapView() {
   const selectedId = useAppStore((s) => s.selectedId)
   const parcel = useAppStore((s) => s.parcel)
   const { matchIds } = usePropertyView()
+  const zoomRequest = useAppStore((s) => s.zoomRequest)
+  const filtered = useAppStore((s) => hasActiveFilters(s.filters))
 
   const geojson = useMemo(() => propertiesToGeoJSON(properties, asOf, matchIds), [properties, asOf, matchIds])
   // Read the latest data inside map callbacks without re-creating the map.
@@ -214,6 +219,26 @@ export default function MapView() {
     ;(map.getSource(SOURCE_IDS.parcel) as GeoJSONSource | undefined)?.setData(parcelGeoJSON(parcel))
     ;(map.getSource(SOURCE_IDS.clickPoint) as GeoJSONSource | undefined)?.setData(clickPointGeoJSON(parcel))
   }, [parcel, loaded])
+
+  // 5. "Zoom to results": fit the matching buildings, keeping the current tilt and rotation.
+  const fitTo = (features: Feature<Polygon>[]) => {
+    const map = mapRef.current
+    const bounds = featureBounds(features)
+    if (!map || !bounds) return false
+    map.fitBounds(bounds, { padding: 80, maxZoom: 16.5, pitch: map.getPitch(), bearing: map.getBearing(), duration: 1200 })
+    return true
+  }
+
+  useEffect(() => {
+    if (!loaded || zoomRequest === 0) return
+    if (fitTo(geojsonRef.current.features.filter((f) => f.properties.matches))) zoomedToResultsRef.current = true
+  }, [zoomRequest, loaded])
+
+  useEffect(() => {
+    if (!loaded || filtered || !zoomedToResultsRef.current) return
+    zoomedToResultsRef.current = false
+    fitTo(geojsonRef.current.features)
+  }, [filtered, loaded])
 
   return (
     <div className="relative h-full w-full">
