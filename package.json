@@ -10,6 +10,7 @@
     "test": "vitest run",
     "underwrite": "vite-node scripts/underwrite.ts",
     "rent-roll": "vite-node scripts/rent-roll.ts",
+    "import": "vite-node scripts/import.ts",
     "check-private": "vite-node scripts/check-private.ts"
   },
   "dependencies": {

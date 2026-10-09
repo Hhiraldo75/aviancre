@@ -9,7 +9,9 @@ AVIANCRE is a browser-only (no backend) 3D commercial real estate app for Provid
 - `npm test` — Vitest suite (tests are colocated `*.test.ts`; single file: `npx vitest run src/lib/metrics.test.ts`)
 - `npm run build` — `tsc -b && vite build`; this is the only type check
 - `npm run dev` — app at http://localhost:5173 (also serves the `/pvdgis` proxy)
-- `npm run underwrite -- <id> [--as-of YYYY-MM-DD] [--price N] [--json]` — prints one property's underwriting; writes `docs/underwriting-<id>.csv`, or with `--json` the AI analyst's input `docs/underwriting/<id>.json`
+- `npm run underwrite -- <id> [--as-of YYYY-MM-DD] [--price N] [--json]` — prints one property's underwriting; writes `docs/underwriting-<id>.csv`, or with `--json` the AI analyst's input `docs/underwriting/<id>.json` (for an imported `deal-*` id, both go to `private-deals/<id>/`)
+- `npm run import -- <file.csv|.xlsx> [--asset-type …] [--class …] [--submarket …]` — validates a rent roll in the `npm run rent-roll` export format and saves the deal as `private-deals/deal-<name>.json`
+- `npm run check-private` — fails if Git tracks or has staged anything in `private-deals/` besides its README (also runs in `npm test`)
 - `/underwriting-analyst <id>` (project skill) — runs the tests and the JSON export, reviews it, and writes an IC memo to `docs/memos/<id>.md`. The engine does all math; the memo only quotes the JSON. Details in `docs/UNDERWRITING.md`.
 
 Before calling a change done, run `npm test` and `npm run build`. For UI changes, also check it in `npm run dev`.
@@ -33,6 +35,10 @@ TypeScript is strict (`tsconfig.app.json`): `verbatimModuleSyntax` (use `import 
 - City ArcGIS goes through the Vite `/pvdgis` proxy, which exists only in dev; production needs `VITE_PVD_GIS_URL` (the only env var) pointing at a relay. The GIS is blocked from some non-US networks.
 - Building footprints come from OSM 3D buildings by design (RIGIS outlines are from 2018 and have no heights).
 - Keys (e.g. future Google 3D Tiles) go in `.env.local` (gitignored via `*.local`).
+
+## Private deals
+
+Real deals live in `private-deals/` (Git ignores all of it except `README.md`) or, in the app, in the browser's local storage. Never commit, copy into `docs/`, bundle (no `src/` import or glob of `private-deals/`), or send anywhere anything about an imported deal. Imported deals have ids starting with `deal-` and `importedFrom` set. The import format, validation and ACT/EST rules are in `src/lib/rentRollImport.ts` and `docs/UNDERWRITING.md`.
 
 ## Git
 

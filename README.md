@@ -10,6 +10,11 @@ the parcel outline from the City GIS server when it's reachable.
 
 **The colored sample properties and all tenant, rent and market figures are fictional sample data.**
 
+To underwrite a real deal, use **Import rent roll** (CSV or Excel, in the format
+`npm run rent-roll` exports). The file is read in your browser and the deal is kept
+in that browser only. From the command line, `npm run import -- <file>` saves it in
+`private-deals/`, which Git ignores (see `private-deals/README.md`).
+
 ## Stack
 React 19 · TypeScript · Vite · Tailwind CSS v4 · MapLibre GL JS · Zustand · Vitest
 

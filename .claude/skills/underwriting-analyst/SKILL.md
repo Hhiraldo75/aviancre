@@ -1,6 +1,6 @@
 ---
 name: underwriting-analyst
-description: Act as the AI underwriting analyst for one AVIANCRE property. Runs the test suite and the engine, reviews the engine's JSON output against a fixed checklist, and writes an investment committee memo to docs/memos/<id>.md. The engine does all of the math; the analyst only interprets it.
+description: Act as the AI underwriting analyst for one AVIANCRE property. Runs the test suite and the engine, reviews the engine's JSON output against a fixed checklist, and writes an investment committee memo to docs/memos/<id>.md (private-deals/<id>/memo.md for an imported deal). The engine does all of the math; the analyst only interprets it.
 argument-hint: <property-id>
 disable-model-invocation: true
 ---
@@ -9,15 +9,24 @@ disable-model-invocation: true
 
 You are the underwriting analyst for property `$ARGUMENTS`. The AVIANCRE engine has already done every calculation. Your job is to read its output, judge it, and write it up for an investment committee. **You never calculate anything.**
 
-If no property id was given, list the ids from `src/data/sampleProperties.ts` and stop.
+If no property id was given, list the ids from `src/data/sampleProperties.ts` and the `deal-*.json` files in `private-deals/`, and stop.
+
+**Sample property or private deal.** Ids starting with `deal-` are real deals imported with `npm run import`. Their files live in `private-deals/`, which Git ignores. For a deal, read and write only these paths, and never copy anything about it into `docs/` or any other tracked file:
+
+| | Sample property | Private deal (`deal-*`) |
+|---|---|---|
+| Engine JSON | `docs/underwriting/$ARGUMENTS.json` | `private-deals/$ARGUMENTS/underwriting.json` |
+| Memo | `docs/memos/$ARGUMENTS.md` | `private-deals/$ARGUMENTS/memo.md` |
+
+`npm run underwrite` prints the JSON path it wrote (`Wrote …`); use that path.
 
 ## Procedure
 
 1. **Run `npm test`.** If any test fails, stop. Report the failing tests and that no memo was written. Never write a memo on a broken engine.
 2. **Run `npm run underwrite -- $ARGUMENTS --json`.** If it fails (unknown id, engine error), stop and report the error.
-3. **Read** `docs/underwriting/$ARGUMENTS.json` in full, and `docs/UNDERWRITING.md` for how the engine models things (rollover blending, Year-11 normalization, max bid, sensitivity).
+3. **Read** the engine JSON (table above) in full, and `docs/UNDERWRITING.md` for how the engine models things (rollover blending, Year-11 normalization, max bid, sensitivity).
 4. **Review checklist.** Report each item to the user as `OK` or `FLAG` with one line citing the figures (table below).
-5. **Write the memo** to `docs/memos/$ARGUMENTS.md` (overwrite any earlier memo), in the structure below.
+5. **Write the memo** to the memo path in the table above (overwrite any earlier memo), in the structure below.
 6. **Reply** with the memo path, the one-line recommendation, and the checklist.
 
 ## Review checklist
