@@ -9,10 +9,10 @@ AVIANCRE is a browser-only (no backend) 3D commercial real estate app for Provid
 - `npm test` — Vitest suite (tests are colocated `*.test.ts`; single file: `npx vitest run src/lib/metrics.test.ts`)
 - `npm run build` — `tsc -b && vite build`; this is the only type check
 - `npm run dev` — app at http://localhost:5173 (also serves the `/pvdgis` proxy)
-- `npm run underwrite -- <id> [--as-of YYYY-MM-DD] [--price N] [--json]` — prints one property's underwriting; writes `docs/underwriting-<id>.csv`, or with `--json` the AI analyst's input `docs/underwriting/<id>.json` (for an imported `deal-*` id, both go to `private-deals/<id>/`)
+- `npm run underwrite -- <id> [--as-of YYYY-MM-DD] [--assumptions set.json] [--price N] [--json]` — prints one property's underwriting at Defaults or at an exported assumption set; writes `docs/underwriting-<id>.csv`, or with `--json` the AI analyst's input `docs/underwriting/<id>.json` (for an imported `deal-*` id, both go to `private-deals/<id>/`)
 - `npm run import -- <file.csv|.xlsx> [--asset-type …] [--class …] [--submarket …]` — validates a rent roll in the `npm run rent-roll` export format and saves the deal as `private-deals/deal-<name>.json`
 - `npm run check-private` — fails if Git tracks or has staged anything in `private-deals/` besides its README (also runs in `npm test`)
-- `/underwriting-analyst <id>` (project skill) — runs the tests and the JSON export, reviews it, and writes an IC memo to `docs/memos/<id>.md`. The engine does all math; the memo only quotes the JSON. Details in `docs/UNDERWRITING.md`.
+- `/underwriting-analyst <id> [--assumptions set.json]` (project skill) — runs the tests and the JSON export, reviews it, and writes an IC memo to `docs/memos/<id>.md` that names its assumption set. The engine does all math; the memo only quotes the JSON. Details in `docs/UNDERWRITING.md`.
 
 Before calling a change done, run `npm test` and `npm run build`. For UI changes, also check it in `npm run dev`.
 

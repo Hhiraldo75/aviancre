@@ -4,19 +4,25 @@
  * Works on sample properties and on deals saved by `npm run import`; a
  * deal's output goes to private-deals/<id>/ instead of docs/.
  *
- *   npm run underwrite -- <property-id> [--as-of YYYY-MM-DD] [--price 4500000] [--json]
+ *   npm run underwrite -- <property-id> [--as-of YYYY-MM-DD] [--assumptions set.json] [--price 4500000] [--json]
+ *
+ * --assumptions runs a set exported from Full underwriting > Assumptions;
+ * --price is applied on top of it as one more change.
  */
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, relative, resolve } from 'node:path'
 import { todayISO } from '../src/lib/metrics'
-import { defaultAssumptions, toCSV, toTable, underwrite, withPurchasePrice } from '../src/lib/underwriting'
+import { toCSV, toTable, underwrite } from '../src/lib/underwriting'
 import { analystExport } from '../src/lib/underwriting/analystExport'
+import { DEFAULTS_SET, parseAssumptionSetFile, setSummary } from '../src/lib/underwriting/assumptionSets'
+import { assumptionsFor, type AssumptionEdits } from '../src/lib/underwriting/edits'
 import { metricRows } from '../src/lib/underwriting/report'
 import { findProperty, outputDir, propertyList } from './deals'
+import { PRIVATE_DIR } from './privateDeals'
 
-const USAGE = 'Usage: npm run underwrite -- <property-id> [--as-of YYYY-MM-DD] [--price N] [--json]'
+const USAGE = 'Usage: npm run underwrite -- <property-id> [--as-of YYYY-MM-DD] [--assumptions set.json] [--price N] [--json]'
 /** Flags that take a value; --json takes none. */
-const VALUE_FLAGS = ['as-of', 'price']
+const VALUE_FLAGS = ['as-of', 'price', 'assumptions']
 
 function fail(message: string): never {
   console.error(message)
@@ -47,16 +53,37 @@ const asOf = flag('as-of') ?? todayISO()
 if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) fail(`--as-of must be YYYY-MM-DD, got "${asOf}".`)
 const price = flag('price')
 
-let assumptions = defaultAssumptions(property, asOf)
+// The assumption set: Defaults, or an exported set file, plus --price as one more change.
+let setName = DEFAULTS_SET
+let edits: AssumptionEdits = {}
+const setPath = flag('assumptions')
+if (setPath !== undefined) {
+  if (!existsSync(setPath)) fail(`No such assumption set file: ${setPath}`)
+  let json: unknown
+  try {
+    json = JSON.parse(readFileSync(setPath, 'utf8'))
+  } catch {
+    fail(`${setPath} is not valid JSON.`)
+  }
+  const parsed = parseAssumptionSetFile(json, property, asOf)
+  if (!parsed.set) fail(`${setPath} can't be used:\n${parsed.errors.map((e) => `  - ${e}`).join('\n')}`)
+  setName = parsed.set.name
+  edits = parsed.set.edits
+  if (property.importedFrom && relative(resolve(PRIVATE_DIR, property.id), resolve(setPath)).startsWith('..')) {
+    console.log(`Note: keep ${property.id}'s assumption sets in ${PRIVATE_DIR}/${property.id}/ so Git never picks them up.`)
+  }
+}
 if (price !== undefined) {
   const n = Number(price)
   if (!Number.isFinite(n) || n <= 0) fail(`--price must be a positive number, got "${price}".`)
-  assumptions = withPurchasePrice(assumptions, n)
+  edits = { ...edits, 'acquisition.purchasePrice': n }
+  setName = `${setName} + --price`
 }
-const result = underwrite(property, asOf, assumptions)
+const result = underwrite(property, asOf, assumptionsFor(property, asOf, edits))
 
 console.log(`\n${property.name} (${property.assetType}, ${property.physical.rentableSF.value.toLocaleString('en-US')} RSF)`)
-console.log(`As of ${asOf}; analysis starts ${result.assumptions.acquisition.analysisStartDate}\n`)
+console.log(`As of ${asOf}; analysis starts ${result.assumptions.acquisition.analysisStartDate}`)
+console.log(`${setSummary(setName, Object.keys(edits).length)}\n`)
 console.log(toTable(result))
 console.log('\nMetrics')
 const width = Math.max(...metricRows(result).map(([label]) => label.length)) + 2
@@ -73,5 +100,5 @@ const out = json
   ? resolve(dir, isDeal ? 'underwriting.json' : `underwriting/${property.id}.json`)
   : resolve(dir, isDeal ? 'underwriting.csv' : `underwriting-${property.id}.csv`)
 mkdirSync(dirname(out), { recursive: true })
-writeFileSync(out, json ? JSON.stringify(analystExport(property, asOf, result), null, 2) + '\n' : toCSV(result, property.name))
+writeFileSync(out, json ? JSON.stringify(analystExport(property, asOf, result, { name: setName, edits }), null, 2) + '\n' : toCSV(result, property.name))
 console.log(`\nWrote ${out}`)

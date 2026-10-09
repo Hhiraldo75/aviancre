@@ -47,7 +47,7 @@ Going-in cap, raw and normalized year-11 NOI, in-place vs market rent, unlevered
 - Unit tests for each piece (escalations, rollover blending, recoveries, vacancy floor, loan amortization, IRR, sale) with hand-checkable numbers.
 - `npm run underwrite -- <property-id>` prints the annual cash flow table and metrics, and writes them to `docs/underwriting-<property-id>.csv` for comparison against an Excel model.
 - `npm run underwrite -- <property-id> --json` writes `docs/underwriting/<property-id>.json` instead of the CSV, for the AI analyst (`src/lib/underwriting/analystExport.ts`). It has:
-  - `meta`: the AI label, as-of date and analysis start
+  - `meta`: the AI label, as-of date and analysis start, and `assumptionSet` (name, the memo's header line, each change with its default, and the hidden marker line the memo copies)
   - `property`
   - `rentRoll`: occupancy, WALT, in-place vs market, the lease rows as the Rent roll tab shows them, expirations, the largest rollover year vs 25%, and above-market renewal options
   - `assumptions`: every editable assumption with its value, source label, EST flag and default, plus model settings
@@ -76,20 +76,29 @@ The app's **Import rent roll** button and `npm run import -- <file>` read the re
 - **Sources.** Leases, rentable SF and asking rents are ACT (`imported`, "Imported rent roll (<file>)"). Market rent, OpEx, cap rate and every underwriting assumption stay EST, exactly as for a sample. Anything a rent roll doesn't have is EST "Not in rent roll – replace with …" (gross SF = rentable SF, 1 floor, zoning unknown) or omitted (year built, assessed value). The deal is placed at its submarket's center, marked approximate; nothing is geocoded.
 - **Where deals live.** In the app, in this browser's local storage (`aviancre.importedDeals.v1`) only, shown with an *Imported* chip and a *Remove imported deal* button; never sent anywhere. On the command line, `private-deals/deal-<name>.json`. `npm run underwrite`, `npm run rent-roll` and `/underwriting-analyst` accept the `deal-*` id and write their output to `private-deals/<id>/`. Git ignores `private-deals/` except its README; `npm run check-private` (and `npm test`) fails if anything else there is tracked or staged.
 
+## Assumption sets
+
+Full underwriting > Assumptions saves the current edits as a named set per property (`src/lib/underwriting/assumptionSets.ts`, *Assumption set* bar in `AssumptionSetBar.tsx`).
+- **Switch, save, delete.** The dropdown lists *Defaults* (always there, can't be deleted) and the saved sets; choosing one applies its edits. *Save as…* stores the current edits under a name (saving under an existing name replaces it, after a confirm). Editing after choosing a set marks it "Edited since saved"; switching away asks before discarding unsaved changes. *Delete set* keeps the current values applied. *Reset all to defaults* switches to Defaults.
+- **Stored** in this browser's local storage (`aviancre.assumptionSets.v1`), by property id; never uploaded. An imported deal's sets stay through a re-import and are removed with the deal.
+- **Files.** *Export* downloads the saved set as `<property id>--<set name>.assumptions.json`: `format`, `version`, `propertyId`, `name`, `savedAt` and `changes` (only the changed assumptions, keyed by path, in engine units: decimals for rates). *Import…* checks the file is for this property and that every change is a known, in-range assumption, lists every problem, and loads nothing on error. Keep a deal's set files in `private-deals/<id>/`.
+- **Command line.** `npm run underwrite -- <id> --assumptions <file>` validates the file the same way and runs through the same `assumptionsFor` as the app, so the figures match the app exactly. `--price` adds one more change on top (the set is then named "<set> + --price"). The console and the JSON name the set: "Assumption set: My case, 3 changes from defaults".
+- **Tests.** Saving and re-applying a set reproduces the run exactly, Defaults reproduces the default run and passes the Atwells golden checks (`atwells.golden.test.ts`), and export → import round-trips with identical results (`assumptionSets.test.ts`).
+
 ## AI underwriting analyst
 
-`/underwriting-analyst <property-id>` (`.claude/skills/underwriting-analyst/SKILL.md`) has Claude Code act as the analyst. The engine does all of the math; the AI only interprets it.
+`/underwriting-analyst <property-id> [--assumptions <file>]` (`.claude/skills/underwriting-analyst/SKILL.md`) has Claude Code act as the analyst, at Defaults or at an exported assumption set. The engine does all of the math; the AI only interprets it.
 1. Run `npm test`, and stop if anything fails: no memo on a broken engine.
-2. Run `npm run underwrite -- <id> --json`, then read the JSON and this document.
+2. Run `npm run underwrite -- <id> [--assumptions <file>] --json`, then read the JSON and this document.
 3. Report a 12-item review checklist as OK or FLAG: in-place vs market, above-market options, rollover concentration, WALT, Year-11 normalization, going-in vs exit cap, negative leverage, DSCR vs 1.25x, debt yield vs 9%, IRR vs target, sensitivity range, and EST placeholders.
-4. Write an investment committee memo to `docs/memos/<id>.md` (for an imported `deal-*` id, `private-deals/<id>/memo.md`, which the app never bundles).
+4. Write an investment committee memo to `docs/memos/<id>.md` (for an imported `deal-*` id, `private-deals/<id>/memo.md`, which the app never bundles). Under the "As of" line the memo states its set ("Assumption set: My case, 3 changes from defaults") and carries the JSON's marker line, `<!-- aviancre-assumption-set: {...} -->`, which records the exact changes. The Underwriting assumptions section lists each change with its default.
 
 Every number in the memo is quoted from the JSON's display strings, and the memo is labeled "AI-generated analysis of sample data. All figures from the AVIANCRE engine." (an imported deal not marked as sample data drops "of sample data"). The skill only runs when invoked by name.
 
 **Analyst memo tab** (V4 step 5B): Full underwriting shows `docs/memos/<property-id>.md` in an *Analyst memo* tab (`src/components/underwriting/AnalystMemoTab.tsx`).
 - Memos are bundled with `import.meta.glob` (`src/services/analystMemos.ts`). Each memo is its own lazy chunk, fetched when the tab opens. A new or regenerated memo needs a rebuild in production; the dev server picks it up live.
-- The header shows an *AI analyst* chip, "Written by Claude Code from AVIANCRE engine outputs, <date>" (the date from the memo's "As of" line) and "All figures from the engine at default assumptions." Because the header says this, the tab hides the memo's own first line when it is an italic disclaimer (`withoutDisclaimer`). The file in `docs/memos/` keeps it.
-- If any assumption is edited, a banner warns that the memo reflects default assumptions and the other tabs may differ. A property without a memo shows the command that writes one.
+- The header shows an *AI analyst* chip, "Written by Claude Code from AVIANCRE engine outputs, <date>" (the date from the memo's "As of" line) and "All figures from the engine at assumption set <name> (<n> changes from defaults)", read from the memo's marker (a memo without one was written at Defaults; the marker line is never shown). Because the header says this, the tab hides the memo's own first line when it is an italic disclaimer (`withoutDisclaimer`). The file in `docs/memos/` keeps it.
+- A banner warns only when the assumptions applied now differ from the memo's set (compared change by change, not by name), naming both. A property without a memo shows the command that writes one.
 - Markdown is rendered by a small built-in parser (`src/lib/markdown.ts`): headings, paragraphs, bullet and numbered lists, tables, rules, and bold, italic and code. There is no raw HTML. Wide tables scroll horizontally.
 
 ## Modeling conventions

@@ -1,13 +1,13 @@
 ---
 name: underwriting-analyst
 description: Act as the AI underwriting analyst for one AVIANCRE property. Runs the test suite and the engine, reviews the engine's JSON output against a fixed checklist, and writes an investment committee memo to docs/memos/<id>.md (private-deals/<id>/memo.md for an imported deal). The engine does all of the math; the analyst only interprets it.
-argument-hint: <property-id>
+argument-hint: <property-id> [--assumptions <set file>]
 disable-model-invocation: true
 ---
 
 # Underwriting analyst
 
-You are the underwriting analyst for property `$ARGUMENTS`. The AVIANCRE engine has already done every calculation. Your job is to read its output, judge it, and write it up for an investment committee. **You never calculate anything.**
+The arguments are `$ARGUMENTS`: the property id first (`<id>` below), then optionally `--assumptions <file>`, an assumption set exported from Full underwriting > Assumptions. You are the underwriting analyst for that property. The AVIANCRE engine has already done every calculation. Your job is to read its output, judge it, and write it up for an investment committee. **You never calculate anything.**
 
 If no property id was given, list the ids from `src/data/sampleProperties.ts` and the `deal-*.json` files in `private-deals/`, and stop.
 
@@ -15,15 +15,16 @@ If no property id was given, list the ids from `src/data/sampleProperties.ts` an
 
 | | Sample property | Private deal (`deal-*`) |
 |---|---|---|
-| Engine JSON | `docs/underwriting/$ARGUMENTS.json` | `private-deals/$ARGUMENTS/underwriting.json` |
-| Memo | `docs/memos/$ARGUMENTS.md` | `private-deals/$ARGUMENTS/memo.md` |
+| Engine JSON | `docs/underwriting/<id>.json` | `private-deals/<id>/underwriting.json` |
+| Memo | `docs/memos/<id>.md` | `private-deals/<id>/memo.md` |
+| Assumption set files | anywhere | `private-deals/<id>/` (the engine notes it if one is elsewhere) |
 
 `npm run underwrite` prints the JSON path it wrote (`Wrote …`); use that path.
 
 ## Procedure
 
 1. **Run `npm test`.** If any test fails, stop. Report the failing tests and that no memo was written. Never write a memo on a broken engine.
-2. **Run `npm run underwrite -- $ARGUMENTS --json`.** If it fails (unknown id, engine error), stop and report the error.
+2. **Run `npm run underwrite -- $ARGUMENTS --json`** (this passes `--assumptions` through; without it the engine runs at Defaults). If it fails (unknown id, an assumption set that doesn't fit the property, engine error), stop and report the error.
 3. **Read** the engine JSON (table above) in full, and `docs/UNDERWRITING.md` for how the engine models things (rollover blending, Year-11 normalization, max bid, sensitivity).
 4. **Review checklist.** Report each item to the user as `OK` or `FLAG` with one line citing the figures (table below).
 5. **Write the memo** to the memo path in the table above (overwrite any earlier memo), in the structure below.
@@ -52,7 +53,7 @@ For multifamily (`rentRoll.kind === 'multifamily'`), report checks 2–4 as `N/A
 
 The first line is `meta.label`, verbatim, in italics. For sample data that is: *AI-generated analysis of sample data. All figures from the AVIANCRE engine.*
 
-Then a title (`# <property.name>: Investment memo`) and a line with `meta.asOf`, the scenario and the hold. Then these sections, in this order:
+Then a title (`# <property.name>: Investment memo`) and a line with `meta.asOf`, the scenario and the hold. On the next line, `meta.assumptionSet.summary` verbatim (e.g. "Assumption set: My case, 3 changes from defaults"). On the line after it, `meta.assumptionSet.marker` verbatim, an HTML comment the app reads to compare the memo's assumptions with the ones applied; never edit it. Then these sections, in this order:
 
 1. **Recommendation.** One of **Pursue**, **Pass**, or **Pursue at a lower price**. For a lower price, name the bid: the `maxBid` price and its label (e.g. "Max bid at <target> levered IRR: <maxBid.priceShort>"). Follow with two or three sentences on why. Whenever you cite the max bid:
    - Say once that it depends on the target levered IRR (`maxBid.target`), and that the target is a placeholder if `targetLeveredIRR` is EST (quote its `sourceName`).
@@ -60,7 +61,7 @@ Then a title (`# <property.name>: Investment memo`) and a line with `meta.asOf`,
 2. **Deal snapshot.** A two-column table: property and address, asset type and rentable SF, purchase price and $/SF (say if it is a model estimate, from `returns.purchasePriceSource`), going-in cap, Year-1 NOI, occupancy, WALT, in-place vs market rent, unlevered IRR, levered IRR (with target), levered multiple, minimum DSCR, debt yield, exit cap, and max bid.
 3. **Investment thesis.** What has to be true for this to work, in a few sentences.
 4. **Rent roll and rollover risk.** Name the tenants that matter, when they roll, their rent vs market, any above-market options, and the rollover peak. In a rent roll table, label the `vsMarket` column "vs Year-1 market", and never describe that percentage as the gap to market at expiration. To compare with market at expiration, quote `rent` and `marketAtExpiration` side by side.
-5. **Underwriting assumptions.** Which drivers are estimates (`EST`) and what would replace each one (quote the `sourceName`). Note analyst edits from `assumptions.edited`, if any.
+5. **Underwriting assumptions.** Which drivers are estimates (`EST`) and what would replace each one (quote the `sourceName`). Then name the assumption set (`meta.assumptionSet.name`) and list every entry of `meta.assumptionSet.changes` verbatim, one bullet each (they read "Exit cap rate 7.50% (default 7.25%)"). At Defaults, say the memo uses default assumptions with no changes.
 6. **Returns and sensitivity.** Headline returns, then cite grid cells by their row and column labels, in the form "at <row label> and <column label>, the levered IRR is <cell>" (from `low.row`, `low.column`, `low.display`). Name the low and high cells of each grid.
 7. **Debt.** Loan, LTV, rate, DSCR path and minimum, debt yield, negative leverage.
 8. **Key risks and mitigants.** A short list; each risk tied to a figure, each mitigant concrete.
