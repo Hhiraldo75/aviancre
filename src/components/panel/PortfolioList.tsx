@@ -1,9 +1,12 @@
+import { useRef, useState } from 'react'
 import { SORT_KEYS, SORT_LABELS } from '../../lib/filters'
 import { fmt } from '../../lib/format'
 import { occupancy, occupancyColor } from '../../lib/metrics'
 import { useAppStore, usePropertyView } from '../../store/useAppStore'
+import { RENT_ROLL_EXTENSIONS } from '../../lib/rentRollFile'
 import { Stat } from '../ui/Card'
 import FilterBar from './FilterBar'
+import ImportRentRollDialog from './ImportRentRollDialog'
 
 export default function PortfolioList() {
   const asOf = useAppStore((s) => s.asOf)
@@ -12,6 +15,8 @@ export default function PortfolioList() {
   const setSort = useAppStore((s) => s.setSort)
   const clearFilters = useAppStore((s) => s.clearFilters)
   const { matching: properties, total, facts } = usePropertyView()
+  const fileInput = useRef<HTMLInputElement>(null)
+  const [importing, setImporting] = useState<File | null>(null)
 
   const commercial = properties.filter((p) => p.rentRoll.kind === 'commercial')
   const totalRSF = commercial.reduce((s, p) => s + p.physical.rentableSF.value, 0)
@@ -33,9 +38,30 @@ export default function PortfolioList() {
         Click any building on the map to see its City of Providence public record.
       </p>
 
+      <button
+        type="button"
+        onClick={() => fileInput.current?.click()}
+        title="CSV or Excel in the rent roll export format. Read in this browser only; nothing is uploaded."
+        className="mt-3 w-full rounded border border-slate-600 px-2.5 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
+      >
+        Import rent roll
+      </button>
+      <input
+        ref={fileInput}
+        type="file"
+        accept={RENT_ROLL_EXTENSIONS.join(',')}
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          e.target.value = '' // so choosing the same file again re-opens the dialog
+          if (file) setImporting(file)
+        }}
+      />
+      {importing && <ImportRentRollDialog file={importing} onClose={() => setImporting(null)} />}
+
       <div className="mb-2 mt-5 flex items-center justify-between gap-2">
         <p className="text-[10px] uppercase tracking-wide text-slate-500">
-          {properties.length} of {total} sample properties
+          {properties.length} of {total} properties
         </p>
         <label className="flex items-center gap-1 text-[11px] text-slate-400">
           Sort

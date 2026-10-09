@@ -4,6 +4,7 @@ import { fmt } from '../../lib/format'
 import { fullUnderwriting, toCSV } from '../../lib/underwriting'
 import { useAppStore, useAssumptionEdits } from '../../store/useAppStore'
 import { Chip, Stat } from '../ui/Card'
+import ImportedChip from '../ui/ImportedChip'
 import AnalystMemoTab from './AnalystMemoTab'
 import AssumptionsTab from './AssumptionsTab'
 import ChangedChip from './ChangedChip'
@@ -57,6 +58,7 @@ export default function FullUnderwritingPanel({ property: p }: { property: Prope
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide">
                 <Chip>{fmt.label(view.header.scenario)} case</Chip>
                 {view.header.isSample && <Chip tone="amber">Sample data</Chip>}
+                {view.header.importedFrom && <ImportedChip from={view.header.importedFrom} />}
                 <ChangedChip changes={view.header.changes} />
                 {view.header.estimates && (
                   <span title={view.header.estimates.notes} className="cursor-help text-[10px] font-normal normal-case tracking-normal text-slate-400">

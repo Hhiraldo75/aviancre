@@ -45,6 +45,8 @@ export type UnderwritingSummary =
   | {
       status: 'ok'
       isSample: boolean
+      /** Set for a deal imported from a rent roll file. */
+      importedFrom?: Property['importedFrom']
       scenario: UnderwritingAssumptions['scenario']
       holdYears: number
       /** Set when any result depends on an estimated assumption; lists them. */
@@ -340,6 +342,7 @@ export function underwritingSummary(property: Property, asOf: ISODate, input?: A
   return {
     status: 'ok',
     isSample: property.isSample,
+    importedFrom: property.importedFrom,
     scenario: a.scenario,
     holdYears: H,
     estimates: assumptionEstimates(property, a),

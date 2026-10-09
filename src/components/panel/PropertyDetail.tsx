@@ -7,6 +7,7 @@ import BrokerView from '../personas/BrokerView'
 import DeveloperView from '../personas/DeveloperView'
 import InvestmentView from '../personas/InvestmentView'
 import { Chip } from '../ui/Card'
+import ImportedChip from '../ui/ImportedChip'
 
 const VIEWS: Record<Persona, (props: { property: Property }) => ReturnType<typeof AnalystView>> = {
   Analyst: AnalystView,
@@ -19,6 +20,7 @@ const VIEWS: Record<Persona, (props: { property: Property }) => ReturnType<typeo
 export default function PropertyDetail({ property: p }: { property: Property }) {
   const asOf = useAppStore((s) => s.asOf)
   const clear = useAppStore((s) => s.clearSelection)
+  const removeImportedDeal = useAppStore((s) => s.removeImportedDeal)
   const persona = useAppStore((s) => s.activePersona)
   const View = VIEWS[persona]
   const { matchIds } = usePropertyView()
@@ -36,17 +38,32 @@ export default function PropertyDetail({ property: p }: { property: Property }) 
           {p.isSample && ' · Real parcel; building, tenant and financial figures are sample data'}
         </p>
       )}
+      {p.importedFrom && (
+        <p className="mt-0.5 text-xs text-slate-400">
+          {p.location.address} · Map location approximate · Rent roll from {p.importedFrom.fileName}
+        </p>
+      )}
       <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
         <Chip>{fmt.label(p.assetType)}</Chip>
         <Chip>Class {p.buildingClass}</Chip>
         <Chip>{fmt.label(p.location.submarket)}</Chip>
         <Chip>{fmt.pct(occupancy(p, asOf), 0)} leased</Chip>
         {p.isSample && <Chip tone="amber">Sample data</Chip>}
+        {p.importedFrom && <ImportedChip from={p.importedFrom} />}
       </div>
       {!matchIds.has(p.id) && <p className="mt-1.5 text-[11px] text-amber-300">Doesn’t match current filters</p>}
       <div className="mt-4">
         <View property={p} />
       </div>
+      {p.importedFrom && (
+        <button
+          type="button"
+          onClick={() => window.confirm(`Remove ${p.name} from this browser? Your file is not affected.`) && removeImportedDeal(p.id)}
+          className="mt-4 w-full rounded border border-red-500/40 px-2.5 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
+        >
+          Remove imported deal
+        </button>
+      )}
     </div>
   )
 }

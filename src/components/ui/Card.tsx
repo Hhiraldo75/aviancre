@@ -49,6 +49,7 @@ const CHIP_TONES = {
   amber: 'bg-amber-500/15 text-amber-300',
   violet: 'bg-violet-500/15 text-violet-300',
   sky: 'bg-sky-500/15 text-sky-300',
+  emerald: 'bg-emerald-500/15 text-emerald-300',
 } as const
 
 export function Chip({ children, tone = 'slate', title }: { children: ReactNode; tone?: keyof typeof CHIP_TONES; title?: string }) {

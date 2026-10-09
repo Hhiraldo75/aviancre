@@ -15,6 +15,7 @@ import {
   type PropertyView,
   type SortKey,
 } from '../lib/filters'
+import { isImportedDeal } from '../lib/importedDeals'
 import { todayISO } from '../lib/metrics'
 import type { AssumptionEdits } from '../lib/underwriting/edits'
 import { lookupParcelAt } from '../services/providenceGis'
@@ -26,6 +27,34 @@ const GIS_TIMEOUT_MS = 8000
 /** Browser only: tests import the store in Node. */
 const hasWindow = typeof window !== 'undefined'
 
+/**
+ * Imported deals live only in this browser's local storage: never in the URL,
+ * never sent anywhere. Storage can be unavailable (private window, blocked
+ * site data), so every access is guarded and the app works without it.
+ */
+export const IMPORTED_DEALS_KEY = 'aviancre.importedDeals.v1'
+
+function loadImportedDeals(): Property[] {
+  if (!hasWindow) return []
+  try {
+    const list: unknown = JSON.parse(window.localStorage.getItem(IMPORTED_DEALS_KEY) ?? '[]')
+    return Array.isArray(list) ? list.filter(isImportedDeal) : []
+  } catch {
+    return []
+  }
+}
+
+/** False when the browser wouldn't store them (the deals then last until reload). */
+function saveImportedDeals(properties: Property[]): boolean {
+  if (!hasWindow) return true
+  try {
+    window.localStorage.setItem(IMPORTED_DEALS_KEY, JSON.stringify(properties.filter((p) => p.importedFrom)))
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Filters and sort start from the URL, so a shared link opens the same view. */
 const initialView = hasWindow ? filtersFromQuery(window.location.search) : { filters: EMPTY_FILTERS, sort: DEFAULT_SORT }
 
@@ -35,6 +64,7 @@ const initialView = hasWindow ? filtersFromQuery(window.location.search) : { fil
  * here, so every view updates together.
  */
 interface AppState {
+  /** Sample properties, then imported deals (`importedFrom` set). */
   properties: Property[]
   /** Selected sample property (mutually exclusive with a parcel lookup). */
   selectedId: string | null
@@ -70,6 +100,13 @@ interface AppState {
   clearFilters: () => void
   setSort: (sort: SortKey) => void
   zoomToResults: () => void
+  /**
+   * Adds an imported deal (replacing one with the same id) and selects it.
+   * Returns false when it couldn't be saved in the browser.
+   */
+  importDeal: (property: Property) => boolean
+  /** Removes an imported deal, its assumption edits and its selection. Sample properties can't be removed. */
+  removeImportedDeal: (id: string) => void
 }
 
 /** In-flight parcel request; a newer click aborts the older one. */
@@ -80,8 +117,8 @@ function cancelInFlight() {
   inFlight = null
 }
 
-export const useAppStore = create<AppState>()((set) => ({
-  properties: SAMPLE_PROPERTIES,
+export const useAppStore = create<AppState>()((set, get) => ({
+  properties: [...SAMPLE_PROPERTIES, ...loadImportedDeals()],
   selectedId: null,
   parcel: { status: 'idle' },
   asOf: todayISO(),
@@ -179,6 +216,24 @@ export const useAppStore = create<AppState>()((set) => ({
   clearFilters: () => set({ filters: EMPTY_FILTERS }),
   setSort: (sort) => set({ sort }),
   zoomToResults: () => set((s) => ({ zoomRequest: s.zoomRequest + 1 })),
+
+  importDeal: (property) => {
+    if (!property.importedFrom) throw new Error(`${property.id} is not an imported deal`)
+    get().resetAssumptions(property.id)
+    const properties = [...get().properties.filter((p) => p.id !== property.id), property]
+    get().select(property.id)
+    set({ properties })
+    return saveImportedDeals(properties)
+  },
+  removeImportedDeal: (id) => {
+    const target = get().properties.find((p) => p.id === id)
+    if (!target?.importedFrom) return
+    get().resetAssumptions(id)
+    if (get().selectedId === id) get().clearSelection()
+    const properties = get().properties.filter((p) => p.id !== id)
+    set({ properties })
+    saveImportedDeals(properties)
+  },
 }))
 
 // Keep the URL in step with the filters (replacing, not adding, history entries).

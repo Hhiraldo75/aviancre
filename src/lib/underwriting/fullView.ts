@@ -96,6 +96,8 @@ export interface ExpirationBar {
 export type RentRollView =
   | {
       kind: 'commercial'
+      /** Where the leases came from: ACT for an imported rent roll, EST for a sample. */
+      source: Pick<Sourced<unknown>, 'source' | 'sourceName'>
       rows: RentRollRow[]
       totals: {
         sf: string
@@ -188,6 +190,8 @@ export type FullUnderwriting =
         name: string
         scenario: UnderwritingAssumptions['scenario']
         isSample: boolean
+        /** Set for a deal imported from a rent roll file. */
+        importedFrom?: Property['importedFrom']
         estimates?: Sourced<unknown>
         /** Edited assumptions with their defaults; empty at defaults. */
         changes: string[]
@@ -239,6 +243,7 @@ export function fullUnderwriting(property: Property, asOf: ISODate, input?: Assu
       name: property.name,
       scenario: a.scenario,
       isSample: property.isSample,
+      importedFrom: property.importedFrom,
       estimates: assumptionEstimates(property, a),
       changes: changesFrom(property, asOf, a),
       metrics: [
@@ -388,8 +393,10 @@ export function rentRollView(property: Property, r: UnderwritingResult, asOf: IS
   })
 
   const totalSF = leases.reduce((s, l) => s + l.leasedSF, 0) + rr.vacancies.reduce((s, v) => s + v.sf, 0)
+  const first = rr.leases[0]
   return {
     kind: 'commercial',
+    source: first ? { source: first.source, sourceName: first.sourceName } : property.physical.rentableSF,
     rows: [...leaseRows, ...vacantRows].sort(bySuite),
     totals: {
       sf: fmt.int(totalSF),

@@ -1,5 +1,6 @@
 import type { RentRollRow, RentRollView } from '../../lib/underwriting/fullView'
 import { UnitMixTable } from '../tables/LeaseTables'
+import SourceBadge from '../ui/SourceBadge'
 import ExpirationChart from './ExpirationChart'
 
 const COLUMNS: [label: string, key: keyof RentRollRow, align: 'left' | 'right'][] = [
@@ -41,7 +42,8 @@ export default function RentRollTab({ rentRoll: rr }: { rentRoll: RentRollView }
         <p className="mb-2 text-[10px] text-slate-400">
           Rents are annual $/SF on the analysis date; remaining term runs from the analysis start. Market at expiration is
           the market rent in the year the space re-leases (lease-up year for vacant suites). vs market is in-place ÷ Year-1
-          market − 1.
+          market − 1. Rent roll
+          <SourceBadge data={rr.source} />
         </p>
         <div className="overflow-x-auto rounded border border-slate-700">
           <table className="w-full border-collapse text-xs tabular-nums">
