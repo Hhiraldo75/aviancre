@@ -3,3 +3,7 @@ dist
 *.local
 .DS_Store
 *.tsbuildinfo
+
+# Real deals: never committed, pushed or deployed (see private-deals/README.md)
+private-deals/*
+!private-deals/README.md
