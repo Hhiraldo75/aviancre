@@ -54,6 +54,7 @@ describe('full underwriting: cash flow tab (Atwells)', () => {
     expect(t.rows.at(-1)?.label).toBe('Cash flow after debt')
     expect(t.rows.map((x) => x.label)).toContain('of which management fee')
     expect(t.rows.map((x) => x.label)).not.toContain('Net sale proceeds')
+    expect(t.rows.map((x) => x.key)).not.toContain('lossToLease')
   })
   it('marks subtotals and the management fee detail', () => {
     expect(t.rows.filter((x) => x.kind === 'subtotal').map((x) => x.label)).toEqual([
@@ -147,6 +148,13 @@ describe('full underwriting: rent roll tab', () => {
   })
   it('shows the unit mix for apartments', () => {
     expect(ok(fullUnderwriting(FEDERAL_HILL, AS_OF)).rentRoll.kind).toBe('unit-mix')
+  })
+  it('shows apartment rent at market, then loss to lease in parentheses', () => {
+    const t = ok(fullUnderwriting(FEDERAL_HILL, AS_OF)).cashFlow
+    expect(t.rows.slice(0, 2).map((x) => [x.label, x.cells[0]])).toEqual([
+      ['Gross potential rent (at market)', '819,600'],
+      ['Less: loss to lease', '(55,500)'],
+    ])
   })
 })
 

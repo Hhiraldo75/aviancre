@@ -57,10 +57,29 @@ describe('unit rent roll model', () => {
     expect(y1.absorptionTurnoverVacancy).toBe(1000)
     expect(y1.occupancy).toBeCloseTo((12 + 11 + 12) / 36, 10)
   })
-  it('burns off loss to lease at each lease end', () => {
-    // 101 ends 2027-03-31: 5 months at $900 (Nov–Mar), then market; it rolls again in year 2 at year-2 market.
-    expect(y1.grossPotentialRent).toBeCloseTo(900 * 5 + 1000 * 7 + 1000 * 12 + 1500 * 12, 6)
-    expect(y2.grossPotentialRent).toBeCloseTo(1000 * 5 + 1000 * (1 + g) * 7 + 1000 * (1 + g) * 11 + 1000 + 1500 * (1 + g) * 12, 6)
+  it('shows GPR at market and loss to lease on leased units', () => {
+    expect(y1.grossPotentialRent).toBeCloseTo((1000 + 1000 + 1500) * 12, 6)
+    expect(y2.grossPotentialRent).toBeCloseTo((1000 + 1000 + 1500) * (1 + g) * 12, 6)
+  })
+  it('renews at the lower of market and in-place + max increase; the turnover share re-leases at market', () => {
+    const t = a.multifamily!.turnoverRate.value
+    const cap = a.multifamily!.maxRenewalIncreasePct!.value
+    // 101 ends 2027-03-31: 5 months at $900 (Nov–Mar), then the blend; it rolls again 12 months later.
+    const r1 = t * 1000 + (1 - t) * Math.min(1000, 900 * (1 + cap))
+    const r2 = t * 1000 * (1 + g) + (1 - t) * Math.min(1000 * (1 + g), r1 * (1 + cap))
+    expect(r1).toBe(972.5) // 50% at $1,000 + 50% renewing at $945
+    expect(y1.lossToLease).toBeCloseTo((1000 - 900) * 5 + (1000 - r1) * 7, 6)
+    // Year 2: 101 at r1 for 5 months, then r2; 102 (leased at $1,000 in month 2) pays year-1 rent until its month-14 roll; 103 renews at market.
+    const m2 = 1000 * (1 + g)
+    expect(y2.lossToLease).toBeCloseTo((m2 - r1) * 5 + (m2 - r2) * 7 + (m2 - 1000), 6)
+    expect(y2.lossToLease).toBeGreaterThan(0)
+  })
+  it('marks to market at the first roll with 100% turnover', () => {
+    const all = structuredClone(a)
+    all.multifamily!.turnoverRate = estimate(1, 'test')
+    const [z1, z2] = operatingCashFlows(p, all, AS_OF).years
+    expect(z1.lossToLease).toBeCloseTo(100 * 5, 6)
+    expect(z2.lossToLease).toBeCloseTo((1000 * (1 + g) - 1000) * 6, 6)
   })
   it('charges turnover at each roll, not at lease-up', () => {
     const cost = a.multifamily!.turnoverRate.value * a.multifamily!.turnoverCostPerUnit.value

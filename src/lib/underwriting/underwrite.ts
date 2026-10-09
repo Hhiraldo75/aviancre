@@ -161,6 +161,7 @@ function annual(
     year: y.year,
     occupancy: y.occupancy,
     grossPotentialRent: y.grossPotentialRent,
+    lossToLease: y.lossToLease,
     absorptionTurnoverVacancy: y.absorptionTurnoverVacancy,
     freeRent: y.freeRent,
     expenseRecoveries: y.expenseRecoveries,

@@ -35,6 +35,13 @@ export default function ReturnsTab({
           <SensitivityGrid title="Exit cap × rent growth" grid={grids.exitCapByRentGrowth} />
           <SensitivityGrid title="Purchase price × exit cap" grid={grids.priceByExitCap} />
         </div>
+        {grids.warnings.length > 0 && (
+          <ul className="list-disc space-y-1 pl-4 text-[11px] leading-snug text-amber-300 marker:text-amber-500">
+            {grids.warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">

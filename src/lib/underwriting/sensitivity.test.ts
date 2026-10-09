@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { SensitivityGrid, SensitivityMetric } from '../../types'
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties'
 import { assumptionsFor, type AssumptionEdits } from './edits'
-import { rentGrowthAxis, sensitivityGrids, sensitivityView, withInputs } from './sensitivity'
+import { RENT_GROWTH_IRR_SWING, rentGrowthAxis, sensitivityGrids, sensitivityView, withInputs } from './sensitivity'
 import { runUnderwriting } from './summary'
 import { underwrite } from './underwrite'
 
@@ -186,5 +186,34 @@ describe('sensitivity view', () => {
     const noDebt = baseRun(ATWELLS, { 'debt.ltv': 0 })
     const v = sensitivityView(sensitivityGrids(ATWELLS, AS_OF, noDebt.assumptions).exitCapByRentGrowth, 'leveredIRR')
     expect(v.cells.flat().every((c) => c.text === '—' && !c.tone)).toBe(true)
+  })
+})
+
+describe('sensitivity warnings', () => {
+  const FEDERAL_HILL = byId('sample-federal-hill-apartments')
+  const warnings = (p = FEDERAL_HILL, edits: AssumptionEdits = {}) => sensitivityGrids(p, AS_OF, baseRun(p, edits).assumptions).warnings
+  const noiWarning = (ws: string[]) => ws.find((w) => w.startsWith('NOI falls'))
+
+  it('flags NOI falling in a rent-growth case below expense growth', () => {
+    // Rent growth cases 1%–5% against 8% expense growth: NOI falls at 1%–3%; at 4%–5% the larger rent base still wins.
+    expect(noiWarning(warnings(FEDERAL_HILL, { 'operating.expenseGrowth': 0.08 }))).toBe(
+      'NOI falls during the hold at 1.0%, 2.0%, 3.0% rent growth (sensitivity cases): expenses grow 8.0%/yr, faster than rents. ' +
+        'At 1.0%, NOI falls in years 3–10; Year-10 NOI $319,306 vs a peak of $467,351 in year 2.',
+    )
+  })
+  it('stays quiet when no rent-growth case is below expense growth', () => {
+    expect(noiWarning(warnings(FEDERAL_HILL, { 'operating.expenseGrowth': 0 }))).toBeUndefined()
+  })
+  it('flags a levered IRR swing above 5 points across rent growth at the current exit cap', () => {
+    for (const p of RUNNABLE) {
+      const r = baseRun(p)
+      const g = sensitivityGrids(p, AS_OF, r.assumptions)
+      const irrs = g.exitCapByRentGrowth.cells[centerOf(g.exitCapByRentGrowth)[0]].flatMap((c) => (c.metrics.leveredIRR === null ? [] : [c.metrics.leveredIRR]))
+      const swing = Math.max(...irrs) - Math.min(...irrs)
+      expect(g.warnings.some((w) => w.startsWith('Levered IRR swings')), p.id).toBe(swing > RENT_GROWTH_IRR_SWING)
+    }
+  })
+  it('has no IRR swing warning without debt', () => {
+    expect(warnings(ATWELLS, { 'debt.ltv': 0 }).some((w) => w.startsWith('Levered IRR'))).toBe(false)
   })
 })

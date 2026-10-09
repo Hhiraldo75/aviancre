@@ -238,6 +238,7 @@ export type FullUnderwriting =
 const SUBTOTALS: LineKey[] = ['effectiveGrossIncome', 'netOperatingIncome', 'cashFlowBeforeDebt', 'cashFlowAfterDebt']
 /** Lines shown in parentheses: the engine reports them as positive amounts. */
 const DEDUCTIONS: LineKey[] = [
+  'lossToLease',
   'absorptionTurnoverVacancy',
   'freeRent',
   'generalVacancy',

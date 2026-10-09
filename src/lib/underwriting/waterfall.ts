@@ -9,6 +9,8 @@ import { multifamilyYears } from './multifamily'
 export interface OperatingInputs {
   occupancy: number
   grossPotentialRent: number
+  /** Market minus in-place rent on leased units (multifamily; 0 for commercial). */
+  lossToLease: number
   absorptionTurnoverVacancy: number
   freeRent: number
   expenseRecoveries: number
@@ -41,7 +43,7 @@ export function generalVacancy(rate: number, potentialRevenue: number, modeledVa
 
 /** Applies vacancy, credit loss and management fee to one year of inputs. */
 export function applyWaterfall(year: number, x: OperatingInputs, op: OperatingAssumptions): OperatingYear {
-  const potential = x.grossPotentialRent + x.expenseRecoveries + x.otherIncome
+  const potential = x.grossPotentialRent - x.lossToLease + x.expenseRecoveries + x.otherIncome
   const gv = generalVacancy(op.generalVacancyPct.value, potential, x.absorptionTurnoverVacancy)
   const beforeCredit = potential - x.absorptionTurnoverVacancy - x.freeRent - gv
   const creditLoss = op.creditLossPct.value * beforeCredit
@@ -99,6 +101,7 @@ export function operatingCashFlows(property: Property, a: UnderwritingAssumption
     const inputs: OperatingInputs = {
       occupancy: rsf ? sum('occupiedSF') / 12 / rsf : 0,
       grossPotentialRent: sum('grossPotentialRent'),
+      lossToLease: 0,
       absorptionTurnoverVacancy: sum('absorptionTurnoverVacancy'),
       freeRent: sum('freeRent'),
       expenseRecoveries: sum('expenseRecoveries'),

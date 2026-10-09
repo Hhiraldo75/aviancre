@@ -74,6 +74,8 @@ export interface MultifamilyAssumptions {
   turnoverCostPerUnit: Sourced<USD>
   /** Vacant units leased per month (pre-leased first). Unit-level rent rolls only. */
   leaseUpUnitsPerMonth?: S
+  /** Cap on a renewing tenant's rent increase; the renewal rent is the lower of market and in-place × (1 + cap). Unit-level rent rolls only. */
+  maxRenewalIncreasePct?: Sourced<Pct>
 }
 
 /** Fixed rate, or floating off an index that can be pulled live from FRED. */
@@ -115,9 +117,12 @@ export interface UnderwritingAssumptions {
 /** One year of the cash flow waterfall. All values in USD. */
 export interface AnnualCashFlow {
   year: number
-  /** Average share of rentable SF (or units) physically occupied. */
+  /** Average share of rentable SF (or units) physically occupied, before general vacancy. */
   occupancy: Pct
+  /** Multifamily: every unit at market rent. */
   grossPotentialRent: USD
+  /** Market rent minus in-place rent on leased units; multifamily only (negative when in-place is above market). */
+  lossToLease: USD
   /** Vacancy from lease rollover downtime and unleased space. */
   absorptionTurnoverVacancy: USD
   freeRent: USD

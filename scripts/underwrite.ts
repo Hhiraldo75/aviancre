@@ -17,6 +17,7 @@ import { analystExport } from '../src/lib/underwriting/analystExport'
 import { DEFAULTS_SET, parseAssumptionSetFile, setSummary } from '../src/lib/underwriting/assumptionSets'
 import { assumptionsFor, type AssumptionEdits } from '../src/lib/underwriting/edits'
 import { metricRows } from '../src/lib/underwriting/report'
+import { sensitivityGrids } from '../src/lib/underwriting/sensitivity'
 import { findProperty, outputDir, propertyList } from './deals'
 import { PRIVATE_DIR } from './privateDeals'
 
@@ -80,6 +81,7 @@ if (price !== undefined) {
   setName = `${setName} + --price`
 }
 const result = underwrite(property, asOf, assumptionsFor(property, asOf, edits))
+const sensitivityWarnings = sensitivityGrids(property, asOf, result.assumptions).warnings
 
 console.log(`\n${property.name} (${property.assetType}, ${property.physical.rentableSF.value.toLocaleString('en-US')} RSF)`)
 console.log(`As of ${asOf}; analysis starts ${result.assumptions.acquisition.analysisStartDate}`)
@@ -91,6 +93,9 @@ for (const [label, value] of metricRows(result)) console.log(`  ${label.padEnd(w
 console.log('\nWarnings')
 for (const w of result.warnings) console.log(`  - ${w}`)
 if (!result.warnings.length) console.log('  (none)')
+console.log('\nSensitivity warnings')
+for (const w of sensitivityWarnings) console.log(`  - ${w}`)
+if (!sensitivityWarnings.length) console.log('  (none)')
 
 // Samples: docs/underwriting/<id>.json and docs/underwriting-<id>.csv.
 // Imported deals: private-deals/<id>/underwriting.json and underwriting.csv.

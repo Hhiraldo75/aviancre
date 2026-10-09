@@ -6,6 +6,8 @@ import type { OperatingInputs } from './waterfall'
  * Simple unit-type model. In-place rents grow with the market and close the
  * loss-to-lease gap as units turn over; vacant units are carried at market.
  * General vacancy (applied in the waterfall) stands in for physical vacancy.
+ * GPR is every unit at market; loss to lease is market minus in-place on
+ * occupied units.
  * A unit rent roll (imported) runs the unit-level model instead.
  */
 export function multifamilyYears(property: Property, a: UnderwritingAssumptions): OperatingInputs[] {
@@ -26,16 +28,19 @@ export function multifamilyYears(property: Property, a: UnderwritingAssumptions)
     const rentGrowth = Math.pow(1 + g, i)
     const costGrowth = Math.pow(1 + expenseGrowth, i)
     let grossPotentialRent = 0
+    let lossToLease = 0
     for (const u of rr.unitTypes) {
       const market1 = u.marketRentMonthly.value
       const inPlace1 = u.inPlaceRentMonthly?.value ?? market1
       const market = market1 * rentGrowth
       const inPlace = market - (market1 - inPlace1) * rentGrowth * Math.pow(1 - turnover, i)
-      grossPotentialRent += (u.occupiedUnits * inPlace + (u.unitCount - u.occupiedUnits) * market) * 12
+      grossPotentialRent += u.unitCount * market * 12
+      lossToLease += u.occupiedUnits * (market - inPlace) * 12
     }
     return {
       occupancy: units ? occupied / units : 0,
       grossPotentialRent,
+      lossToLease,
       absorptionTurnoverVacancy: 0,
       freeRent: 0,
       expenseRecoveries: 0,
@@ -51,10 +56,13 @@ export function multifamilyYears(property: Property, a: UnderwritingAssumptions)
 /**
  * Unit-level model for a unit rent roll, month by month. Each occupied unit
  * pays its in-place rent until its lease end (month 1 when month-to-month or
- * expired), then re-leases at that year's market rent for 12 months at a time;
- * every roll costs turnover rate × turnover cost (the general vacancy floor
- * stands in for make-ready downtime). Vacant units lease at market at the
- * lease-up pace, pre-leased first; until then their rent is absorption vacancy.
+ * expired), then rolls for 12 months at a time. At each roll the turnover
+ * share re-leases at that year's market rent and the rest renews at the lower
+ * of market and current rent × (1 + max renewal increase), blended like a
+ * commercial renewal probability, so loss to lease burns off over several
+ * rolls. Every roll costs turnover rate × turnover cost (the general vacancy
+ * floor stands in for make-ready downtime). Vacant units lease at market at
+ * the lease-up pace, pre-leased first; until then their rent is absorption vacancy.
  */
 function unitYears(property: Property, units: ApartmentUnit[], a: UnderwritingAssumptions, mf: MultifamilyAssumptions): OperatingInputs[] {
   const pace = mf.leaseUpUnitsPerMonth?.value
@@ -66,10 +74,14 @@ function unitYears(property: Property, units: ApartmentUnit[], a: UnderwritingAs
   const expenseGrowth = a.operating.expenseGrowth.value
   const rentGrowth = (m: number) => Math.pow(1 + g, analysisYear(m) - 1)
   const costGrowth = (m: number) => Math.pow(1 + expenseGrowth, analysisYear(m) - 1)
-  const turnoverCost = mf.turnoverRate.value * mf.turnoverCostPerUnit.value
+  const turnoverRate = mf.turnoverRate.value
+  const turnoverCost = turnoverRate * mf.turnoverCostPerUnit.value
+  const maxRenewal = mf.maxRenewalIncreasePct?.value
+  if (maxRenewal === undefined || maxRenewal < 0) throw new Error(`${property.id}: the max renewal increase must be 0% or more`)
 
   const zeros = () => Array.from({ length: months }, () => 0)
   const rent = zeros()
+  const lossToLease = zeros()
   const vacancy = zeros()
   const occupiedUnits = zeros()
   const turnover = zeros()
@@ -87,11 +99,13 @@ function unitYears(property: Property, units: ApartmentUnit[], a: UnderwritingAs
         continue
       }
       if (m === next) {
-        current = market
+        const renewal = Math.min(market, current * (1 + maxRenewal))
+        current = m === leaseUp && !u.occupied ? market : turnoverRate * market + (1 - turnoverRate) * renewal
         next += 12
         if (u.occupied || m > leaseUp) turnover[m] += turnoverCost * costGrowth(m)
       }
-      rent[m] += current
+      rent[m] += market
+      lossToLease[m] += market - current
       occupiedUnits[m]++
     }
   }
@@ -103,6 +117,7 @@ function unitYears(property: Property, units: ApartmentUnit[], a: UnderwritingAs
     return {
       occupancy: units.length ? sum(occupiedUnits) / 12 / units.length : 0,
       grossPotentialRent: sum(rent),
+      lossToLease: sum(lossToLease),
       absorptionTurnoverVacancy: sum(vacancy),
       freeRent: 0,
       expenseRecoveries: 0,

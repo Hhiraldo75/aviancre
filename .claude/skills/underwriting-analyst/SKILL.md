@@ -44,7 +44,7 @@ If no property id was given, list the ids from `src/data/sampleProperties.ts` an
 | 8 | Minimum DSCR vs 1.25x | `debt.minimumDSCR`, `debt.minimumDSCRYear`, `debt.dscrFloor`, `debt.dscrByYear` | Minimum DSCR is below the floor |
 | 9 | Debt yield vs 9% | `debt.debtYield`, `debt.debtYieldFloor` | Debt yield is below the floor |
 | 10 | Levered IRR vs target | `returns.leveredIRR`, `returns.targetLeveredIRR`, `returns.leveredIRRVsTarget`, `maxBid` | Levered IRR is below target |
-| 11 | Sensitivity range | `sensitivity.grids[].low`, `.high`, `.center` | The current case or a modest downside cell is below the target |
+| 11 | Sensitivity range | `sensitivity.grids[].low`, `.high`, `.center`, `sensitivity.warnings` | The current case or a modest downside cell is below the target, or `sensitivity.warnings` is not empty |
 | 12 | EST placeholders | `assumptions.estimated`, `assumptions.items[].sourceName` | Always list which *key* assumptions are still estimates: market rent, rent growth, renewal probability, operating expenses, exit cap, interest rate and LTV, purchase price |
 
 For multifamily (`rentRoll.kind === 'multifamily'`), report checks 2–4 as `N/A (multifamily)`.
@@ -72,6 +72,6 @@ Then a title (`# <property.name>: Investment memo`) and a line with `meta.asOf`,
 
 - **Every number comes from the JSON.** Quote `display` strings exactly. The one exception: a simple difference or ratio between two JSON figures (a bps gap, a % difference) is allowed, but only when both inputs appear next to it (e.g. "the 7.86% going-in cap is 61 bps above the 7.25% exit cap"). Nothing else: never sum, average, round, convert, chain calculations or approximate a figure, not even "about a third" or "roughly $X". If a figure you want isn't in the JSON, describe it in words or leave it out.
 - **No double negatives with signed numbers.** When a word gives the direction, drop the sign: "58 bps below", "322 bps short of target", "10.9% below the current price", not "−58 bps below" or "(10.9%) below". Keep the signed display in tables or where no direction word is used.
-- Cite the engine's warnings rather than rephrasing them into new numbers.
+- Cite the engine's warnings (`warnings` and `sensitivity.warnings`) rather than rephrasing them into new numbers.
 - About two pages. Write for an investment committee: direct, specific, no hype, no filler. Prefer short paragraphs and tables over long bullets.
 - Do not edit the engine, the sample data or the JSON. If the output looks wrong, say so in the reply and in the memo; don't work around it.

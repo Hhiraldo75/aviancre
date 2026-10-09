@@ -109,6 +109,7 @@ function driverGroups(p: Property, a: UnderwritingAssumptions) {
             ['Turnover rate', a.multifamily.turnoverRate],
             ['Turnover cost', a.multifamily.turnoverCostPerUnit],
             ...(a.multifamily.leaseUpUnitsPerMonth ? [['Lease-up pace', a.multifamily.leaseUpUnitsPerMonth] as Driver] : []),
+            ...(a.multifamily.maxRenewalIncreasePct ? [['Max renewal increase', a.multifamily.maxRenewalIncreasePct] as Driver] : []),
           ]
         : []
   const noiOverHold: Driver[] = [

@@ -4,10 +4,19 @@ import type { AnnualCashFlow, Escalation, Lease, Property, UnderwritingAssumptio
 
 export type LineKey = Exclude<keyof AnnualCashFlow, 'year' | 'occupancy'>
 
-/** Waterfall lines in report order. Losses and costs are positive amounts. */
+/**
+ * Waterfall lines in report order. Losses and costs are positive amounts.
+ * Multifamily shows rent at market, then loss to lease on leased units.
+ */
 function lines(isMultifamily: boolean): [label: string, key: LineKey][] {
+  const rent: [label: string, key: LineKey][] = isMultifamily
+    ? [
+        ['Gross potential rent (at market)', 'grossPotentialRent'],
+        ['Less: loss to lease', 'lossToLease'],
+      ]
+    : [['Gross potential rent', 'grossPotentialRent']]
   return [
-    ['Gross potential rent', 'grossPotentialRent'],
+    ...rent,
     ['Less: absorption & turnover vacancy', 'absorptionTurnoverVacancy'],
     ['Less: free rent', 'freeRent'],
     ['Expense recoveries', 'expenseRecoveries'],
@@ -38,6 +47,9 @@ function yearZero(r: UnderwritingResult, key: LineKey): number | null {
   return null
 }
 
+/** Multifamily occupancy counts leased units; the general vacancy line comes after it. */
+export const MF_OCCUPANCY_LABEL = 'Physical occupancy (before general vacancy)'
+
 export interface ReportRow {
   label: string
   /** The cash flow field; undefined for the occupancy row. */
@@ -49,7 +61,7 @@ export interface ReportRow {
 export function cashFlowRows(r: UnderwritingResult): ReportRow[] {
   const isMF = r.assumptions.multifamily !== undefined
   const occupancy: ReportRow = {
-    label: 'Occupancy',
+    label: isMF ? MF_OCCUPANCY_LABEL : 'Occupancy',
     values: [null, ...r.cashFlows.map((c) => c.occupancy), r.forwardYear.occupancy, null],
   }
   return [
@@ -160,13 +172,13 @@ export function assumptionRows(assumptions: UnderwritingAssumptions): Assumption
 export function toTable(r: UnderwritingResult): string {
   const rows = cashFlowRows(r)
   const H = r.cashFlows.length
-  const labelWidth = 36
+  const labelWidth = Math.max(36, ...rows.map((row) => row.label.length + 2))
   const colWidth = 9
   const header =
     '$000s'.padEnd(labelWidth) +
     ['Yr 0', ...r.cashFlows.map((c) => `Yr ${c.year}`), `Yr ${H + 1}*`, `Norm.**`].map((h) => h.padStart(colWidth)).join('')
   const body = rows.map((row) => {
-    const isOcc = row.label === 'Occupancy'
+    const isOcc = row.key === undefined
     const cells = row.values.map((v) => {
       if (v === null) return ''
       if (isOcc) return `${(v * 100).toFixed(1)}%`

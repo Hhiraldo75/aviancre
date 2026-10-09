@@ -93,6 +93,8 @@ export const MULTIFAMILY_DEFAULTS = {
   turnoverCostPerUnit: 1000,
   /** Vacant units leased per month; unit rent rolls only. */
   leaseUpUnitsPerMonth: 8,
+  /** Cap on a renewal's rent increase; unit rent rolls only. */
+  maxRenewalIncreasePct: 0.05,
 } as const
 
 const rot = (value: number) => estimate(value, RULE_OF_THUMB)
@@ -179,7 +181,10 @@ export function defaultAssumptions(property: Property, asOf: ISODate): Underwrit
           turnoverRate: rot(MULTIFAMILY_DEFAULTS.turnoverRate),
           turnoverCostPerUnit: rot(MULTIFAMILY_DEFAULTS.turnoverCostPerUnit),
           ...(property.rentRoll.kind === 'multifamily' && property.rentRoll.units
-            ? { leaseUpUnitsPerMonth: rot(MULTIFAMILY_DEFAULTS.leaseUpUnitsPerMonth) }
+            ? {
+                leaseUpUnitsPerMonth: rot(MULTIFAMILY_DEFAULTS.leaseUpUnitsPerMonth),
+                maxRenewalIncreasePct: rot(MULTIFAMILY_DEFAULTS.maxRenewalIncreasePct),
+              }
             : {}),
         }
       : undefined,

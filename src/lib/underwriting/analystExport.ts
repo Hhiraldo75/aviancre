@@ -198,10 +198,7 @@ export function analystExport(
     },
     warnings: r.warnings,
     notes: r.notes,
-    sensitivity: {
-      caption: SENSITIVITY_CAPTION,
-      grids: sensitivitySection(property, asOf, r),
-    },
+    sensitivity: sensitivitySection(property, asOf, r),
     maxBid: {
       label: bidStat.label,
       status: bid.status,
@@ -320,12 +317,14 @@ function assumptionsSection(property: Property, asOf: ISODate, r: UnderwritingRe
   }
 }
 
-function sensitivitySection(property: Property, asOf: ISODate, r: UnderwritingResult): ExportGrid[] {
+function sensitivitySection(property: Property, asOf: ISODate, r: UnderwritingResult) {
   const grids = sensitivityGrids(property, asOf, r.assumptions)
-  return [
-    exportGrid('Exit cap × rent growth', grids.exitCapByRentGrowth),
-    exportGrid('Purchase price × exit cap', grids.priceByExitCap),
-  ]
+  return {
+    caption: SENSITIVITY_CAPTION,
+    grids: [exportGrid('Exit cap × rent growth', grids.exitCapByRentGrowth), exportGrid('Purchase price × exit cap', grids.priceByExitCap)],
+    /** NOI falling in a rent-growth case below expense growth; a levered IRR range above 5 points across rent growth. */
+    warnings: grids.warnings,
+  }
 }
 
 function exportGrid(title: string, g: SensitivityGrid): ExportGrid {

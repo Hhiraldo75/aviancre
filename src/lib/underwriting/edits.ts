@@ -80,6 +80,7 @@ export function editableFields(a: UnderwritingAssumptions): AssumptionField[] {
       const format = (x: number) => `${Number(x.toFixed(1))} ${suffix}`
       fields.push({ key: 'multifamily.leaseUpUnitsPerMonth', label: 'Lease-up pace (vacant units)', group, scale: 1, suffix, min: 1, max: 1000, format })
     }
+    if (a.multifamily?.maxRenewalIncreasePct) pct('multifamily.maxRenewalIncreasePct', 'Max renewal increase', 0, 50)
   } else {
     pct('leasing.newLeaseEscalationPct', 'New-lease escalation', 0, 10, (x) => `${fmt.pctShort(x)}/yr`, '%/yr')
     pct('leasing.renewalProbability', 'Renewal probability', 0, 100)

@@ -223,6 +223,7 @@ describe('general vacancy floor', () => {
       {
         occupancy: 1,
         grossPotentialRent: 900_000,
+        lossToLease: 0,
         absorptionTurnoverVacancy: 20_000,
         freeRent: 10_000,
         expenseRecoveries: 100_000,
@@ -250,6 +251,7 @@ describe('exit normalization', () => {
       {
         occupancy: 0.9,
         grossPotentialRent: 900_000,
+        lossToLease: 0,
         absorptionTurnoverVacancy: 60_000,
         freeRent: 25_000,
         expenseRecoveries: 100_000,
@@ -407,8 +409,11 @@ describe('underwrite (integration)', () => {
   })
   it('models multifamily rent by unit type (hand-checked year 1)', () => {
     const res = underwrite(byId('sample-federal-hill-apartments'), AS_OF)
-    // (23 × $1,525 + 1 vacant × $1,650 + 14 × $1,925) × 12
-    expect(res.cashFlows[0].grossPotentialRent).toBeCloseTo(764_100, 6)
+    // GPR at market: (24 × $1,650 + 14 × $2,050) × 12; loss to lease: (23 + 14) occupied × $125 × 12
+    expect(res.cashFlows[0].grossPotentialRent).toBeCloseTo(819_600, 6)
+    expect(res.cashFlows[0].lossToLease).toBeCloseTo(55_500, 6)
+    // Net of loss to lease: (23 × $1,525 + 1 vacant × $1,650 + 14 × $1,925) × 12, as before the split
+    expect(res.cashFlows[0].grossPotentialRent - res.cashFlows[0].lossToLease).toBeCloseTo(764_100, 6)
     // 38 units × 50% turnover × $1,000
     expect(res.cashFlows[0].tenantImprovements).toBeCloseTo(19_000, 6)
   })
