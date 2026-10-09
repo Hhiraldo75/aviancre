@@ -17,6 +17,7 @@ import {
 } from '../lib/filters'
 import { isImportedDeal } from '../lib/importedDeals'
 import { todayISO } from '../lib/metrics'
+import { DEFAULTS_SET, isSavedSet, type SavedAssumptionSet } from '../lib/underwriting/assumptionSets'
 import type { AssumptionEdits } from '../lib/underwriting/edits'
 import { lookupParcelAt } from '../services/providenceGis'
 import { lookupTaxRecord } from '../services/providenceOpenData'
@@ -55,6 +56,22 @@ function saveImportedDeals(properties: Property[]): boolean {
   }
 }
 
+/** Saved assumption sets, by property id; browser only, like imported deals. */
+export const ASSUMPTION_SETS_KEY = 'aviancre.assumptionSets.v1'
+
+function loadAssumptionSets(): Record<string, SavedAssumptionSet[]> {
+  if (!hasWindow) return {}
+  try {
+    const stored: unknown = JSON.parse(window.localStorage.getItem(ASSUMPTION_SETS_KEY) ?? '{}')
+    if (typeof stored !== 'object' || stored === null) return {}
+    return Object.fromEntries(
+      Object.entries(stored).flatMap(([id, sets]) => (Array.isArray(sets) ? [[id, sets.filter(isSavedSet)]] : [])),
+    )
+  } catch {
+    return {}
+  }
+}
+
 /** Filters and sort start from the URL, so a shared link opens the same view. */
 const initialView = hasWindow ? filtersFromQuery(window.location.search) : { filters: EMPTY_FILTERS, sort: DEFAULT_SORT }
 
@@ -78,6 +95,10 @@ interface AppState {
   underwritingOpen: boolean
   /** Analyst edits to the default underwriting assumptions, by property id; kept for the session. */
   assumptionEdits: Record<string, AssumptionEdits>
+  /** Named assumption sets, by property id. Kept in local storage; an imported deal's sets go when the deal is removed. */
+  assumptionSets: Record<string, SavedAssumptionSet[]>
+  /** The set last applied or saved, by property id; absent = Defaults. The edits may since differ from it. */
+  activeSets: Record<string, string>
   /** Portfolio filters; the map and the list show the same matching set. Mirrored in the URL. */
   filters: PropertyFilters
   sort: SortKey
@@ -93,7 +114,14 @@ interface AppState {
   /** `value` in engine units (Pct as a decimal); callers validate it first. */
   setAssumption: (propertyId: string, key: string, value: number) => void
   resetAssumption: (propertyId: string, key: string) => void
+  /** Clears every edit and makes Defaults the active set. */
   resetAssumptions: (propertyId: string) => void
+  /** Saves a set (replacing one with the same name), applies its edits and makes it active. */
+  saveAssumptionSet: (propertyId: string, set: SavedAssumptionSet) => void
+  /** Applies a saved set's edits, or Defaults (no edits). */
+  applyAssumptionSet: (propertyId: string, name: string) => void
+  /** Deletes a saved set; the current edits stay as they are. Defaults can't be deleted. */
+  deleteAssumptionSet: (propertyId: string, name: string) => void
   setFilter: <K extends keyof PropertyFilters>(key: K, value: PropertyFilters[K]) => void
   /** Clears the filter behind an active-filter chip (see `activeFilterChips`). */
   removeFilter: (chipKey: string) => void
@@ -125,6 +153,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
   activePersona: 'Analyst',
   underwritingOpen: false,
   assumptionEdits: {},
+  assumptionSets: loadAssumptionSets(),
+  activeSets: {},
   filters: initialView.filters,
   sort: initialView.sort,
   zoomRequest: 0,
@@ -208,7 +238,42 @@ export const useAppStore = create<AppState>()((set, get) => ({
   resetAssumptions: (propertyId) =>
     set((s) => {
       const { [propertyId]: _removed, ...rest } = s.assumptionEdits
-      return { assumptionEdits: rest }
+      const { [propertyId]: _active, ...activeSets } = s.activeSets
+      return { assumptionEdits: rest, activeSets }
+    }),
+  saveAssumptionSet: (propertyId, saved) =>
+    set((s) => {
+      const others = (s.assumptionSets[propertyId] ?? []).filter((x) => x.name !== saved.name)
+      const { [propertyId]: _removed, ...otherEdits } = s.assumptionEdits
+      const edits = { ...saved.edits }
+      return {
+        assumptionSets: { ...s.assumptionSets, [propertyId]: [...others, { ...saved, edits: { ...saved.edits } }] },
+        assumptionEdits: Object.keys(edits).length ? { ...otherEdits, [propertyId]: edits } : otherEdits,
+        activeSets: { ...s.activeSets, [propertyId]: saved.name },
+      }
+    }),
+  applyAssumptionSet: (propertyId, name) => {
+    if (name === DEFAULTS_SET) return get().resetAssumptions(propertyId)
+    const saved = get().assumptionSets[propertyId]?.find((x) => x.name === name)
+    if (!saved) return
+    set((s) => {
+      const { [propertyId]: _removed, ...otherEdits } = s.assumptionEdits
+      const edits = { ...saved.edits }
+      return {
+        assumptionEdits: Object.keys(edits).length ? { ...otherEdits, [propertyId]: edits } : otherEdits,
+        activeSets: { ...s.activeSets, [propertyId]: name },
+      }
+    })
+  },
+  deleteAssumptionSet: (propertyId, name) =>
+    set((s) => {
+      const remaining = (s.assumptionSets[propertyId] ?? []).filter((x) => x.name !== name)
+      const { [propertyId]: _sets, ...otherSets } = s.assumptionSets
+      const { [propertyId]: _active, ...otherActive } = s.activeSets
+      return {
+        assumptionSets: remaining.length ? { ...otherSets, [propertyId]: remaining } : otherSets,
+        activeSets: s.activeSets[propertyId] === name ? otherActive : s.activeSets,
+      }
     }),
 
   setFilter: (key, value) => set((s) => ({ filters: { ...s.filters, [key]: value } })),
@@ -229,12 +294,28 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const target = get().properties.find((p) => p.id === id)
     if (!target?.importedFrom) return
     get().resetAssumptions(id)
+    set((s) => {
+      const { [id]: _sets, ...assumptionSets } = s.assumptionSets
+      return { assumptionSets }
+    })
     if (get().selectedId === id) get().clearSelection()
     const properties = get().properties.filter((p) => p.id !== id)
     set({ properties })
     saveImportedDeals(properties)
   },
 }))
+
+// Persist saved assumption sets whenever they change.
+if (hasWindow) {
+  useAppStore.subscribe((s, prev) => {
+    if (s.assumptionSets === prev.assumptionSets) return
+    try {
+      window.localStorage.setItem(ASSUMPTION_SETS_KEY, JSON.stringify(s.assumptionSets))
+    } catch {
+      // Storage blocked or full: the sets last until reload.
+    }
+  })
+}
 
 // Keep the URL in step with the filters (replacing, not adding, history entries).
 if (hasWindow) {
@@ -270,3 +351,11 @@ export function usePropertyView(): PropertyView {
     return propertyView(properties, filters, sort, asOf, facts)
   }, [properties, filters, sort, asOf, edits])
 }
+
+const NO_SETS: SavedAssumptionSet[] = []
+
+/** A property's saved assumption sets; a stable empty array when there are none. */
+export const useAssumptionSets = (propertyId: string) => useAppStore((s) => s.assumptionSets[propertyId] ?? NO_SETS)
+
+/** The set last applied or saved for a property (Defaults when none). */
+export const useActiveSetName = (propertyId: string) => useAppStore((s) => s.activeSets[propertyId] ?? DEFAULTS_SET)

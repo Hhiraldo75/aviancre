@@ -65,3 +65,35 @@ describe('Atwells golden benchmark after Reset', () => {
   })
   goldenChecks(reset, fixture)
 })
+
+describe('Atwells with saved assumption sets', () => {
+  store.setAssumption(ATWELLS.id, 'exit.exitCapRate', 0.075)
+  store.setAssumption(ATWELLS.id, 'operating.generalVacancyPct', 0.07)
+  store.setAssumption(ATWELLS.id, 'acquisition.marketCapRate', 0.0725)
+  store.saveAssumptionSet(ATWELLS.id, { name: 'My case', savedAt: AS_OF, edits: useAppStore.getState().assumptionEdits[ATWELLS.id] })
+  const saved = runFromStore()
+  store.setAssumption(ATWELLS.id, 'debt.ltv', 0.5) // an unsaved change on top
+  const unsaved = runFromStore()
+  store.applyAssumptionSet(ATWELLS.id, 'Defaults')
+  const atDefaults = runFromStore()
+  store.applyAssumptionSet(ATWELLS.id, 'My case')
+  const reapplied = runFromStore()
+  const activeAfterReapply = useAppStore.getState().activeSets[ATWELLS.id]
+  store.applyAssumptionSet(ATWELLS.id, 'Defaults')
+  const activeAtEnd = useAppStore.getState().activeSets[ATWELLS.id]
+
+  const withoutTimestamp = ({ generatedAt: _g, ...rest }: typeof saved) => rest
+  it('reapplying a saved set reproduces its results exactly', () => {
+    expect(withoutTimestamp(reapplied)).toEqual(withoutTimestamp(saved))
+    expect(withoutTimestamp(unsaved)).not.toEqual(withoutTimestamp(saved))
+    expect(activeAfterReapply).toBe('My case')
+  })
+  it('Defaults restores the default results exactly', () => {
+    expect(withoutTimestamp(atDefaults)).toEqual(withoutTimestamp(defaultRun))
+    expect(activeAtEnd).toBeUndefined()
+  })
+  it('keeps the saved set after switching to Defaults', () => {
+    expect(useAppStore.getState().assumptionSets[ATWELLS.id]?.map((x) => x.name)).toEqual(['My case'])
+  })
+  describe('golden benchmark at Defaults', () => goldenChecks(atDefaults, fixture))
+})

@@ -13,6 +13,7 @@ import type {
   VacantSpace,
 } from '../types'
 import { SUBMARKETS } from '../data/submarkets'
+import { slug } from './format'
 import { marketViewFor } from './marketView'
 import { estimate, fromImport } from './sourced'
 
@@ -173,17 +174,8 @@ export function parseNumber(c: Cell): number | null {
   return percent ? Number(t) / 100 : Number(t)
 }
 
-function slug(s: string): string {
-  return (
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'rent-roll'
-  )
-}
-
 /** The id an imported deal gets: "deal-" + its name. Private deals are recognized by this prefix. */
-export const dealId = (name: string) => `deal-${slug(name)}`
+export const dealId = (name: string) => `deal-${slug(name) || 'rent-roll'}`
 
 export const isImportedDealId = (id: string) => id.startsWith('deal-')
 

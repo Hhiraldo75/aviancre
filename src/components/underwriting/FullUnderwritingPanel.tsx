@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Property } from '../../types'
 import { fmt } from '../../lib/format'
 import { fullUnderwriting, toCSV } from '../../lib/underwriting'
-import { useAppStore, useAssumptionEdits } from '../../store/useAppStore'
+import { appliedSetLabel } from '../../lib/underwriting/assumptionSets'
+import { useActiveSetName, useAppStore, useAssumptionEdits, useAssumptionSets } from '../../store/useAppStore'
 import { Chip, Stat } from '../ui/Card'
+import { downloadFile } from '../ui/download'
 import ImportedChip from '../ui/ImportedChip'
 import AnalystMemoTab from './AnalystMemoTab'
+import AssumptionSetBar from './AssumptionSetBar'
 import AssumptionsTab from './AssumptionsTab'
 import ChangedChip from './ChangedChip'
 import CashFlowTab from './CashFlowTab'
@@ -15,15 +18,6 @@ import ReturnsTab from './ReturnsTab'
 const TABS = ['Cash flow', 'Rent roll', 'Returns', 'Assumptions', 'Analyst memo'] as const
 type Tab = (typeof TABS)[number]
 
-function downloadCSV(filename: string, csv: string) {
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
 /** Full underwriting over the map; renders the mapped view only, no math. Assumption edits recalculate everything. */
 export default function FullUnderwritingPanel({ property: p }: { property: Property }) {
   const asOf = useAppStore((s) => s.asOf)
@@ -32,6 +26,8 @@ export default function FullUnderwritingPanel({ property: p }: { property: Prope
   const resetAssumption = useAppStore((s) => s.resetAssumption)
   const resetAssumptions = useAppStore((s) => s.resetAssumptions)
   const edits = useAssumptionEdits(p.id)
+  const sets = useAssumptionSets(p.id)
+  const activeSet = useActiveSetName(p.id)
   const view = useMemo(() => fullUnderwriting(p, asOf, edits), [p, asOf, edits])
   const [tab, setTab] = useState<Tab>('Cash flow')
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -129,7 +125,7 @@ export default function FullUnderwritingPanel({ property: p }: { property: Prope
             {tab === 'Cash flow' && (
               <CashFlowTab
                 table={view.cashFlow}
-                onDownload={() => downloadCSV(`${p.id}-underwriting.csv`, toCSV(view.result, p.name))}
+                onDownload={() => downloadFile(`${p.id}-underwriting.csv`, toCSV(view.result, p.name), 'text/csv;charset=utf-8')}
               />
             )}
             {tab === 'Rent roll' && <RentRollTab rentRoll={view.rentRoll} />}
@@ -137,15 +133,18 @@ export default function FullUnderwritingPanel({ property: p }: { property: Prope
               <ReturnsTab returns={view.returns} property={p} asOf={asOf} assumptions={view.result.assumptions} />
             )}
             {tab === 'Assumptions' && (
-              <AssumptionsTab
-                groups={view.assumptions}
-                changed={view.header.changes.length > 0}
-                onSet={(key, value) => setAssumption(p.id, key, value)}
-                onReset={(key) => resetAssumption(p.id, key)}
-                onResetAll={() => resetAssumptions(p.id)}
-              />
+              <div className="max-w-5xl space-y-4">
+                <AssumptionSetBar property={p} asOf={asOf} edits={edits} />
+                <AssumptionsTab
+                  groups={view.assumptions}
+                  changed={view.header.changes.length > 0}
+                  onSet={(key, value) => setAssumption(p.id, key, value)}
+                  onReset={(key) => resetAssumption(p.id, key)}
+                  onResetAll={() => resetAssumptions(p.id)}
+                />
+              </div>
             )}
-            {tab === 'Analyst memo' && <AnalystMemoTab propertyId={p.id} edited={view.header.changes.length > 0} />}
+            {tab === 'Analyst memo' && <AnalystMemoTab propertyId={p.id} edits={edits} applied={appliedSetLabel(activeSet, sets, edits)} />}
             {view.header.notes.length > 0 && (
               <div className="mt-6 space-y-1 border-t border-slate-700 pt-3 text-[10px] leading-snug text-slate-500">
                 {view.header.notes.map((n) => (

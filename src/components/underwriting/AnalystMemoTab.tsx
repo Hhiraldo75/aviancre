@@ -1,14 +1,20 @@
 import { useEffect, useState } from 'react'
 import { fmt } from '../../lib/format'
 import { isImportedDealId } from '../../lib/rentRollImport'
+import { changesText, memoAssumptionSet, sameEdits, withoutMarker } from '../../lib/underwriting/assumptionSets'
+import type { AssumptionEdits } from '../../lib/underwriting/edits'
 import { loadAnalystMemo, memoDate, withoutDisclaimer } from '../../services/analystMemos'
 import { Chip } from '../ui/Card'
 import Markdown from '../ui/Markdown'
 
 type MemoState = { id: string; status: 'ok'; markdown: string } | { id: string; status: 'none' | 'error' }
 
-/** The /underwriting-analyst memo for this property, written at default assumptions. */
-export default function AnalystMemoTab({ propertyId, edited }: { propertyId: string; edited: boolean }) {
+/**
+ * The /underwriting-analyst memo for this property. The memo records the
+ * assumption set it was written at; a warning shows only when the assumptions
+ * applied now (`edits`, described by `applied`) are different.
+ */
+export default function AnalystMemoTab({ propertyId, edits, applied }: { propertyId: string; edits: AssumptionEdits; applied: string }) {
   const [memo, setMemo] = useState<MemoState | null>(null)
 
   useEffect(() => {
@@ -47,6 +53,8 @@ export default function AnalystMemoTab({ propertyId, edited }: { propertyId: str
   }
 
   const date = memoDate(memo.markdown)
+  const written = memoAssumptionSet(memo.markdown)
+  const writtenAt = `${written.name} (${changesText(Object.keys(written.edits).length)})`
   return (
     <article className="max-w-4xl">
       <header className="mb-4 space-y-1">
@@ -58,14 +66,15 @@ export default function AnalystMemoTab({ propertyId, edited }: { propertyId: str
             Written by Claude Code from AVIANCRE engine outputs{date && `, ${fmt.date(date)}`}
           </span>
         </div>
-        <p className="text-[10px] text-slate-500">All figures from the engine at default assumptions.</p>
+        <p className="text-[10px] text-slate-500">All figures from the engine at assumption set {writtenAt}.</p>
       </header>
-      {edited && (
+      {!sameEdits(written.edits, edits) && (
         <p role="note" className="mb-4 rounded-md bg-amber-500/10 p-3 text-xs leading-snug text-amber-300">
-          This memo reflects default assumptions. Your edits are not included; numbers in the other tabs may differ.
+          This memo was written at assumption set {writtenAt}. The assumptions applied now ({applied}) are different, so
+          numbers in the other tabs may differ from the memo.
         </p>
       )}
-      <Markdown source={withoutDisclaimer(memo.markdown)} />
+      <Markdown source={withoutDisclaimer(withoutMarker(memo.markdown))} />
     </article>
   )
 }

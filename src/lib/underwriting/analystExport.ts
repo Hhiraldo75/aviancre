@@ -2,7 +2,8 @@ import type { ISODate, Property, SensitivityGrid, UnderwritingResult } from '../
 import { fmt } from '../format'
 import { occupancy } from '../metrics'
 import { isEstimate } from './defaults'
-import { defaultsFor, editableFields, fieldValue, isEdited, type AssumptionGroupTitle } from './edits'
+import { DEFAULTS_SET, memoMarker, setSummary } from './assumptionSets'
+import { defaultsFor, editableFields, fieldValue, isEdited, type AssumptionEdits, type AssumptionGroupTitle } from './edits'
 import { rentRollView, type ExpirationRow, type RentRollRow } from './fullView'
 import { maxBid, MAX_BID_RANGE } from './maxBid'
 import { cashFlowRows } from './report'
@@ -78,8 +79,18 @@ const bps = (x: number | null) => {
 }
 const signed = (x: number | null) => fig(x, x === null ? '—' : fmt.signedPct(x))
 
-export function analystExport(property: Property, asOf: ISODate, r: UnderwritingResult) {
+/**
+ * `set` names the assumption set `r` was run at (its edits, as applied); the
+ * memo quotes its summary and copies its marker so the app can compare.
+ */
+export function analystExport(
+  property: Property,
+  asOf: ISODate,
+  r: UnderwritingResult,
+  set: { name: string; edits: AssumptionEdits } = { name: DEFAULTS_SET, edits: {} },
+) {
   const a = r.assumptions
+  const assumptions = assumptionsSection(property, asOf, r)
   const m = r.metrics
   const H = r.cashFlows.length
   const noi1 = r.cashFlows[0].netOperatingIncome
@@ -100,6 +111,15 @@ export function analystExport(property: Property, asOf: ISODate, r: Underwriting
       units:
         'Rates are decimals (0.065 = 6.5%); bps figures are basis points; dollars are whole USD. ' +
         'Quote the display strings: they match the app.',
+      assumptionSet: {
+        name: set.name,
+        /** The memo's header line, verbatim. */
+        summary: setSummary(set.name, assumptions.edited.length),
+        /** Each changed assumption with its default, for the Underwriting assumptions section. */
+        changes: assumptions.edited,
+        /** Copy this line verbatim into the memo (directly under the header); the app reads it and never shows it. */
+        marker: memoMarker(set.name, set.edits),
+      },
     },
     property: {
       id: property.id,
@@ -113,7 +133,7 @@ export function analystExport(property: Property, asOf: ISODate, r: Underwriting
       units: property.rentRoll.kind === 'multifamily' ? property.rentRoll.unitTypes.reduce((s, u) => s + u.unitCount, 0) : undefined,
     },
     rentRoll: rentRollSection(property, asOf, r),
-    assumptions: assumptionsSection(property, asOf, r),
+    assumptions,
     cashFlows: {
       note: 'Whole dollars. Losses and costs are positive amounts. Occupancy is a decimal.',
       columns: ['Year 0', ...r.cashFlows.map((c) => `Year ${c.year}`), `Year ${H + 1} (forward, raw)`, `Year ${r.normalizedExitYear.year} (normalized for sale)`],

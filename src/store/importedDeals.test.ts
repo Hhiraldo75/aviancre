@@ -55,3 +55,36 @@ describe('stored deals', () => {
     expect(propertyFromDealFile(deal)).toBeNull()
   })
 })
+
+describe("an imported deal's assumption sets", () => {
+  it('stay with the deal when it is re-imported and go when it is removed', () => {
+    const s = () => useAppStore.getState()
+    s().importDeal(deal)
+    s().saveAssumptionSet(deal.id, { name: 'Base', savedAt: AS_OF, edits: { 'exit.exitCapRate': 0.08 } })
+    expect(s().assumptionEdits[deal.id]).toEqual({ 'exit.exitCapRate': 0.08 })
+    s().importDeal(deal)
+    expect(s().assumptionSets[deal.id]?.map((x) => x.name)).toEqual(['Base'])
+    expect(s().assumptionEdits[deal.id]).toBeUndefined()
+    s().removeImportedDeal(deal.id)
+    expect(s().assumptionSets[deal.id]).toBeUndefined()
+  })
+})
+
+describe('assumption sets in the store', () => {
+  const id = SAMPLE_PROPERTIES[1].id
+  const s = () => useAppStore.getState()
+  it('replace a set saved under the same name, and delete without touching the current edits', () => {
+    s().saveAssumptionSet(id, { name: 'Base', savedAt: AS_OF, edits: { 'debt.ltv': 0.5 } })
+    s().saveAssumptionSet(id, { name: 'Base', savedAt: AS_OF, edits: { 'debt.ltv': 0.55 } })
+    expect(s().assumptionSets[id]).toEqual([{ name: 'Base', savedAt: AS_OF, edits: { 'debt.ltv': 0.55 } }])
+    s().deleteAssumptionSet(id, 'Base')
+    expect(s().assumptionSets[id]).toBeUndefined()
+    expect(s().activeSets[id]).toBeUndefined()
+    expect(s().assumptionEdits[id]).toEqual({ 'debt.ltv': 0.55 })
+    s().resetAssumptions(id)
+  })
+  it('ignore a set name that does not exist', () => {
+    s().applyAssumptionSet(id, 'Nope')
+    expect(s().assumptionEdits[id]).toBeUndefined()
+  })
+})
