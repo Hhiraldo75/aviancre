@@ -78,8 +78,17 @@ export default function ImportRentRollDialog({ file, onClose }: { file: File; on
           {result && (
             <>
               <div className="grid grid-cols-3 gap-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
-                <Count label="Leases" value={`${result.summary.leases} · ${fmt.sf(result.summary.leasedSF)}`} />
-                <Count label="Vacant suites" value={`${result.summary.vacancies} · ${fmt.sf(result.summary.vacantSF)}`} />
+                {result.summary.kind === 'multifamily' ? (
+                  <>
+                    <Count label="Units" value={`${fmt.int(result.summary.units)} · ${fmt.int(result.summary.occupiedUnits)} occupied`} />
+                    <Count label="Floor plans" value={fmt.int(result.summary.floorPlans)} />
+                  </>
+                ) : (
+                  <>
+                    <Count label="Leases" value={`${result.summary.leases} · ${fmt.sf(result.summary.leasedSF)}`} />
+                    <Count label="Vacant suites" value={`${result.summary.vacancies} · ${fmt.sf(result.summary.vacantSF)}`} />
+                  </>
+                )}
                 <Count label="Rentable" value={result.summary.rentableSF ? fmt.sf(result.summary.rentableSF) : '—'} />
               </div>
 
@@ -147,8 +156,8 @@ export default function ImportRentRollDialog({ file, onClose }: { file: File; on
 
           <p className="text-[10px] leading-snug text-slate-500">
             Format: the rent roll export (title, Rentable SF, Property block, Leases and Vacant suites tables), as {RENT_ROLL_EXTENSIONS.join(' or ')}.
-            Rents are annual $/SF; percentages are decimals (0.03 = 3%). Values from the file are marked ACT; market figures and
-            assumptions stay EST.
+            Rents are annual $/SF; percentages are decimals (0.03 = 3%). Apartments: a unit rent roll (Property block, then a Units
+            table, one row per unit, rents $/month). Values from the file are marked ACT; market figures and assumptions stay EST.
           </p>
         </div>
 

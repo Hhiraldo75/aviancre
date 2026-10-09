@@ -75,6 +75,26 @@ export interface RentRollRow {
   renewalOption: string
 }
 
+/** One floor plan of an apartment rent roll; rents are $/unit/month. */
+export interface UnitMixRow {
+  id: string
+  floorPlan: string
+  units: string
+  occupied: string
+  vacant: string
+  /** Vacant units with a signed applicant ("—" without a unit rent roll). */
+  preLeased: string
+  avgSF: string
+  /** Average over all units. */
+  market: string
+  /** Average over occupied units. */
+  inPlace: string
+  /** Market − in-place per occupied unit, its share of their market rent, and the yearly total. */
+  lossToLease: string
+  lossToLeasePct: string
+  lossToLeaseAnnual: string
+}
+
 export interface ExpirationRow {
   year: string
   inPlaceSF: string
@@ -112,7 +132,15 @@ export type RentRollView =
       expirations: ExpirationRow[]
       expirationChart: ExpirationBar[]
     }
-  | { kind: 'unit-mix'; rentRoll: MultifamilyRentRoll }
+  | {
+      kind: 'unit-mix'
+      /** ACT for an imported rent roll, EST for a sample. */
+      source: Pick<Sourced<unknown>, 'source' | 'sourceName'>
+      /** True for a unit rent roll, which knows which vacant units are pre-leased. */
+      byUnit: boolean
+      rows: UnitMixRow[]
+      totals: UnitMixRow
+    }
 
 export interface LineItem {
   label: string
@@ -337,7 +365,7 @@ const bySuite = (x: { suite: string }, y: { suite: string }) => x.suite.localeCo
 
 export function rentRollView(property: Property, r: UnderwritingResult, asOf: ISODate): RentRollView {
   const rr = property.rentRoll
-  if (rr.kind === 'multifamily') return { kind: 'unit-mix', rentRoll: rr }
+  if (rr.kind === 'multifamily') return unitMixView(rr)
   const m = r.metrics
   const { leasing, acquisition } = r.assumptions
   const start = acquisition.analysisStartDate
@@ -433,6 +461,91 @@ export function rentRollView(property: Property, r: UnderwritingResult, asOf: IS
         tooltip: `Year ${i + 1}: ${total ? parts.join(' · ') : 'no leases expire'}`,
       }
     }),
+  }
+}
+
+interface PlanTotals {
+  units: number
+  occupied: number
+  preLeased: number
+  sf: number
+  market: number
+  /** Sums over occupied units. */
+  occupiedMarket: number
+  inPlace: number
+  /** Occupied units with an in-place rent. */
+  rented: number
+}
+
+/**
+ * The unit mix with loss to lease per floor plan. A unit rent roll is summed
+ * unit by unit; a unit-type rent roll uses each type's averages (in-place
+ * assumed at market when missing, so no loss to lease).
+ */
+function unitMixView(rr: MultifamilyRentRoll): RentRollView {
+  const plans = rr.unitTypes.map((u): [string, string, PlanTotals] => {
+    const units = rr.units?.filter((x) => x.floorPlan === u.id)
+    const occupied = units?.filter((x) => x.occupied)
+    const market = u.marketRentMonthly.value
+    const inPlace = u.inPlaceRentMonthly?.value
+    const totals: PlanTotals = units
+      ? {
+          units: units.length,
+          occupied: occupied!.length,
+          preLeased: units.filter((x) => !x.occupied && x.preLeased).length,
+          sf: units.reduce((s, x) => s + x.sf, 0),
+          market: units.reduce((s, x) => s + x.marketRentMonthly, 0),
+          occupiedMarket: occupied!.reduce((s, x) => s + x.marketRentMonthly, 0),
+          inPlace: occupied!.reduce((s, x) => s + x.inPlaceRentMonthly, 0),
+          rented: occupied!.length,
+        }
+      : {
+          units: u.unitCount,
+          occupied: u.occupiedUnits,
+          preLeased: 0,
+          sf: u.avgSF * u.unitCount,
+          market: market * u.unitCount,
+          occupiedMarket: market * u.occupiedUnits,
+          inPlace: (inPlace ?? market) * u.occupiedUnits,
+          rented: inPlace === undefined ? 0 : u.occupiedUnits,
+        }
+    return [u.id, u.label, totals]
+  })
+  const byUnit = rr.units !== undefined
+  /** Negative (in-place above market) in parentheses, like the percent. */
+  const signed = (x: number, f: (n: number) => string) => (x < -0.005 ? `(${f(-x)})` : f(Math.max(0, x)))
+  const row = (id: string, floorPlan: string, t: PlanTotals): UnitMixRow => {
+    const loss = t.occupiedMarket - t.inPlace
+    const hasLoss = t.rented > 0
+    return {
+      id,
+      floorPlan,
+      units: fmt.int(t.units),
+      occupied: fmt.int(t.occupied),
+      vacant: fmt.int(t.units - t.occupied),
+      preLeased: byUnit ? fmt.int(t.preLeased) : '—',
+      avgSF: t.units ? fmt.int(t.sf / t.units) : '—',
+      market: t.units ? fmt.usdCents(t.market / t.units) : '—',
+      inPlace: t.occupied ? fmt.usdCents(t.inPlace / t.occupied) : '—',
+      lossToLease: hasLoss ? signed(loss / t.occupied, fmt.usdCents) : '—',
+      lossToLeasePct: hasLoss && t.occupiedMarket ? fmt.pct(loss / t.occupiedMarket, 1) : '—',
+      lossToLeaseAnnual: hasLoss ? signed(loss * 12, fmt.usd) : '—',
+    }
+  }
+  const all = plans.reduce<PlanTotals>(
+    (s, [, , t]) => {
+      for (const k of Object.keys(s) as (keyof PlanTotals)[]) s[k] += t[k]
+      return s
+    },
+    { units: 0, occupied: 0, preLeased: 0, sf: 0, market: 0, occupiedMarket: 0, inPlace: 0, rented: 0 },
+  )
+  const first = rr.unitTypes[0]?.marketRentMonthly
+  return {
+    kind: 'unit-mix',
+    source: first ? { source: first.source, sourceName: first.sourceName } : { source: 'estimated', sourceName: 'No units' },
+    byUnit,
+    rows: plans.map(([id, label, t]) => row(id, label, t)),
+    totals: row('total', 'Total', all),
   }
 }
 

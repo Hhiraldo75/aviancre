@@ -75,6 +75,11 @@ export function editableFields(a: UnderwritingAssumptions): AssumptionField[] {
   if (isMF) {
     pct('multifamily.turnoverRate', 'Turnover rate', 0, 100)
     usd('multifamily.turnoverCostPerUnit', 'Turnover cost', '/move-out')
+    if (a.multifamily?.leaseUpUnitsPerMonth) {
+      const suffix = 'units/mo'
+      const format = (x: number) => `${Number(x.toFixed(1))} ${suffix}`
+      fields.push({ key: 'multifamily.leaseUpUnitsPerMonth', label: 'Lease-up pace (vacant units)', group, scale: 1, suffix, min: 1, max: 1000, format })
+    }
   } else {
     pct('leasing.newLeaseEscalationPct', 'New-lease escalation', 0, 10, (x) => `${fmt.pctShort(x)}/yr`, '%/yr')
     pct('leasing.renewalProbability', 'Renewal probability', 0, 100)

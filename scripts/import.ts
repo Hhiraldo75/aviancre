@@ -1,6 +1,6 @@
 /**
  * Import a rent roll (CSV or Excel .xlsx, in the `npm run rent-roll` export
- * format), validate it, and save the deal as private-deals/<id>.json for
+ * format, or a unit rent roll for apartments), validate it, and save the deal as private-deals/<id>.json for
  * `npm run underwrite` and /underwriting-analyst.
  *
  *   npm run import -- <file> [--asset-type office] [--class B] [--submarket downtown] [--address "1 Main St"]
@@ -19,7 +19,8 @@ import { dealPath } from './deals'
 import { PRIVATE_DIR } from './privateDeals'
 
 const USAGE =
-  'Usage: npm run import -- <file.csv|file.xlsx> [--asset-type office|retail|industrial|mixed-use] [--class A|B|C] [--submarket <id>] [--address "…"]'
+  'Usage: npm run import -- <file.csv|file.xlsx> [--asset-type office|retail|industrial|mixed-use|multifamily] [--class A|B|C] [--submarket <id>] [--address "…"]'
+const ASSET_TYPES: AssetType[] = [...IMPORT_ASSET_TYPES, 'multifamily']
 const VALUE_FLAGS = ['asset-type', 'class', 'submarket', 'address']
 
 function fail(message: string): never {
@@ -42,7 +43,7 @@ if (!existsSync(file)) fail(`No such file: ${file}`)
 const details: DealDetails = { address: flag('address') }
 const assetType = flag('asset-type')
 if (assetType !== undefined) {
-  if (!(IMPORT_ASSET_TYPES as string[]).includes(assetType)) fail(`--asset-type must be one of: ${IMPORT_ASSET_TYPES.join(', ')}.`)
+  if (!(ASSET_TYPES as string[]).includes(assetType)) fail(`--asset-type must be one of: ${ASSET_TYPES.join(', ')}.`)
   details.assetType = assetType as AssetType
 }
 const cls = flag('class')?.toUpperCase()
@@ -64,8 +65,11 @@ const result = parseRentRoll(grid, { fileName, asOf: today, details, importedAt:
 const s = result.summary
 const sf = (n: number) => n.toLocaleString('en-US')
 console.log(`\n${s.name || fileName}`)
+const rentable = `rentable ${s.rentableSF === null ? '?' : sf(s.rentableSF)} SF`
 console.log(
-  `  ${s.leases} leases (${sf(s.leasedSF)} SF), ${s.vacancies} vacant suites (${sf(s.vacantSF)} SF), rentable ${s.rentableSF === null ? '?' : sf(s.rentableSF)} SF`,
+  s.kind === 'multifamily'
+    ? `  ${sf(s.units)} units (${sf(s.occupiedUnits)} occupied), ${s.floorPlans} floor plans, ${rentable}`
+    : `  ${s.leases} leases (${sf(s.leasedSF)} SF), ${s.vacancies} vacant suites (${sf(s.vacantSF)} SF), ${rentable}`,
 )
 
 const line = (i: ImportIssue) => `  - ${i.row !== undefined ? `Row ${i.row}${i.column ? ` (${i.column})` : ''}: ` : ''}${i.message}`

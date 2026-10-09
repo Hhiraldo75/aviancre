@@ -8,6 +8,7 @@ import type {
   Property,
   Recovery,
   RenewalOption,
+  RentRoll,
   RentStep,
   SubmarketId,
   VacantSpace,
@@ -15,25 +16,32 @@ import type {
 import { SUBMARKETS } from '../data/submarkets'
 import { slug } from './format'
 import { marketViewFor } from './marketView'
+import {
+  isBlank,
+  norm,
+  optionalNumber,
+  parseDate,
+  parseNumber,
+  readTable,
+  text,
+  type Cell,
+  type ColumnSpec,
+  type ImportIssue,
+  type Report,
+  type TableRow,
+} from './rentRollCells'
 import { estimate, fromImport } from './sourced'
+import { readUnits, unitMix } from './unitRentRoll'
 
 /**
  * Rent roll import: reads the format `rentRollCSV` exports (title, rentable SF,
  * property block, leases table, vacant suites table) back into a Property,
- * validating every row first. Pure: the caller turns a CSV or .xlsx file into
+ * validating every row first. A unit rent roll (property block, then a Units
+ * table) becomes a multifamily Property instead (see unitRentRoll.ts). Pure: the caller turns a CSV or .xlsx file into
  * a grid of cells (see rentRollFile.ts) and decides what to do with the result.
  */
 
-/** One spreadsheet cell: text, a number, or empty. Dates arrive as ISO text or Excel serial numbers. */
-export type Cell = string | number | null | undefined
-
-export interface ImportIssue {
-  severity: 'error' | 'warning'
-  /** 1-based row number, as Excel and text editors show it. */
-  row?: number
-  column?: string
-  message: string
-}
+export { excelSerialToISO, parseDate, parseNumber, type Cell, type ImportIssue } from './rentRollCells'
 
 /** What sets the market defaults: from the file's property block, a picker, or CLI flags. */
 export interface DealDetails {
@@ -43,14 +51,9 @@ export interface DealDetails {
   address?: string
 }
 
-export interface RentRollSummary {
-  name: string
-  rentableSF: number | null
-  leases: number
-  vacancies: number
-  leasedSF: number
-  vacantSF: number
-}
+export type RentRollSummary =
+  | { kind: 'commercial'; name: string; rentableSF: number | null; leases: number; vacancies: number; leasedSF: number; vacantSF: number }
+  | { kind: 'multifamily'; name: string; rentableSF: number | null; units: number; occupiedUnits: number; floorPlans: number }
 
 export interface RentRollImport {
   /** Null when there is any error: bad data never loads. */
@@ -70,26 +73,12 @@ export interface ImportOptions {
   importedAt?: ISODate
 }
 
-/** Commercial asset types only; multifamily rent rolls are by unit type and use another format. */
+/** Asset types for a commercial (lease) rent roll; a unit rent roll is always multifamily. */
 export const IMPORT_ASSET_TYPES: AssetType[] = ['office', 'retail', 'industrial', 'mixed-use']
 export const BUILDING_CLASSES: BuildingClass[] = ['A', 'B', 'C']
 
-/** Lowercase, without parenthesized units, single-spaced: "Starting rent ($/SF/yr)" → "starting rent". */
-const norm = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/\([^)]*\)/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-const text = (c: Cell) => (c === null || c === undefined ? '' : String(c).trim())
-
-const isBlank = (row: Cell[] | undefined) => !row || row.every((c) => text(c) === '')
-
-interface ColumnSpec {
-  label: string
-  required: boolean
-}
+/** Section titles; each ends the table above it. */
+const SECTIONS = ['leases', 'vacant suites', 'units']
 
 const LEASE_COLUMNS = {
   tenant: { label: 'Tenant', required: true },
@@ -130,48 +119,21 @@ const LEASE_TYPES: Record<string, LeaseType> = {
   'full-service-gross': 'full-service-gross',
 }
 
-const PROPERTY_FIELDS = ['asset type', 'building class', 'submarket', 'address'] as const
-const DETAIL_KEYS: Record<(typeof PROPERTY_FIELDS)[number], keyof DealDetails> = {
+type DetailField = 'asset type' | 'building class' | 'submarket' | 'address'
+/** Property block rows; "class" is the unit rent roll's name for building class. */
+const PROPERTY_FIELDS: Record<string, DetailField | 'units'> = {
+  'asset type': 'asset type',
+  'building class': 'building class',
+  class: 'building class',
+  submarket: 'submarket',
+  address: 'address',
+  units: 'units',
+}
+const DETAIL_KEYS: Record<DetailField, keyof DealDetails> = {
   'asset type': 'assetType',
   'building class': 'buildingClass',
   submarket: 'submarket',
   address: 'address',
-}
-
-/** Excel's 1900 date system: serial 25569 is 1970-01-01. */
-export function excelSerialToISO(serial: number): ISODate {
-  return new Date(Math.round((serial - 25569) * 86_400_000)).toISOString().slice(0, 10)
-}
-
-function isoDate(y: number, m: number, d: number): ISODate | null {
-  const t = new Date(Date.UTC(y, m - 1, d))
-  if (t.getUTCFullYear() !== y || t.getUTCMonth() !== m - 1 || t.getUTCDate() !== d) return null
-  return t.toISOString().slice(0, 10)
-}
-
-/** YYYY-MM-DD, M/D/YYYY or M/D/YY (as Excel re-saves a CSV), or an Excel date serial. Null when invalid. */
-export function parseDate(c: Cell): ISODate | null {
-  if (typeof c === 'number') return c >= 1 && c < 110_000 ? excelSerialToISO(c) : null
-  const s = text(c)
-  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s)
-  if (m) return isoDate(+m[1], +m[2], +m[3])
-  m = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(s)
-  if (m) {
-    const y = m[3].length === 2 ? (+m[3] < 70 ? 2000 : 1900) + +m[3] : +m[3]
-    return isoDate(y, +m[1], +m[2])
-  }
-  return null
-}
-
-/** A number, allowing "$", thousands commas and a trailing "%" (3% → 0.03). Null when blank, NaN when not a number. */
-export function parseNumber(c: Cell): number | null {
-  if (typeof c === 'number') return c
-  const s = text(c)
-  if (!s) return null
-  const percent = s.endsWith('%')
-  const t = s.replace(/[$,\s]/g, '').replace(/%$/, '')
-  if (!/^-?(\d+\.?\d*|\.\d+)$/.test(t)) return NaN
-  return percent ? Number(t) / 100 : Number(t)
 }
 
 /** The id an imported deal gets: "deal-" + its name. Private deals are recognized by this prefix. */
@@ -191,26 +153,41 @@ export function parseRentRoll(grid: Cell[][], opts: ImportOptions): RentRollImpo
   const error = (message: string, row?: number, column?: string) => issues.push({ severity: 'error', row, column, message })
   const warn = (message: string, row?: number, column?: string) => issues.push({ severity: 'warning', row, column, message })
   const firstCell = (i: number) => norm(text(grid[i]?.[0]))
+  const nextRow = (i: number) => {
+    let j = i + 1
+    while (j < grid.length && isBlank(grid[j])) j++
+    return j
+  }
 
   // ---- sections ----
+  // A unit rent roll has a "Units" title row (unlike the property block's "Units, 314" row) over a table headed "Unit".
+  const unitsTitle = (i: number) => firstCell(i) === 'units' && grid[i].slice(1).every((c) => !text(c))
   const leasesAt = grid.findIndex((_, i) => firstCell(i) === 'leases')
   const vacantAt = grid.findIndex((_, i) => firstCell(i) === 'vacant suites')
-  const headEnd = leasesAt >= 0 ? leasesAt : vacantAt >= 0 ? vacantAt : grid.length
-  if (leasesAt < 0) error('No "Leases" section. The file needs a row reading "Leases" above the leases table.')
-  if (vacantAt < 0) error('No "Vacant suites" section. The file needs a row reading "Vacant suites" above that table (it may be empty).')
+  let unitsAt = grid.findIndex((_, i) => unitsTitle(i) && firstCell(nextRow(i)) === 'unit')
+  if (unitsAt < 0 && leasesAt < 0 && vacantAt < 0) {
+    for (let i = grid.length - 1; i >= 0 && unitsAt < 0; i--) if (unitsTitle(i)) unitsAt = i
+  }
+  const isUnits = unitsAt >= 0
+  const headEnd = isUnits ? unitsAt : leasesAt >= 0 ? leasesAt : vacantAt >= 0 ? vacantAt : grid.length
+  if (!isUnits) {
+    if (leasesAt < 0) error('No "Leases" section. The file needs a row reading "Leases" above the leases table.')
+    if (vacantAt < 0) error('No "Vacant suites" section. The file needs a row reading "Vacant suites" above that table (it may be empty).')
+  }
+  const tableName = isUnits ? 'units' : 'leases'
 
   // ---- title and rentable SF ----
   const titleRow = grid.findIndex((row) => !isBlank(row))
   const titleText = titleRow >= 0 && titleRow < headEnd ? text(grid[titleRow][0]) : ''
-  const isTitle = titleText && !/^rentable sf/i.test(titleText) && !PROPERTY_FIELDS.some((f) => norm(titleText) === f)
+  const isTitle = titleText && !/^rentable sf/i.test(titleText) && !Object.hasOwn(PROPERTY_FIELDS, norm(titleText))
   const isSample = isTitle ? SAMPLE_SUFFIX.test(titleText) : false
-  const name = isTitle ? titleText.replace(SAMPLE_SUFFIX, '').replace(/:\s*rent roll\s*$/i, '').trim() : ''
+  const name = isTitle ? titleText.replace(SAMPLE_SUFFIX, '').replace(/:\s*(unit )?rent roll\s*$/i, '').trim() : ''
   if (!name) error('No property name. The first row should read "<Property name>: rent roll".', 1)
 
   let rentableSF: number | null = null
   const rsfRow = grid.slice(0, headEnd).findIndex((row) => /^rentable sf/i.test(text(row[0])))
   if (rsfRow < 0) {
-    error('No rentable SF. Add a row reading "Rentable SF <number>" above the leases table.')
+    error(`No rentable SF. Add a row reading "Rentable SF <number>" above the ${tableName} table.`)
   } else {
     const inline = /^rentable sf\b[:\s]*([\d,]+(?:\.\d+)?)/i.exec(text(grid[rsfRow][0]))
     const n = inline ? parseNumber(inline[1]) : parseNumber(grid[rsfRow][1])
@@ -221,17 +198,28 @@ export function parseRentRoll(grid: Cell[][], opts: ImportOptions): RentRollImpo
 
   // ---- property block ----
   const fileDetails: DealDetails = {}
-  const fieldRows: Partial<Record<(typeof PROPERTY_FIELDS)[number], number>> = {}
+  const fieldRows: Partial<Record<DetailField | 'units', number>> = {}
+  let statedUnits: number | undefined
   grid.slice(0, headEnd).forEach((row, i) => {
-    const field = PROPERTY_FIELDS.find((f) => firstCell(i) === f)
-    if (!field) return
+    if (!Object.hasOwn(PROPERTY_FIELDS, firstCell(i))) return
+    const field = PROPERTY_FIELDS[firstCell(i)]
     fieldRows[field] = i + 1
     const value = text(row[1])
+    if (field === 'units') {
+      const n = parseNumber(row[1])
+      if (n === null) return
+      if (!Number.isInteger(n) || n <= 0) error(`Units must be a whole number above 0, got "${value}".`, i + 1, 'Units')
+      else statedUnits = n
+      return
+    }
     // An explicit choice (picker or CLI flag) replaces the file's value, valid or not.
     if (!value || opts.details?.[DETAIL_KEYS[field]]) return
     if (field === 'asset type') {
       const v = value.toLowerCase()
-      if (v === 'multifamily') error('Multifamily rent rolls are by unit type and can\'t be imported in this format.', i + 1, 'Asset type')
+      if (v === 'multifamily') {
+        if (isUnits) fileDetails.assetType = 'multifamily'
+        else error('Multifamily rent rolls list units, not leases: use the unit rent roll format (a "Units" table).', i + 1, 'Asset type')
+      } else if (isUnits) error(`A unit rent roll is multifamily, not "${value}".`, i + 1, 'Asset type')
       else if ((IMPORT_ASSET_TYPES as string[]).includes(v)) fileDetails.assetType = v as AssetType
       else error(`Unknown asset type "${value}". Use one of: ${IMPORT_ASSET_TYPES.join(', ')}.`, i + 1, 'Asset type')
     } else if (field === 'building class') {
@@ -244,8 +232,20 @@ export function parseRentRoll(grid: Cell[][], opts: ImportOptions): RentRollImpo
       else error(`Unknown submarket "${value}". Use one of: ${Object.keys(SUBMARKETS).join(', ')}.`, i + 1, 'Submarket')
     } else fileDetails.address = value
   })
+  // The format says what a unit rent roll is; it needs no asset type row or picker.
+  if (isUnits && !issues.some((x) => x.column === 'Asset type')) fileDetails.assetType = 'multifamily'
   const details: DealDetails = { ...fileDetails, ...definedOnly(opts.details) }
-  const missing = (label: string, field: (typeof PROPERTY_FIELDS)[number]) =>
+  const override = opts.details?.assetType
+  if (override && (override === 'multifamily') !== isUnits) {
+    error(
+      isUnits
+        ? `A unit rent roll is multifamily, not ${override}.`
+        : 'Multifamily rent rolls list units, not leases: use the unit rent roll format (a "Units" table).',
+      fieldRows['asset type'],
+      'Asset type',
+    )
+  }
+  const missing = (label: string, field: DetailField) =>
     error(`${label} is missing. Add the "${label}" row to the property block, or choose one when importing.`, fieldRows[field], label)
   if (!details.assetType && !issues.some((x) => x.column === 'Asset type')) missing('Asset type', 'asset type')
   if (!details.buildingClass && !issues.some((x) => x.column === 'Building class')) missing('Building class', 'building class')
@@ -264,75 +264,113 @@ export function parseRentRoll(grid: Cell[][], opts: ImportOptions): RentRollImpo
   // ---- tables ----
   const id = dealId(name)
   const sourceName = `Imported rent roll (${opts.fileName})`
-  const leaseTable = leasesAt >= 0 ? readTable(grid, leasesAt, LEASE_COLUMNS, 'Leases', error, warn) : null
-  const vacantTable = vacantAt >= 0 ? readTable(grid, vacantAt, VACANT_COLUMNS, 'Vacant suites', error, warn) : null
-
-  const leases: Lease[] = []
-  for (const { row, get } of leaseTable?.rows ?? []) {
-    const lease = parseLease(row, get, `${id}-L${leases.length + 1}`, sourceName, error, warn)
-    if (lease) leases.push(lease)
-  }
-  const vacancies: VacantSpace[] = []
-  for (const { row, get } of vacantTable?.rows ?? []) {
-    const space = parseVacant(row, get, `${id}-V${vacancies.length + 1}`, sourceName, opts.importedAt, error)
-    if (space) vacancies.push(space)
-  }
-  if (leaseTable && !leaseTable.rows.length && vacantTable && !vacantTable.rows.length) {
-    error('The rent roll has no leases and no vacant suites.', leasesAt + 1)
-  }
-
-  // ---- cross-row checks ----
-  const suites = new Map<string, number>()
-  for (const { row, get } of [...(leaseTable?.rows ?? []), ...(vacantTable?.rows ?? [])]) {
-    const suite = text(get('suite'))
-    if (!suite) continue
-    const first = suites.get(suite)
-    if (first !== undefined) warn(`Suite "${suite}" also appears on row ${first}.`, row, 'Suite')
-    else suites.set(suite, row)
-  }
-  for (const { row, get } of leaseTable?.rows ?? []) {
-    const end = parseDate(get('end'))
-    if (end && end < opts.asOf) {
-      warn(`Lease expired on ${end}, before the analysis date (${opts.asOf}); the suite is treated as rolling over.`, row, 'End')
+  const importedAt = opts.importedAt ?? opts.asOf
+  const f = (n: number) => n.toLocaleString('en-US')
+  let rentRoll: RentRoll
+  let summary: RentRollSummary
+  if (isUnits) {
+    const table = readUnits(grid, unitsAt, SECTIONS, opts.asOf, error, warn)
+    if (table && !table.rows.length) error('The rent roll has no units.', unitsAt + 1)
+    if (table && statedUnits !== undefined && statedUnits !== table.rows.length) {
+      warn(`The property block says ${f(statedUnits)} units, but the Units table has ${f(table.rows.length)} rows. The table is used.`, fieldRows.units, 'Units')
     }
-  }
-  // Totals from every row's SF cell, so a row with an error elsewhere still counts.
-  const sumSF = (rows: TableRow<'sf'>[] = []) =>
-    rows.reduce((s, { get }) => {
-      const n = parseNumber(get('sf'))
-      return n !== null && Number.isFinite(n) && n > 0 ? s + n : s
-    }, 0)
-  const leasedSF = sumSF(leaseTable?.rows)
-  const vacantSF = sumSF(vacantTable?.rows)
-  if (rentableSF !== null && Math.abs(leasedSF + vacantSF - rentableSF) > 0.5) {
-    const f = (n: number) => n.toLocaleString('en-US')
-    warn(
-      `Leased (${f(leasedSF)} SF) + vacant (${f(vacantSF)} SF) = ${f(leasedSF + vacantSF)} SF, but rentable SF is ${f(rentableSF)}. ` +
-        'Occupancy and per-SF figures use rentable SF.',
-      rsfRow + 1,
-      'Rentable SF',
-    )
+    if (table && rentableSF !== null && Math.abs(table.totalSF - rentableSF) > 0.5) {
+      warn(`The units total ${f(table.totalSF)} SF, but rentable SF is ${f(rentableSF)}. Per-SF figures use rentable SF.`, rsfRow + 1, 'Rentable SF')
+    }
+    const units = table?.units ?? []
+    const occupied = units.filter((u) => u.occupied)
+    const otherIncome = occupied.reduce((s, u) => s + u.otherIncomeMonthly, 0)
+    rentRoll = {
+      kind: 'multifamily',
+      unitTypes: unitMix(units, table?.floorPlans ?? [], sourceName, importedAt),
+      units,
+      otherIncomePerUnitMonthly: occupied.length ? fromImport(otherIncome / occupied.length, sourceName, importedAt) : undefined,
+    }
+    summary = {
+      kind: 'multifamily',
+      name,
+      rentableSF,
+      units: table?.rows.length ?? 0,
+      occupiedUnits: table?.occupiedRows ?? 0,
+      floorPlans: new Set(table?.rows.map(({ get }) => text(get('floorPlan'))).filter(Boolean)).size,
+    }
+  } else {
+    const leaseTable = leasesAt >= 0 ? readTable(grid, leasesAt, LEASE_COLUMNS, 'Leases', SECTIONS, error, warn) : null
+    const vacantTable = vacantAt >= 0 ? readTable(grid, vacantAt, VACANT_COLUMNS, 'Vacant suites', SECTIONS, error, warn) : null
+
+    const leases: Lease[] = []
+    for (const { row, get } of leaseTable?.rows ?? []) {
+      const lease = parseLease(row, get, `${id}-L${leases.length + 1}`, sourceName, error, warn)
+      if (lease) leases.push(lease)
+    }
+    const vacancies: VacantSpace[] = []
+    for (const { row, get } of vacantTable?.rows ?? []) {
+      const space = parseVacant(row, get, `${id}-V${vacancies.length + 1}`, sourceName, opts.importedAt, error)
+      if (space) vacancies.push(space)
+    }
+    if (leaseTable && !leaseTable.rows.length && vacantTable && !vacantTable.rows.length) {
+      error('The rent roll has no leases and no vacant suites.', leasesAt + 1)
+    }
+
+    // ---- cross-row checks ----
+    const suites = new Map<string, number>()
+    for (const { row, get } of [...(leaseTable?.rows ?? []), ...(vacantTable?.rows ?? [])]) {
+      const suite = text(get('suite'))
+      if (!suite) continue
+      const first = suites.get(suite)
+      if (first !== undefined) warn(`Suite "${suite}" also appears on row ${first}.`, row, 'Suite')
+      else suites.set(suite, row)
+    }
+    for (const { row, get } of leaseTable?.rows ?? []) {
+      const end = parseDate(get('end'))
+      if (end && end < opts.asOf) {
+        warn(`Lease expired on ${end}, before the analysis date (${opts.asOf}); the suite is treated as rolling over.`, row, 'End')
+      }
+    }
+    // Totals from every row's SF cell, so a row with an error elsewhere still counts.
+    const sumSF = (rows: TableRow<'sf'>[] = []) =>
+      rows.reduce((s, { get }) => {
+        const n = parseNumber(get('sf'))
+        return n !== null && Number.isFinite(n) && n > 0 ? s + n : s
+      }, 0)
+    const leasedSF = sumSF(leaseTable?.rows)
+    const vacantSF = sumSF(vacantTable?.rows)
+    if (rentableSF !== null && Math.abs(leasedSF + vacantSF - rentableSF) > 0.5) {
+      warn(
+        `Leased (${f(leasedSF)} SF) + vacant (${f(vacantSF)} SF) = ${f(leasedSF + vacantSF)} SF, but rentable SF is ${f(rentableSF)}. ` +
+          'Occupancy and per-SF figures use rentable SF.',
+        rsfRow + 1,
+        'Rentable SF',
+      )
+    }
+    rentRoll = { kind: 'commercial', leases, vacancies }
+    summary = {
+      kind: 'commercial',
+      name,
+      rentableSF,
+      leases: leaseTable?.rows.length ?? 0,
+      vacancies: vacantTable?.rows.length ?? 0,
+      leasedSF,
+      vacantSF,
+    }
   }
   if (!details.address) {
     const where = details.submarket ? SUBMARKETS[details.submarket].name : 'its submarket'
     warn(`No address. The deal is placed at the center of ${where} on the map (approximate).`, fieldRows.address, 'Address')
   }
 
-  const summary: RentRollSummary = {
-    name,
-    rentableSF,
-    leases: leaseTable?.rows.length ?? 0,
-    vacancies: vacantTable?.rows.length ?? 0,
-    leasedSF,
-    vacantSF,
-  }
   issues.sort((a, b) => (a.row ?? 0) - (b.row ?? 0))
   if (issues.some((x) => x.severity === 'error')) return { property: null, issues, fileDetails, summary }
 
   const { assetType, buildingClass, submarket } = details as Required<Pick<DealDetails, 'assetType' | 'buildingClass' | 'submarket'>>
-  const importedAt = opts.importedAt ?? opts.asOf
   const notInRentRoll = (what: string) => `Not in rent roll – replace with ${what}`
   const [lng, lat] = SUBMARKETS[submarket].center
+  const market = marketViewFor(submarket, assetType, buildingClass)
+  if (rentRoll.kind === 'multifamily') {
+    const units = rentRoll.units ?? []
+    const avgMarket = units.reduce((s, u) => s + u.marketRentMonthly, 0) / units.length
+    market.marketRent = fromImport(Math.round(avgMarket * 100) / 100, `${sourceName}: average market rent per unit`, importedAt)
+  }
   const property: Property = {
     id,
     name,
@@ -351,11 +389,12 @@ export function parseRentRoll(grid: Cell[][], opts: ImportOptions): RentRollImpo
       grossBuildingSF: estimate(rentableSF!, notInRentRoll('building records (rentable SF used)')),
       rentableSF: fromImport(rentableSF!, sourceName, importedAt),
       floors: estimate(1, notInRentRoll('building records')),
+      ...(rentRoll.kind === 'multifamily' ? { unitCount: fromImport(rentRoll.units?.length ?? 0, sourceName, importedAt) } : {}),
     },
     zoning: { district: estimate('Unknown', notInRentRoll('the Providence zoning map')) },
     valuation: {},
-    market: marketViewFor(submarket, assetType, buildingClass),
-    rentRoll: { kind: 'commercial', leases, vacancies },
+    market,
+    rentRoll,
     isSample,
     importedFrom: { fileName: opts.fileName, importedAt },
   }
@@ -366,70 +405,8 @@ function definedOnly(d: DealDetails | undefined): DealDetails {
   return Object.fromEntries(Object.entries(d ?? {}).filter(([, v]) => v !== undefined && v !== '')) as DealDetails
 }
 
-type Report = (message: string, row?: number, column?: string) => void
-
-interface TableRow<K extends string> {
-  /** 1-based row number. */
-  row: number
-  get: (key: K) => Cell
-}
-
-/**
- * The table under a section title: its header row (the next non-blank row),
- * then data rows up to the first blank row or the next section.
- */
-function readTable<K extends string>(
-  grid: Cell[][],
-  titleAt: number,
-  columns: Record<K, ColumnSpec>,
-  section: string,
-  error: Report,
-  warn: Report,
-): { rows: TableRow<K>[] } | null {
-  let headerAt = titleAt + 1
-  while (headerAt < grid.length && isBlank(grid[headerAt])) headerAt++
-  const header = (grid[headerAt] ?? []).map((c) => norm(text(c)))
-  if (headerAt >= grid.length || ['leases', 'vacant suites'].includes(header[0])) {
-    error(`The ${section} section has no header row.`, titleAt + 1)
-    return null
-  }
-  const index = {} as Record<K, number>
-  const missing: string[] = []
-  for (const [key, spec] of Object.entries(columns) as [K, ColumnSpec][]) {
-    index[key] = header.indexOf(norm(spec.label))
-    if (index[key] < 0 && spec.required) missing.push(spec.label)
-  }
-  if (missing.length) {
-    error(`${section}: missing required column${missing.length > 1 ? 's' : ''} ${missing.map((m) => `"${m}"`).join(', ')}.`, headerAt + 1)
-    return null
-  }
-  const known = new Set(Object.values<ColumnSpec>(columns).map((c) => norm(c.label)))
-  grid[headerAt].forEach((c, i) => {
-    if (text(c) && !known.has(header[i])) warn(`${section}: column "${text(c)}" isn't used and was ignored.`, headerAt + 1, text(c))
-  })
-
-  const rows: TableRow<K>[] = []
-  for (let i = headerAt + 1; i < grid.length; i++) {
-    const r = grid[i]
-    if (isBlank(r) || ['leases', 'vacant suites'].includes(norm(text(r[0])))) break
-    rows.push({ row: i + 1, get: (key) => (index[key] >= 0 ? r[index[key]] : undefined) })
-  }
-  return { rows }
-}
-
 type LeaseKey = keyof typeof LEASE_COLUMNS
 type VacantKey = keyof typeof VACANT_COLUMNS
-
-/** Reads an optional number cell; reports and returns NaN when it isn't a number ≥ min. */
-function optionalNumber(c: Cell, column: string, row: number, error: Report, min = 0): number | undefined {
-  const n = parseNumber(c)
-  if (n === null) return undefined
-  if (!Number.isFinite(n) || n < min) {
-    error(`${column} must be a number of at least ${min}, got "${text(c)}".`, row, column)
-    return NaN
-  }
-  return n
-}
 
 /** Rates are decimals; a value of 1 or more was almost certainly typed as a whole percent. */
 function checkRate(n: number, column: string, row: number, error: Report): boolean {

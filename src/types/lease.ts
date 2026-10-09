@@ -113,9 +113,31 @@ export interface UnitType {
   inPlaceRentMonthly?: Sourced<USD>
 }
 
+/** One apartment from a unit-level rent roll (imported deals). Rents are $/month. */
+export interface ApartmentUnit {
+  unit: string
+  /** The UnitType id this unit is grouped under. */
+  floorPlan: string
+  sf: SF
+  occupied: boolean
+  marketRentMonthly: USD
+  /** 0 when vacant. */
+  inPlaceRentMonthly: USD
+  otherIncomeMonthly: USD
+  moveInDate?: ISODate
+  /** Omitted for a vacant unit or a month-to-month tenant. */
+  leaseEndDate?: ISODate
+  /** Delinquent balance (+) or prepaid credit (−); reported, not modeled. */
+  balanceOwed: USD
+  /** A vacant unit with a signed applicant (or an occupied unit already re-let). */
+  preLeased: boolean
+}
+
 export interface MultifamilyRentRoll {
   kind: 'multifamily'
   unitTypes: UnitType[]
+  /** Unit by unit, when imported from a unit rent roll; the engine then rolls each lease at its lease end. */
+  units?: ApartmentUnit[]
   /** Parking, laundry, pet fees, etc., per occupied unit per month. */
   otherIncomePerUnitMonthly?: Sourced<USD>
 }

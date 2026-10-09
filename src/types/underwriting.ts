@@ -72,6 +72,8 @@ export interface MultifamilyAssumptions {
   turnoverRate: Sourced<Pct>
   /** Make-ready cost per move-out, in year-1 dollars. */
   turnoverCostPerUnit: Sourced<USD>
+  /** Vacant units leased per month (pre-leased first). Unit-level rent rolls only. */
+  leaseUpUnitsPerMonth?: S
 }
 
 /** Fixed rate, or floating off an index that can be pulled live from FRED. */

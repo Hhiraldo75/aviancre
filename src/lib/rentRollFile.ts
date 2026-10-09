@@ -1,5 +1,5 @@
 import { parseCSV } from './csv'
-import { excelSerialToISO, type Cell } from './rentRollImport'
+import { excelSerialToISO, type Cell } from './rentRollCells'
 
 /** File types the rent roll import reads. */
 export const RENT_ROLL_EXTENSIONS = ['.csv', '.xlsx'] as const

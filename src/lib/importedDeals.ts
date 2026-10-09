@@ -27,7 +27,9 @@ export function isImportedDeal(x: unknown): x is Property {
   if (!isObject(x.importedFrom) || !isObject(x.location) || !isObject(x.physical) || !isObject(x.market)) return false
   if (!isSourcedNumber(x.physical.rentableSF) || !isSourcedNumber(x.market.marketRent) || !isSourcedNumber(x.market.marketCapRate)) return false
   const rr = x.rentRoll
-  return isObject(rr) && rr.kind === 'commercial' && Array.isArray(rr.leases) && Array.isArray(rr.vacancies)
+  if (!isObject(rr)) return false
+  if (rr.kind === 'multifamily') return Array.isArray(rr.unitTypes) && (rr.units === undefined || Array.isArray(rr.units))
+  return rr.kind === 'commercial' && Array.isArray(rr.leases) && Array.isArray(rr.vacancies)
 }
 
 export function dealFile(property: Property): DealFile {
