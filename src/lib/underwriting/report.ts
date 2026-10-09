@@ -252,7 +252,9 @@ function renewalOptionCell(l: Lease): string | number {
 
 /**
  * Rent roll as CSV: every lease and vacant-suite field the underwriting engine
- * reads, so an Excel model can be built from the same inputs.
+ * reads, so an Excel model can be built from the same inputs. The property
+ * block carries what sets the market defaults (asset type, class, submarket).
+ * `parseRentRoll` (src/lib/rentRollImport.ts) reads this format back.
  */
 export function rentRollCSV(property: Property): string {
   const rr = property.rentRoll
@@ -260,6 +262,12 @@ export function rentRollCSV(property: Property): string {
   const out: (string | number | boolean | null | undefined)[][] = [
     [`${property.name}: rent roll${property.isSample ? ' (fictional sample data)' : ''}`],
     [`Rentable SF ${property.physical.rentableSF.value}; rents are annual $/SF; percentages are decimals`],
+    [],
+    ['Property'],
+    ['Asset type', property.assetType],
+    ['Building class', property.buildingClass],
+    ['Submarket', property.location.submarket],
+    ['Address', property.location.address],
     [],
     ['Leases'],
     [

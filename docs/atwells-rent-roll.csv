@@ -1,6 +1,12 @@
 Atwells Retail Row (Sample): rent roll (fictional sample data)
 Rentable SF 14400; rents are annual $/SF; percentages are decimals
 
+Property
+Asset type,retail
+Building class,B
+Submarket,federal-hill
+Address,245 Atwells Ave
+
 Leases
 Tenant,Suite,SF,Start,End,Starting rent ($/SF/yr),Escalation type,Escalation value,Lease type,Recovery method,Admin fee,Free rent (months),Renewal option rent ($/SF/yr),Base-year expense amount ($/yr)
 Casa Lucenti Trattoria,101,3400,2015-03-01,2030-02-28,24,fixed % per year,0.03,NNN,net,0.1,,30,

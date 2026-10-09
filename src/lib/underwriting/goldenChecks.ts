@@ -5,36 +5,13 @@
  */
 import { expect, it } from 'vitest'
 import type { AnnualCashFlow, UnderwritingResult } from '../../types'
+import { parseCSV } from '../csv'
 
 const DOLLARS = 1
 const RATE = 0.0001
 const DSCR = 0.01
 /** Years. WALT runs from the analysis start (Nov 1, 2026), not the Oct 4 analysis date. */
 const WALT = 0.01
-
-/** Minimal CSV parser: commas, double-quoted cells, "" escapes. */
-function parseCSV(text: string): string[][] {
-  return text
-    .trimEnd()
-    .split('\n')
-    .map((line) => {
-      const cells: string[] = []
-      let cell = ''
-      let quoted = false
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i]
-        if (quoted) {
-          if (ch === '"' && line[i + 1] === '"') (cell += '"'), i++
-          else if (ch === '"') quoted = false
-          else cell += ch
-        } else if (ch === '"') quoted = true
-        else if (ch === ',') cells.push(cell), (cell = '')
-        else cell += ch
-      }
-      cells.push(cell)
-      return cells
-    })
-}
 
 /** Fixture line label → engine field. */
 const LINES: Record<string, keyof Omit<AnnualCashFlow, 'year'>> = {

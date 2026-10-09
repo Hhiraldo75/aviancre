@@ -60,7 +60,7 @@ export default function DeveloperView({ property: p }: { property: Property }) {
           <Stat label="Rentable area" value={fmt.sf(ph.rentableSF.value)} src={ph.rentableSF} />
           <Stat label="Land area" value={ph.landAreaSF ? `${fmt.sf(ph.landAreaSF.value)} (${(ph.landAreaSF.value / 43_560).toFixed(2)} ac)` : '—'} src={ph.landAreaSF} />
           <Stat label="Floors" value={String(ph.floors.value)} src={ph.floors} />
-          <Stat label="Year built" value={String(ph.yearBuilt.value)} src={ph.yearBuilt} />
+          <Stat label="Year built" value={ph.yearBuilt ? String(ph.yearBuilt.value) : '—'} src={ph.yearBuilt} />
           <Stat label="Renovated" value={ph.yearRenovated ? String(ph.yearRenovated.value) : '—'} src={ph.yearRenovated} />
           {ph.parkingSpaces && <Stat label="Parking" value={`${ph.parkingSpaces.value} spaces`} src={ph.parkingSpaces} />}
           {ph.unitCount && <Stat label="Units" value={String(ph.unitCount.value)} src={ph.unitCount} />}

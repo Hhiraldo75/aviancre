@@ -1,6 +1,12 @@
 Westminster Office Tower (Sample): rent roll (fictional sample data)
 Rentable SF 355900; rents are annual $/SF; percentages are decimals
 
+Property
+Asset type,office
+Building class,A
+Submarket,downtown
+Address,1 Financial Plaza
+
 Leases
 Tenant,Suite,SF,Start,End,Starting rent ($/SF/yr),Escalation type,Escalation value,Lease type,Recovery method,Admin fee,Free rent (months),Renewal option rent ($/SF/yr),Base-year expense amount ($/yr)
 Weybridge Insurance Services,Fl 19–25,105700,2019-01-01,2029-12-31,26,fixed % per year,0.025,full-service-gross,base-year (2019),,,,

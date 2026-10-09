@@ -31,7 +31,8 @@ export interface PhysicalCharacteristics {
   /** Leasable area; the denominator for occupancy and rent per SF. */
   rentableSF: Sourced<SF>
   landAreaSF?: Sourced<SF>
-  yearBuilt: Sourced<number>
+  /** Omitted when unknown (e.g. an imported rent roll). */
+  yearBuilt?: Sourced<number>
   yearRenovated?: Sourced<number>
   floors: Sourced<number>
   heightFt?: Sourced<number>
@@ -56,7 +57,8 @@ export interface ZoningInfo {
 }
 
 export interface Valuation {
-  assessedValue: Sourced<USD>
+  /** Omitted when unknown (e.g. an imported rent roll). */
+  assessedValue?: Sourced<USD>
   assessmentYear?: number
   lastSalePrice?: Sourced<USD>
   lastSaleDate?: Sourced<ISODate>
@@ -89,4 +91,6 @@ export interface Property {
   tags?: string[]
   /** True for demo data. The UI should badge these clearly. */
   isSample: boolean
+  /** Set when the rent roll was imported from a file: a private deal, kept in the browser or private-deals/. */
+  importedFrom?: { fileName: string; importedAt: ISODate }
 }

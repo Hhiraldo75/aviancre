@@ -65,7 +65,8 @@ export function yearOneNOI(p: Property, asOf: ISODate): YearOneNOI {
 export interface QuickFinancials extends YearOneNOI {
   marketCapRate: number
   impliedValue: number
-  assessedValue: number
+  /** Null when unknown; the assessed-value basis then falls back to implied value. */
+  assessedValue: number | null
   purchasePrice: number
   goingInCapRate: number
   noiGrowth: number
@@ -81,8 +82,8 @@ export function quickFinancials(p: Property, asOf: ISODate, basis: PurchaseBasis
   const y1 = yearOneNOI(p, asOf)
   const marketCapRate = p.market.marketCapRate.value
   const impliedValue = y1.noi / marketCapRate
-  const assessedValue = p.valuation.assessedValue.value
-  const purchasePrice = basis === 'implied-value' ? impliedValue : assessedValue
+  const assessedValue = p.valuation.assessedValue?.value ?? null
+  const purchasePrice = basis === 'assessed-value' && assessedValue ? assessedValue : impliedValue
 
   const lookupType = p.assetType === 'mixed-use' ? 'office' : p.assetType
   const noiGrowth = SUBMARKETS[p.location.submarket].benchmarks[lookupType]?.annualRentGrowth.value ?? 0.02

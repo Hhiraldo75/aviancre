@@ -109,7 +109,7 @@ export function analystExport(property: Property, asOf: ISODate, r: Underwriting
       address: `${property.location.address}, ${property.location.city}, ${property.location.state}`,
       submarket: property.location.submarket,
       rentableSF: fig(property.physical.rentableSF.value, fmt.sf(property.physical.rentableSF.value)),
-      yearBuilt: property.physical.yearBuilt.value,
+      yearBuilt: property.physical.yearBuilt?.value ?? null,
       units: property.rentRoll.kind === 'multifamily' ? property.rentRoll.unitTypes.reduce((s, u) => s + u.unitCount, 0) : undefined,
     },
     rentRoll: rentRollSection(property, asOf, r),
