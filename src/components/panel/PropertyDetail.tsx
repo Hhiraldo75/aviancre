@@ -1,7 +1,7 @@
 import type { Persona, Property } from '../../types'
 import { fmt } from '../../lib/format'
 import { occupancy } from '../../lib/metrics'
-import { useAppStore } from '../../store/useAppStore'
+import { useAppStore, usePropertyView } from '../../store/useAppStore'
 import AnalystView from '../personas/AnalystView'
 import BrokerView from '../personas/BrokerView'
 import DeveloperView from '../personas/DeveloperView'
@@ -21,6 +21,7 @@ export default function PropertyDetail({ property: p }: { property: Property }) 
   const clear = useAppStore((s) => s.clearSelection)
   const persona = useAppStore((s) => s.activePersona)
   const View = VIEWS[persona]
+  const { matchIds } = usePropertyView()
 
   return (
     <div>
@@ -42,6 +43,7 @@ export default function PropertyDetail({ property: p }: { property: Property }) 
         <Chip>{fmt.pct(occupancy(p, asOf), 0)} leased</Chip>
         {p.isSample && <Chip tone="amber">Sample data</Chip>}
       </div>
+      {!matchIds.has(p.id) && <p className="mt-1.5 text-[11px] text-amber-300">Doesn’t match current filters</p>}
       <div className="mt-4">
         <View property={p} />
       </div>

@@ -1,6 +1,10 @@
+import { hasActiveFilters } from '../../lib/filters'
+import { FILTERED_OUT_COLOR } from '../../lib/geo'
 import { OCCUPANCY_BUCKETS } from '../../lib/metrics'
+import { useAppStore } from '../../store/useAppStore'
 
 export default function MapLegend() {
+  const filtered = useAppStore((s) => hasActiveFilters(s.filters))
   return (
     <div className="pointer-events-none absolute bottom-6 left-4 rounded-lg bg-slate-900/85 px-3 py-2 text-xs text-slate-100 shadow-lg backdrop-blur">
       <div className="mb-1 font-semibold">Occupancy</div>
@@ -10,6 +14,12 @@ export default function MapLegend() {
           {b.label}
         </div>
       ))}
+      {filtered && (
+        <div className="flex items-center gap-2">
+          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: FILTERED_OUT_COLOR }} />
+          Outside filters
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <span className="inline-block h-3 w-3 rounded-sm bg-blue-500" />
         Selected

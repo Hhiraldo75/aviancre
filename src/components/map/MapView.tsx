@@ -5,7 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { LAYER_IDS, MAP_CONFIG, SOURCE_IDS } from '../../config/map'
 import { propertiesToGeoJSON } from '../../lib/geo'
 import { fmt } from '../../lib/format'
-import { useAppStore } from '../../store/useAppStore'
+import { useAppStore, usePropertyView } from '../../store/useAppStore'
 import type { ParcelLookup } from '../../types'
 import MapLegend from './MapLegend'
 
@@ -47,8 +47,9 @@ export default function MapView() {
   const asOf = useAppStore((s) => s.asOf)
   const selectedId = useAppStore((s) => s.selectedId)
   const parcel = useAppStore((s) => s.parcel)
+  const { matchIds } = usePropertyView()
 
-  const geojson = useMemo(() => propertiesToGeoJSON(properties, asOf), [properties, asOf])
+  const geojson = useMemo(() => propertiesToGeoJSON(properties, asOf, matchIds), [properties, asOf, matchIds])
   // Read the latest data inside map callbacks without re-creating the map.
   const geojsonRef = useRef(geojson)
   geojsonRef.current = geojson
@@ -88,7 +89,7 @@ export default function MapView() {
         },
       })
 
-      // Sample properties, colored by occupancy. promoteId lets us use feature-state for selection.
+      // Sample properties, colored by occupancy (faded gray when filtered out). promoteId lets us use feature-state for selection.
       map.addSource(SOURCE_IDS.properties, {
         type: 'geojson',
         data: geojsonRef.current,
@@ -142,19 +143,24 @@ export default function MapView() {
       setLoaded(true)
     })
 
-    // Sample building → its dashboard. Anywhere else → look up the real public parcel there.
+    // Matching sample building → its dashboard. Anywhere else, including a
+    // filtered-out sample building → look up the real public parcel there.
     map.on('click', (e) => {
       const hit = map.getLayer(LAYER_IDS.properties)
         ? map.queryRenderedFeatures(e.point, { layers: [LAYER_IDS.properties] })[0]
         : undefined
-      const id = hit?.properties?.id
+      const id = hit?.properties?.matches ? hit.properties.id : undefined
       if (typeof id === 'string') useAppStore.getState().select(id)
       else void useAppStore.getState().lookupParcel(e.lngLat.lng, e.lngLat.lat)
     })
 
     map.on('mousemove', LAYER_IDS.properties, (e) => {
       const props = e.features?.[0]?.properties
-      if (!props) return
+      if (!props?.matches) {
+        map.getCanvas().style.cursor = ''
+        popup.remove()
+        return
+      }
       map.getCanvas().style.cursor = 'pointer'
       // Build DOM nodes instead of an HTML string, so imported tenant/property names can't inject markup.
       const el = document.createElement('div')
@@ -178,7 +184,7 @@ export default function MapView() {
     }
   }, [])
 
-  // 2. Push new data when properties or the analysis date change.
+  // 2. Push new data when properties, the analysis date or the filters change.
   useEffect(() => {
     if (!loaded) return
     const source = mapRef.current?.getSource(SOURCE_IDS.properties) as GeoJSONSource | undefined

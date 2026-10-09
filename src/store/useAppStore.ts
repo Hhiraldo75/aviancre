@@ -1,6 +1,20 @@
+import { useMemo } from 'react'
 import { create } from 'zustand'
 import type { GisDetails, ISODate, ParcelLookup, Persona, Property, TaxRecord } from '../types'
 import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
+import {
+  DEFAULT_SORT,
+  EMPTY_FILTERS,
+  filtersFromQuery,
+  filtersToQuery,
+  propertyView,
+  underwritingFactsById,
+  underwritingNeeds,
+  withoutFilter,
+  type PropertyFilters,
+  type PropertyView,
+  type SortKey,
+} from '../lib/filters'
 import { todayISO } from '../lib/metrics'
 import type { AssumptionEdits } from '../lib/underwriting/edits'
 import { lookupParcelAt } from '../services/providenceGis'
@@ -9,10 +23,16 @@ import { lookupTaxRecord } from '../services/providenceOpenData'
 /** The city GIS server is optional enrichment; give up on it after this long. */
 const GIS_TIMEOUT_MS = 8000
 
+/** Browser only: tests import the store in Node. */
+const hasWindow = typeof window !== 'undefined'
+
+/** Filters and sort start from the URL, so a shared link opens the same view. */
+const initialView = hasWindow ? filtersFromQuery(window.location.search) : { filters: EMPTY_FILTERS, sort: DEFAULT_SORT }
+
 /**
  * Single source of truth shared by the map and the side panel.
- * Filters, the lease-expiration timeline and underwriting assumptions will
- * live here too, so every view updates together.
+ * Filters, the lease-expiration timeline and underwriting assumptions live
+ * here, so every view updates together.
  */
 interface AppState {
   properties: Property[]
@@ -28,6 +48,9 @@ interface AppState {
   underwritingOpen: boolean
   /** Analyst edits to the default underwriting assumptions, by property id; kept for the session. */
   assumptionEdits: Record<string, AssumptionEdits>
+  /** Portfolio filters; the map and the list show the same matching set. Mirrored in the URL. */
+  filters: PropertyFilters
+  sort: SortKey
   select: (id: string | null) => void
   lookupParcel: (lng: number, lat: number) => Promise<void>
   clearSelection: () => void
@@ -39,6 +62,11 @@ interface AppState {
   setAssumption: (propertyId: string, key: string, value: number) => void
   resetAssumption: (propertyId: string, key: string) => void
   resetAssumptions: (propertyId: string) => void
+  setFilter: <K extends keyof PropertyFilters>(key: K, value: PropertyFilters[K]) => void
+  /** Clears the filter behind an active-filter chip (see `activeFilterChips`). */
+  removeFilter: (chipKey: string) => void
+  clearFilters: () => void
+  setSort: (sort: SortKey) => void
 }
 
 /** In-flight parcel request; a newer click aborts the older one. */
@@ -57,6 +85,8 @@ export const useAppStore = create<AppState>()((set) => ({
   activePersona: 'Analyst',
   underwritingOpen: false,
   assumptionEdits: {},
+  filters: initialView.filters,
+  sort: initialView.sort,
 
   select: (id) => {
     cancelInFlight()
@@ -139,7 +169,22 @@ export const useAppStore = create<AppState>()((set) => ({
       const { [propertyId]: _removed, ...rest } = s.assumptionEdits
       return { assumptionEdits: rest }
     }),
+
+  setFilter: (key, value) => set((s) => ({ filters: { ...s.filters, [key]: value } })),
+  removeFilter: (chipKey) => set((s) => ({ filters: withoutFilter(s.filters, chipKey) })),
+  clearFilters: () => set({ filters: EMPTY_FILTERS }),
+  setSort: (sort) => set({ sort }),
 }))
+
+// Keep the URL in step with the filters (replacing, not adding, history entries).
+if (hasWindow) {
+  useAppStore.subscribe((s, prev) => {
+    if (s.filters === prev.filters && s.sort === prev.sort) return
+    const q = filtersToQuery(s.filters, s.sort)
+    const { pathname, hash } = window.location
+    window.history.replaceState(window.history.state, '', `${pathname}${q ? `?${q}` : ''}${hash}`)
+  })
+}
 
 const NO_EDITS: AssumptionEdits = {}
 
@@ -148,3 +193,20 @@ export const useAssumptionEdits = (propertyId: string) => useAppStore((s) => s.a
 
 export const useSelectedProperty = () =>
   useAppStore((s) => s.properties.find((p) => p.id === s.selectedId) ?? null)
+
+/**
+ * The filtered, sorted properties shared by the map, the list and the detail
+ * header. Engine figures come from the memoized underwriting runs at each
+ * property's current assumptions, and only when a filter or the sort uses them.
+ */
+export function usePropertyView(): PropertyView {
+  const properties = useAppStore((s) => s.properties)
+  const filters = useAppStore((s) => s.filters)
+  const sort = useAppStore((s) => s.sort)
+  const asOf = useAppStore((s) => s.asOf)
+  const edits = useAppStore((s) => s.assumptionEdits)
+  return useMemo(() => {
+    const facts = underwritingFactsById(properties, asOf, edits, underwritingNeeds(filters, sort))
+    return propertyView(properties, filters, sort, asOf, facts)
+  }, [properties, filters, sort, asOf, edits])
+}

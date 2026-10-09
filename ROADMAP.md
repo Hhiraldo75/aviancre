@@ -9,6 +9,7 @@
 - [x] Persona dashboard: Analyst / Broker / Developer / Investment views
 - [x] Tested calculations: occupancy, WALT, mark-to-market, NOI, IRR, stacking plan, FAR capacity
 - [x] Click any building → live public record: Providence Open Data 2025 tax roll (owner, land use, assessed value, taxes, condo units), plus City GIS zoning, flood, year built, building size and parcel outline when that server is reachable
+- [x] Filters synced across map and list: asset type, size, occupancy, lease expiration, submarket, levered IRR and max bid vs price; shareable in the URL
 
 ## Next
 1. **Real building footprints and parcels** (in progress)
@@ -26,6 +27,5 @@
    - Lease-by-lease 10-year cash flow, rollover (renewal probability, downtime, TI/LC), debt, IRR, DSCR
    - Replaces the quick estimate in the Investment view; validated against a hand-built Excel model
 4. **Live assumptions panel**: change rent growth, exit cap or interest rate and see results update
-5. **Filters**: asset type, size, occupancy and expiration window, synced across map and list
-6. **Rent estimation engine** with comps and confidence ranges; **rent roll import** (CSV/Excel)
-7. **Deploy** to Vercel or Netlify for a public portfolio link
+5. **Rent estimation engine** with comps and confidence ranges; **rent roll import** (CSV/Excel)
+6. **Deploy** to Vercel or Netlify for a public portfolio link

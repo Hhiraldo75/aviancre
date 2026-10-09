@@ -126,6 +126,28 @@ export function expiringWithin(property: Property, asOf: ISODate, months: number
     .sort((a, b) => a.expirationDate.localeCompare(b.expirationDate))
 }
 
+/** The same calendar date `years` later; Feb 29 falls back to Feb 28 in a non-leap year. */
+export function addYears(date: ISODate, years: number): ISODate {
+  const [y, m, d] = date.split('-').map(Number)
+  const lastDay = new Date(Date.UTC(y + years, m, 0)).getUTCDate()
+  return `${y + years}-${String(m).padStart(2, '0')}-${String(Math.min(d, lastDay)).padStart(2, '0')}`
+}
+
+/**
+ * Share of rentable SF in active leases expiring on or before the date
+ * `years` after `asOf` (calendar dates, so a lease ending exactly N years out
+ * counts). Commercial only: null for multifamily or no rentable SF.
+ */
+export function expiringShare(property: Property, asOf: ISODate, years: number): number | null {
+  const rsf = property.physical.rentableSF.value
+  if (property.rentRoll.kind !== 'commercial' || !rsf) return null
+  const cutoff = addYears(asOf, years)
+  const sf = activeLeases(property, asOf)
+    .filter((l) => l.expirationDate <= cutoff)
+    .reduce((s, l) => s + l.leasedSF, 0)
+  return sf / rsf
+}
+
 /** Map color bucket for occupancy; shared by the map layer and the legend. */
 export const OCCUPANCY_BUCKETS = [
   { label: 'Under 80% leased', min: 0, color: '#ef4444' },

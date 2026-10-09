@@ -7,12 +7,16 @@ const METERS_PER_DEG_LAT = 111_320
 const METERS_PER_FT = 0.3048
 /** Typical floor-to-floor height when the real building height is unknown. */
 const METERS_PER_FLOOR = 4
+/** Sample buildings outside the current filters: still visible, but faded. */
+export const FILTERED_OUT_COLOR = '#e5e7eb'
 
 export interface PropertyFeatureProps {
   id: string
   name: string
   assetType: string
   occupancy: number
+  /** False when the building is outside the current filters (drawn faded, clicks fall through to public records). */
+  matches: boolean
   color: string
   heightM: number
 }
@@ -37,15 +41,18 @@ function squareFootprint(lng: number, lat: number, footprintSqFt: number): Polyg
   }
 }
 
+/** `matchIds` is the filtered set; without it every building matches. */
 export function propertiesToGeoJSON(
   properties: Property[],
   asOf: ISODate,
+  matchIds?: Set<string>,
 ): FeatureCollection<Polygon, PropertyFeatureProps> {
   return {
     type: 'FeatureCollection',
     features: properties.map((p): Feature<Polygon, PropertyFeatureProps> => {
       const floors = Math.max(1, p.physical.floors.value)
       const occ = occupancy(p, asOf)
+      const matches = !matchIds || matchIds.has(p.id)
       return {
         type: 'Feature',
         geometry: p.physical.footprint
@@ -56,7 +63,8 @@ export function propertiesToGeoJSON(
           name: p.name,
           assetType: p.assetType,
           occupancy: occ,
-          color: occupancyColor(occ),
+          matches,
+          color: matches ? occupancyColor(occ) : FILTERED_OUT_COLOR,
           heightM: p.physical.heightFt ? p.physical.heightFt.value * METERS_PER_FT : floors * METERS_PER_FLOOR,
         },
       }
