@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import fernhillDoc from '../../../docs/samples/fernhill-commons-unit-rent-roll.csv?raw'
 import type { Property } from '../../types'
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties'
+import { parseCSV } from '../csv'
+import { parseRentRoll } from '../rentRollImport'
 import { defaultAssumptions, withPurchasePrice } from './defaults'
 import { PRICE_ESTIMATE_HINT, underwritingSummary, type SummaryStat, type UnderwritingSummary } from './summary'
 import { underwrite } from './underwrite'
@@ -100,6 +103,41 @@ describe('underwriting summary (Atwells, base scenario)', () => {
     expect(stat(priced, 'Purchase price').hint).toBe('Analyst input')
     expect(ok(priced).estimates?.sourceName).not.toMatch(/purchase price/)
     expect(stat(priced, 'Going-in cap').src?.sourceName).not.toMatch(/purchase price/)
+  })
+})
+
+describe('where the cap rates come from', () => {
+  it('names the submarket benchmark behind the price and the exit', () => {
+    const s = underwritingSummary(ATWELLS, AS_OF)
+    expect(stat(s, 'Going-in cap').from).toBe('Federal Hill retail')
+    expect(stat(s, 'Exit cap').from).toBe('Federal Hill retail + 25 bps')
+  })
+
+  it('names Fernhill\'s Olneyville benchmark from its property block, and the submarket picked on import', () => {
+    const fernhill = (details = {}) =>
+      parseRentRoll(parseCSV(fernhillDoc), { fileName: 'fernhill.csv', asOf: AS_OF, details }).property!
+    const s = underwritingSummary(fernhill(), AS_OF)
+    expect([stat(s, 'Going-in cap').value, stat(s, 'Going-in cap').from]).toEqual(['6.25%', 'Olneyville multifamily'])
+    expect([stat(s, 'Exit cap').value, stat(s, 'Exit cap').from]).toEqual(['6.50%', 'Olneyville multifamily + 25 bps'])
+    expect(stat(s, 'Purchase price').value).toBe('$20.99M')
+    const downtown = underwritingSummary(fernhill({ submarket: 'downtown' }), AS_OF)
+    expect([stat(downtown, 'Going-in cap').value, stat(downtown, 'Going-in cap').from]).toEqual(['5.75%', 'Downtown / Downcity multifamily'])
+    expect(stat(downtown, 'Purchase price').value).toBe('$22.81M')
+  })
+
+  it('says when the analyst set them', () => {
+    const priced = underwritingSummary(ATWELLS, AS_OF, withPurchasePrice(defaultAssumptions(ATWELLS, AS_OF), 4_000_000))
+    expect(stat(priced, 'Going-in cap').from).toBe('from your price')
+    expect(stat(underwritingSummary(ATWELLS, AS_OF, { 'acquisition.marketCapRate': 0.075 }), 'Going-in cap').from).toBe(
+      'price at your 7.50% market cap',
+    )
+    expect(stat(underwritingSummary(ATWELLS, AS_OF, { 'exit.exitCapRate': 0.08 }), 'Exit cap').from).toBe('your input')
+  })
+
+  it('shows the benchmark cap the price was set at when other edits move the going-in cap', () => {
+    const s = underwritingSummary(ATWELLS, AS_OF, { 'operating.generalVacancyPct': 0.25 })
+    expect(stat(s, 'Going-in cap').value).not.toBe('7.00%')
+    expect(stat(s, 'Going-in cap').from).toBe('price at Federal Hill retail 7.00%')
   })
 })
 

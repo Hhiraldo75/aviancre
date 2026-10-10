@@ -1,3 +1,4 @@
+import { SUBMARKETS } from '../../data/submarkets'
 import type { ISODate, Property, Sourced, UnderwritingAssumptions, UnderwritingResult } from '../../types'
 import { fmt } from '../format'
 import { estimate } from '../sourced'
@@ -18,6 +19,8 @@ export interface SummaryStat {
   tone?: 'good' | 'warn'
   /** EST badge, only on the cap rates; the card notes estimates once for everything else. */
   src?: Sourced<unknown>
+  /** Where the value came from, shown after it: "Olneyville multifamily", "your input". */
+  from?: string
 }
 
 export interface SummaryWarning {
@@ -79,6 +82,29 @@ function missingData(p: Property): string | null {
       : rr.unitTypes.reduce((s, u) => s + u.unitCount, 0) === 0
   if (empty) return 'The rent roll is empty, so there is no income to underwrite.'
   return null
+}
+
+/** The submarket benchmark a property's market cap rate comes from, e.g. "Olneyville multifamily" (mixed-use uses office). */
+function benchmarkName(p: Property): string {
+  return `${SUBMARKETS[p.location.submarket].name} ${p.assetType === 'mixed-use' ? 'office' : p.assetType}`
+}
+
+/** Where the going-in and exit cap rates came from: the submarket benchmark, or the analyst's input. */
+function capSources(p: Property, a: UnderwritingAssumptions, goingIn: number) {
+  const benchmark = benchmarkName(p)
+  const marketCap = a.acquisition.marketCapRate
+  const goingInFrom = !isEstimate(a.acquisition.purchasePrice)
+    ? 'from your price'
+    : !isEstimate(marketCap)
+      ? `price at your ${fmt.pct(marketCap.value, 2)} market cap`
+      : // Edits to other assumptions move the going-in cap off the market cap the price was set at.
+        Math.abs(goingIn - marketCap.value) < 0.00005
+        ? benchmark
+        : `price at ${benchmark} ${fmt.pct(marketCap.value, 2)}`
+  const exit = a.exit.exitCapRate
+  const spread = Math.round((exit.value - p.market.marketCapRate.value) * 10_000)
+  const exitFrom = !isEstimate(exit) ? 'your input' : spread ? `${benchmark} ${spread > 0 ? '+' : '−'} ${Math.abs(spread)} bps` : benchmark
+  return { goingIn: goingInFrom, exit: exitFrom }
 }
 
 type Driver = [name: string, value: Sourced<unknown>]
@@ -274,6 +300,7 @@ export function underwritingSummary(property: Property, asOf: ISODate, input?: A
   const priceIsEstimate = isEstimate(a.acquisition.purchasePrice)
 
   const d = driverGroups(property, a)
+  const caps = capSources(property, a, m.goingInCapRate)
   const H = a.acquisition.holdYears.value
   const hold = `${H}-yr hold`
   const lowDSCR = m.minimumDSCR !== null && m.minimumDSCR < DSCR_FLOOR
@@ -289,7 +316,7 @@ export function underwritingSummary(property: Property, asOf: ISODate, input?: A
         },
         maxBidStat(maxBid(property, asOf, a)),
         { label: 'Price / SF', value: `${fmt.usd(m.pricePerSF)}/SF` },
-        { label: 'Going-in cap', value: fmt.pct(m.goingInCapRate, 2), src: estimatedFrom(d.price, d.yearOneNOI) },
+        { label: 'Going-in cap', value: fmt.pct(m.goingInCapRate, 2), src: estimatedFrom(d.price, d.yearOneNOI), from: caps.goingIn },
         { label: 'Year-1 NOI', value: fmt.money(noi1) },
       ],
     },
@@ -331,7 +358,7 @@ export function underwritingSummary(property: Property, asOf: ISODate, input?: A
           value: fmt.money(m.exitNOI),
           hint: 'General vacancy replaces rollover',
         },
-        { label: 'Exit cap', value: fmt.pct(a.exit.exitCapRate.value, 2), src: estimatedFrom(d.exitCap) },
+        { label: 'Exit cap', value: fmt.pct(a.exit.exitCapRate.value, 2), src: estimatedFrom(d.exitCap), from: caps.exit },
         {
           label: 'Net sale proceeds',
           value: fmt.money(m.netSaleProceeds),

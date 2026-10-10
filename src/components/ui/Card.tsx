@@ -18,12 +18,15 @@ export function Stat({
   label,
   value,
   src,
+  from,
   hint,
   tone,
 }: {
   label: string
   value: string
   src?: Sourced<unknown>
+  /** Where the value came from, after it: "5.75% EST · Olneyville multifamily". */
+  from?: string
   hint?: string
   tone?: 'good' | 'warn'
 }) {
@@ -34,6 +37,7 @@ export function Stat({
       <div className="text-sm font-semibold tabular-nums">
         {value}
         {src && <SourceBadge data={src} />}
+        {from && <span className="ml-1 text-[10px] font-normal text-slate-400">· {from}</span>}
       </div>
       {hint && <div className={`text-[10px] ${hintColor}`}>{hint}</div>}
     </div>
