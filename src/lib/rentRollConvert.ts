@@ -46,8 +46,10 @@ export interface FloorPlanGroup {
   sf: number | null
   market: number | null
   defaultName: string
-  /** The default, or the user's rename. Plans with the same name merge on import. */
+  /** The default, or the user's rename (or the preset's). Plans with the same name merge on import. */
   name: string
+  /** The name came from the preset. */
+  nameFromPreset?: boolean
   units: number
   /** The file's unit type codes in this plan (kept as notes). */
   codes: string[]
@@ -76,6 +78,8 @@ export interface RentRollPreset {
   mapping: Partial<Record<FieldKey, string>>
   chargeCodes?: Record<string, ChargeUse>
   statusValues?: Record<string, StatusChoice>
+  /** Floor plan names the user gave, by plan key ("<SF>|<market rent>"). */
+  planNames?: Record<string, string>
   savedAt?: ISODate
 }
 
@@ -234,13 +238,29 @@ export function convertRentRoll(grid: Cell[][], opts: ConvertOptions = {}): Conv
   }
   const bySF = new Map<string, number>()
   for (const p of plans) bySF.set(String(p.sf), (bySF.get(String(p.sf)) ?? 0) + 1)
+  // The preset's names: by plan key, else (market rents move between exports) the one named plan at the same SF, when the file has one plan there.
+  const presetNames = Object.entries(preset?.planNames ?? {}).filter((e): e is [string, string] => typeof e[1] === 'string' && e[1].trim() !== '')
+  const presetName = (p: FloorPlanGroup) => {
+    const exact = presetNames.find(([key]) => key === p.key)
+    if (exact) return exact[1].trim()
+    if (bySF.get(String(p.sf))! > 1) return undefined
+    const sameSF = presetNames.filter(([key]) => key.split('|')[0] === `${p.sf ?? ''}`)
+    return sameSF.length === 1 ? sameSF[0][1].trim() : undefined
+  }
   let namedByType = 0
+  let namedByPreset = 0
   for (const p of plans) {
     const sfName = p.sf === null ? 'Unknown SF' : `${p.sf} SF`
     const byType = !yardi && p.codes.length === 1 && ex.units.every((u) => planOf.get(`${u.sf ?? ''}|${u.market ?? ''}`) !== p || u.unitType)
     if (byType) namedByType++
     p.defaultName = byType ? p.codes[0] : bySF.get(String(p.sf))! > 1 && p.market !== null ? `${sfName} · ${fmt.usd(p.market)}` : sfName
-    p.name = opts.planNames?.[p.key]?.trim() || p.defaultName
+    const mine = opts.planNames?.[p.key]?.trim()
+    const theirs = mine ? undefined : presetName(p)
+    p.name = mine || theirs || p.defaultName
+    if (theirs) {
+      p.nameFromPreset = true
+      namedByPreset++
+    }
   }
   const codeCount = new Set(ex.units.map((u) => u.unitType).filter(Boolean)).size
   if (plans.length) {
@@ -248,6 +268,7 @@ export function convertRentRoll(grid: Cell[][], opts: ConvertOptions = {}): Conv
       `Floor plans grouped by SF + market rent: ${plans.length} plan${plans.length === 1 ? '' : 's'}` +
         (codeCount ? ` from ${codeCount} unit type code${codeCount === 1 ? '' : 's'} (kept in the Note column)` : '') +
         (namedByType ? `; ${namedByType} named after the file's unit type` : '') +
+        (namedByPreset ? `; ${namedByPreset} named by the preset` : '') +
         '. Rename them under Floor plans; plans given the same name are merged.',
     )
   }
@@ -350,6 +371,7 @@ export function presetFrom(c: Conversion, name: string, savedAt?: ISODate): Rent
   for (const f of c.fields) if (f.column !== null) mapping[f.key] = c.columns[f.column]
   const chargeCodes = Object.fromEntries(c.chargeCodes.map((x) => [x.code, x.use]))
   const statusValues = Object.fromEntries(c.statusValues.filter((s) => s.choice).map((s) => [s.value, s.choice!]))
+  const planNames = Object.fromEntries(c.plans.filter((p) => p.name !== p.defaultName).map((p) => [p.key, p.name]))
   return {
     name: name.trim(),
     format: c.format,
@@ -357,6 +379,7 @@ export function presetFrom(c: Conversion, name: string, savedAt?: ISODate): Rent
     mapping,
     ...(c.chargeCodes.length ? { chargeCodes } : {}),
     ...(Object.keys(statusValues).length ? { statusValues } : {}),
+    ...(Object.keys(planNames).length ? { planNames } : {}),
     ...(savedAt ? { savedAt } : {}),
   }
 }
@@ -369,7 +392,8 @@ export function isRentRollPreset(x: unknown): x is RentRollPreset {
     typeof x.name === 'string' &&
     (x.format === 'yardi-lease-charges' || x.format === 'generic') &&
     typeof x.signature === 'string' &&
-    isObject(x.mapping)
+    isObject(x.mapping) &&
+    (x.planNames === undefined || isObject(x.planNames))
   )
 }
 

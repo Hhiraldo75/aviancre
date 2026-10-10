@@ -225,7 +225,10 @@ export default function RentRollMapping({
       )}
 
       {c.plans.length > 0 && (
-        <Section title="Floor plans" hint="One per SF + market rent. Rename them (e.g. “1 Bed”); plans given the same name are merged.">
+        <Section
+          title="Floor plans"
+          hint="One per SF + market rent. Rename them (e.g. “1 Bed”); plans given the same name are merged. Saving a preset keeps the names."
+        >
           <table className="w-full tabular-nums">
             <thead className="text-[10px] uppercase tracking-wide text-slate-500">
               <tr>
@@ -240,11 +243,14 @@ export default function RentRollMapping({
               {c.plans.map((p) => (
                 <tr key={p.key} className="border-t border-slate-800">
                   <td className="py-1 pr-2">
-                    <input
-                      className={`${input} max-w-40`}
-                      value={options.planNames?.[p.key] ?? p.defaultName}
-                      onChange={(e) => setPlanName(p.key, e.target.value)}
-                    />
+                    <span className="flex items-center gap-2">
+                      <input
+                        className={`${input} max-w-40`}
+                        value={options.planNames?.[p.key] ?? p.name}
+                        onChange={(e) => setPlanName(p.key, e.target.value)}
+                      />
+                      {p.nameFromPreset && <Chip provenance="preset" />}
+                    </span>
                   </td>
                   <td className="py-1 text-right">{p.sf === null ? '—' : fmt.int(p.sf)}</td>
                   <td className="py-1 text-right">{p.market === null ? '—' : fmt.usd(p.market)}</td>

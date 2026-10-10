@@ -37,8 +37,9 @@ function yardi(edit: (rows: Cell[][]) => void = () => {}): Cell[][] {
     ['Rent Roll with Lease Charges'],
     ['Test Gardens (fictional sample data)'],
     ['As Of = 9/30/2026'],
-    H1,
-    H2,
+    // Copies, so an edit to one grid's header doesn't leak into later tests.
+    [...H1],
+    [...H2],
     ['Current/Notice/Vacant Residents'],
     [101, 'tg1a', 600, 't001', 'Resident', 1200, 'rent', 1100, 150, 0, '2026-01-01', '2026-12-31', '', 0],
     charge('petrent', 25),
@@ -274,6 +275,52 @@ describe('presets', () => {
     const other = convertRentRoll(yardi((rows) => (rows[3][13] = 'Bal')), { presets: [preset] })
     expect(other.presetName).toBeUndefined()
     expect(other.blockers).toEqual([expect.stringMatching(/^Resident "MODEL"/)])
+  })
+
+  describe('floor plan names', () => {
+    const renamed = convertRentRoll(yardi(), { ...MODEL_VACANT, planNames: { '600|1200': '1 Bed' } })
+    const named = presetFrom(renamed, 'Named plans')
+
+    it('are saved when renamed, and only those', () => {
+      expect(named.planNames).toEqual({ '600|1200': '1 Bed' })
+      expect(preset).not.toHaveProperty('planNames')
+    })
+
+    it('come back when the same layout is converted again', () => {
+      const again = convertRentRoll(yardi(), { presets: [named] })
+      expect(again.plans.map((p) => [p.name, p.nameFromPreset ?? false])).toEqual([
+        ['1 Bed', true],
+        ['850 SF', false],
+      ])
+      expect(again.units.filter((u) => u.plan === '1 Bed').map((u) => u.unit)).toEqual(['101', '102'])
+      expect(again.flags).toContainEqual(expect.stringMatching(/; 1 named by the preset\./))
+      expect(presetFrom(again, 'Named plans').planNames).toEqual({ '600|1200': '1 Bed' })
+    })
+
+    it('follow a plan whose market rent changed, when it is the only plan at that SF', () => {
+      const raised = yardi((rows) => {
+        rows[rowOf(rows, 101)][5] = 1250
+        rows[rowOf(rows, 102)][5] = 1250
+      })
+      expect(convertRentRoll(raised, { presets: [named] }).plans.map((p) => [p.key, p.name])).toEqual([
+        ['600|1250', '1 Bed'],
+        ['850|1500', '850 SF'],
+      ])
+      // Two plans at 600 SF now: the unchanged one keeps its name; the new one can't be told apart, so it keeps the default.
+      const split = yardi((rows) => (rows[rowOf(rows, 101)][5] = 1250))
+      expect(convertRentRoll(split, { presets: [named] }).plans.map((p) => p.name)).toEqual(['600 SF · $1,250', '1 Bed', '850 SF'])
+    })
+
+    it('give way to a name typed on the mapping screen', () => {
+      const typed = convertRentRoll(yardi(), { presets: [named], planNames: { '600|1200': 'One bedroom' } })
+      expect(typed.plans[0]).toMatchObject({ name: 'One bedroom' })
+      expect(typed.plans[0].nameFromPreset).toBeUndefined()
+    })
+
+    it('round-trip through the presets file', () => {
+      expect(presetsFromFile(JSON.parse(JSON.stringify(presetsFile([named]))))).toEqual([named])
+      expect(presetsFromFile(presetsFile([{ ...named, planNames: 'oops' as never }]))).toEqual([])
+    })
   })
 
   it('replace an older preset for the same layout, and round-trip through the presets file', () => {
