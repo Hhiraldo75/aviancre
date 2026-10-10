@@ -13,7 +13,7 @@ AVIANCRE is a browser-only (no backend) 3D commercial real estate app for Provid
 - `npm run import -- <file.csv|.xlsx> [--asset-type …] [--class …] [--submarket …] [--check]` — validates a rent roll in the `npm run rent-roll` export format and saves the deal as `private-deals/deal-<name>.json` (`--check`: validate only, save nothing)
 - `npm run convert -- <file> [--name …] [--allow-mismatch] [--dump]` — converts a Yardi "Rent Roll with Lease Charges" or a plain table of apartment units into the unit rent roll CSV (written under `private-deals/`), checked against the file's own totals; the app's import does the same through a mapping screen. Rules in `docs/UNDERWRITING.md` ("Converting other rent roll layouts")
 - `/convert-rent-roll <file>` (project skill) — for layouts the converter can't handle, writes the clean CSV from the file's values only, runs the import check and reports totals against the file.
-- `npm run check-private` — fails if Git tracks or has staged anything in `private-deals/` besides its README (also runs in `npm test`)
+- `npm run check-private` — fails if Git tracks or has staged anything in `private-deals/` besides its README (also runs in `npm test`, and before every commit via `.githooks/pre-commit`, which `npm install`'s `prepare` script enables with `core.hooksPath`)
 - `/underwriting-analyst <id> [--assumptions set.json]` (project skill) — runs the tests and the JSON export, reviews it, and writes an IC memo to `docs/memos/<id>.md` that names its assumption set. The engine does all math; the memo only quotes the JSON. Details in `docs/UNDERWRITING.md`.
 
 Before calling a change done, run `npm test` and `npm run build`. For UI changes, also check it in `npm run dev`.

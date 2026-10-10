@@ -23,9 +23,7 @@ The rent roll format is the one `npm run rent-roll` exports (see
 
 `npm run check-private` fails if Git tracks or has staged anything in this
 folder besides this README, or if the folder is no longer ignored. `npm test`
-runs the same check. To run it before every commit:
-
-    printf '#!/bin/sh\nnpm run --silent check-private\n' > .git/hooks/pre-commit
-    chmod +x .git/hooks/pre-commit
+runs the same check, and so does every commit: `npm install` points Git at
+the tracked `.githooks/` folder (`core.hooksPath`), whose `pre-commit` runs it.
 
 If it fails: `git rm --cached <file>` to untrack the file (it stays on disk).
