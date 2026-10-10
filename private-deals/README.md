@@ -11,6 +11,7 @@ browser's local storage instead and are never sent anywhere.
 
 ## Workflow
 
+    npm run convert -- private-deals/yardi-export.xlsx  # other layouts: writes private-deals/yardi-export-unit-rent-roll.csv
     npm run import -- private-deals/my-rent-roll.xlsx   # validates, writes private-deals/deal-<name>.json
     npm run underwrite -- deal-<name> [--json]          # output goes to private-deals/deal-<name>/
     /underwriting-analyst deal-<name>                    # memo goes to private-deals/deal-<name>/memo.md
