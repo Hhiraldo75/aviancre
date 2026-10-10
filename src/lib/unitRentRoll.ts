@@ -22,6 +22,8 @@ export const UNIT_COLUMNS = {
   leaseEnd: { label: 'Lease end', required: false },
   balance: { label: 'Balance owed ($)', required: false },
   preLeased: { label: 'Pre-leased (applicant)', required: false },
+  /** Free text for the analyst (e.g. what a converter inferred); the engine ignores it. */
+  note: { label: 'Note', required: false },
 }
 
 type UnitKey = keyof typeof UNIT_COLUMNS

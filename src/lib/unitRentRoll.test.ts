@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest'
+import fernhillDoc from '../../docs/samples/fernhill-commons-unit-rent-roll.csv?raw'
 import type { Property } from '../types'
 import { parseCSV } from './csv'
-import { occupancy } from './metrics'
+import { dealFile, isImportedDeal, propertyFromDealFile } from './importedDeals'
+import { averageInPlaceRent, occupancy } from './metrics'
 import { parseRentRoll, type DealDetails, type ImportIssue } from './rentRollImport'
 import { estimate } from './sourced'
 import { defaultAssumptions } from './underwriting/defaults'
+import { rentRollView } from './underwriting/fullView'
+import { cashFlowRows, MF_OCCUPANCY_LABEL, toTable } from './underwriting/report'
+import { sensitivityGrids } from './underwriting/sensitivity'
+import { underwrite } from './underwriting/underwrite'
 import { operatingCashFlows } from './underwriting/waterfall'
 
 const AS_OF = '2026-10-04'
@@ -16,6 +22,117 @@ const loaded = (r: ReturnType<typeof parseRentRoll>): Property => {
   return r.property
 }
 const matching = (issues: ImportIssue[], re: RegExp) => issues.filter((i) => re.test(i.message))
+
+describe('Fernhill Commons unit rent roll (sample)', () => {
+  const r = importCSV(fernhillDoc, DETAILS)
+  const p = loaded(r)
+  const rr = p.rentRoll
+
+  it('imports with warnings only', () => {
+    expect(r.issues.filter((i) => i.severity === 'error')).toEqual([])
+    expect(r.fileDetails).toEqual({ assetType: 'multifamily' })
+    expect(p).toMatchObject({ id: 'deal-fernhill-commons-apartments', name: 'Fernhill Commons Apartments', assetType: 'multifamily', isSample: true })
+    expect(r.summary).toEqual({ kind: 'multifamily', name: p.name, rentableSF: 95_040, units: 120, occupiedUnits: 110, floorPlans: 4 })
+  })
+
+  it('aggregates 120 units into 4 floor plans', () => {
+    if (rr.kind !== 'multifamily') throw new Error('expected multifamily')
+    expect(rr.units).toHaveLength(120)
+    expect(rr.unitTypes.map((u) => [u.label, u.unitCount, u.occupiedUnits, u.avgSF])).toEqual([
+      ['735 SF', 48, 44, 735],
+      ['560 SF', 30, 28, 560],
+      ['960 SF', 30, 27, 960],
+      ['1180 SF', 12, 11, 1180],
+    ])
+    expect(occupancy(p, AS_OF)).toBeCloseTo(110 / 120, 10)
+    expect(p.physical.unitCount?.value).toBe(120)
+    expect(rr.unitTypes.every((u) => u.marketRentMonthly.source === 'imported')).toBe(true)
+    expect(rr.units?.filter((u) => u.preLeased).map((u) => [u.unit, u.occupied])).toEqual([
+      ['117', false],
+      ['214', true],
+      ['305', false],
+      ['427', false],
+    ])
+  })
+
+  it('averages $1,566.45 in place on occupied units against $1,620.25 market', () => {
+    expect(averageInPlaceRent(p, AS_OF)).toBeCloseTo(1566.45, 2)
+    expect(p.market.marketRent.value).toBe(1620.25)
+    expect(p.market.marketRent.source).toBe('imported')
+    const result = underwrite(p, AS_OF)
+    expect(result.metrics.inPlaceRent).toBeCloseTo(1566.45, 2)
+    expect(result.metrics.marketRent).toBe(1620.25)
+  })
+
+  it('warns on balances owed and month-to-month leases', () => {
+    expect(matching(r.issues, /before move-in/)).toEqual([])
+    expect(matching(r.issues, /^Balance owed/).map((i) => i.row)).toEqual([21, 64, 105])
+    expect(matching(r.issues, /^Balance owed \$1,260\.00/)[0]).toMatchObject({ row: 64, column: 'Balance owed ($)' })
+    expect(matching(r.issues, /^Lease ended on 2026-07-31.* month-to-month/).map((i) => i.row)).toEqual([39])
+    expect(matching(r.issues, /^No lease end/).map((i) => i.row)).toEqual([96])
+  })
+
+  it('models other income, lease-up and turnover', () => {
+    const a = defaultAssumptions(p, AS_OF)
+    expect(a.multifamily?.leaseUpUnitsPerMonth).toMatchObject({ value: 8, source: 'estimated' })
+    const years = operatingCashFlows(p, a, AS_OF).years
+    expect(years[0].otherIncome).toBeCloseTo(3_262 * 12, 6)
+    expect(years[0].absorptionTurnoverVacancy).toBeGreaterThan(0)
+    expect(years[1].absorptionTurnoverVacancy).toBe(0)
+    expect(years[0].tenantImprovements).toBeGreaterThan(0)
+    expect(years[1].occupancy).toBe(1)
+  })
+
+  it('defaults the max renewal increase to an EST 5%, so loss to lease burns off over several years', () => {
+    const a = defaultAssumptions(p, AS_OF)
+    expect(a.multifamily?.maxRenewalIncreasePct).toMatchObject({ value: 0.05, source: 'estimated' })
+    const ltl = operatingCashFlows(p, a, AS_OF).years.map((y) => y.lossToLease)
+    expect(ltl[0]).toBeGreaterThan(ltl[1])
+    expect(ltl[1]).toBeGreaterThan(ltl[2])
+    expect(ltl[2]).toBeGreaterThan(ltl[3])
+  })
+
+  it('shows GPR at market, then loss to lease, with physical occupancy labeled', () => {
+    const r = underwrite(p, AS_OF)
+    expect(cashFlowRows(r).slice(0, 3).map((x) => x.label)).toEqual([MF_OCCUPANCY_LABEL, 'Gross potential rent (at market)', 'Less: loss to lease'])
+    expect(toTable(r)).toContain(MF_OCCUPANCY_LABEL)
+    for (const c of r.cashFlows) {
+      const egi = c.grossPotentialRent - c.lossToLease - c.absorptionTurnoverVacancy + c.otherIncome - c.generalVacancy - c.creditLoss
+      expect(c.effectiveGrossIncome).toBeCloseTo(egi, 6)
+    }
+  })
+
+  it('warns that the levered IRR swings across rent growth', () => {
+    const r = underwrite(p, AS_OF)
+    expect(sensitivityGrids(p, AS_OF, r.assumptions).warnings).toContainEqual(expect.stringMatching(/^Levered IRR swings [\d.]+ points across the rent-growth cases/))
+  })
+
+  it('underwrites to finite returns', () => {
+    const m = underwrite(p, AS_OF).metrics
+    expect(m.purchasePrice).toBeGreaterThan(0)
+    expect(Number.isFinite(m.unleveredIRR)).toBe(true)
+    expect(Number.isFinite(m.leveredIRR)).toBe(true)
+  })
+
+  it('shows loss to lease per floor plan', () => {
+    const view = rentRollView(p, underwrite(p, AS_OF), AS_OF)
+    if (view.kind !== 'unit-mix') throw new Error('expected unit mix')
+    expect(view.byUnit).toBe(true)
+    expect(view.source.source).toBe('imported')
+    const b = view.rows.find((x) => x.floorPlan === '735 SF')!
+    expect(b).toMatchObject({ units: '48', occupied: '44', vacant: '4', preLeased: '1', market: '$1,525.00', inPlace: '$1,451.93' })
+    expect(b.lossToLease).toBe('$73.07')
+    expect(view.rows.find((x) => x.floorPlan === '960 SF')).toMatchObject({ lossToLease: '$45.56', lossToLeasePct: '2.5%', lossToLeaseAnnual: '$14,760' })
+    expect(view.totals).toMatchObject({ lossToLease: '$51.27', lossToLeasePct: '3.2%', lossToLeaseAnnual: '$67,680' })
+    expect(view.totals).toMatchObject({ units: '120', occupied: '110', vacant: '10', preLeased: '3', market: '$1,620.25', inPlace: '$1,566.45' })
+  })
+
+  it('round-trips as a stored deal', () => {
+    const stored: unknown = JSON.parse(JSON.stringify(dealFile(p)))
+    expect(isImportedDeal(p)).toBe(true)
+    expect(propertyFromDealFile(stored)).toEqual(JSON.parse(JSON.stringify(p)))
+  })
+})
 
 const TINY = `Tiny Flats: unit rent roll
 Property
