@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { type Feature, type FeatureCollection, LAYERS, parseOverlays, parseParcelFeature, pointQueryUrl } from './providenceGis'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { type Feature, type FeatureCollection, LAYERS, lookupParcelAt, parseOverlays, parseParcelFeature, pointQueryUrl } from './providenceGis'
 import { normalizeZoningCode, parcelMetrics } from '../lib/parcelMetrics'
 
 /** Shape of a parcel feature as the city's ArcGIS server returns it with f=geojson. */
@@ -93,5 +93,20 @@ describe('parcelMetrics', () => {
     const m = parcelMetrics(parseParcelFeature({ type: 'Feature', geometry: null, properties: { PIN: 'x' } }), 'Z-9')
     expect(m.existingFAR).toBe(null)
     expect(m.placeholderMaxFAR).toBe(null)
+  })
+})
+
+describe('lookupParcelAt errors', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("passes on the relay's explanation of a failed upstream call", async () => {
+    const message = 'City GIS server timed out: could not connect after 10.0 s (UND_ERR_CONNECT_TIMEOUT)'
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message } }), { status: 504 })))
+    await expect(lookupParcelAt(-71.41, 41.82)).rejects.toThrow(message)
+  })
+
+  it('falls back to the HTTP status when the body has no explanation', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>Bad gateway</html>', { status: 502 })))
+    await expect(lookupParcelAt(-71.41, 41.82)).rejects.toThrow('City GIS returned HTTP 502')
   })
 })

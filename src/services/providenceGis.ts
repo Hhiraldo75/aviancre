@@ -123,11 +123,12 @@ export function parseOverlays(
 
 async function getGeoJSON(url: string, signal?: AbortSignal): Promise<FeatureCollection> {
   const res = await fetch(url, { signal })
-  if (!res.ok) throw new Error(`City GIS returned HTTP ${res.status}`)
-  const body = (await res.json()) as FeatureCollection & { error?: { message?: string } }
+  const body = (await res.json().catch(() => ({}))) as Partial<FeatureCollection> & { error?: { message?: string } }
+  // The relay (api/pvdgis.ts) explains a failed upstream call in error.message.
+  if (!res.ok) throw new Error(body.error?.message ?? `City GIS returned HTTP ${res.status}`)
   if (body.error) throw new Error(body.error.message ?? 'City GIS returned an error')
   if (!Array.isArray(body.features)) throw new Error('Unexpected response from City GIS')
-  return body
+  return body as FeatureCollection
 }
 
 export interface ParcelLookupResult {

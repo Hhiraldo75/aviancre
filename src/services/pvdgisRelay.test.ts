@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { GET, upstreamUrl } from '../../api/pvdgis'
+import { GET, TIMEOUT_MS, describeFailure, upstreamUrl } from '../../api/pvdgis'
 import { LAYERS, PVD_GIS_BASE, pointQueryUrl } from './providenceGis'
 
 /** What the relay sees after the vercel.json rewrite of an app URL. */
@@ -83,13 +83,16 @@ describe('GET', () => {
     const res = await GET(request(relayed(PARCEL_URL).query))
     expect(res.status).toBe(503)
     expect(res.headers.get('Cache-Control')).toBe('no-store')
+    expect(((await res.json()) as { error: { message: string } }).error.message).toBe('City GIS server answered HTTP 503')
   })
 
-  it('answers 502 when the city server is unreachable', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('fetch failed') }))
+  it('says which failure it was when the city server is unreachable', async () => {
+    const refused = Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } })
+    vi.stubGlobal('fetch', vi.fn(async () => { throw refused }))
     const res = await GET(request(relayed(PARCEL_URL).query))
     expect(res.status).toBe(502)
-    expect(((await res.json()) as { error: { message: string } }).error.message).toMatch(/did not respond/)
+    expect(res.headers.get('Cache-Control')).toBe('no-store')
+    expect(((await res.json()) as { error: { message: string } }).error.message).toBe('City GIS server refused the connection (ECONNREFUSED)')
   })
 
   it('answers 400 without calling the city server for a disallowed path', async () => {
@@ -100,5 +103,37 @@ describe('GET', () => {
     const res = await GET(request(query))
     expect(res.status).toBe(400)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('describeFailure', () => {
+  const failed = (cause: unknown) => Object.assign(new TypeError('fetch failed'), { cause })
+
+  it('names timeouts, with how long it waited', () => {
+    expect(TIMEOUT_MS).toBe(20_000)
+    expect(describeFailure(new DOMException('The operation was aborted due to timeout', 'TimeoutError'), 20_004)).toEqual({
+      status: 504,
+      message: 'City GIS server timed out: no answer after 20.0 s',
+    })
+    expect(describeFailure(failed({ code: 'UND_ERR_CONNECT_TIMEOUT' }), 10_012)).toEqual({
+      status: 504,
+      message: 'City GIS server timed out: could not connect after 10.0 s (UND_ERR_CONNECT_TIMEOUT)',
+    })
+  })
+
+  it('names DNS, refused, reset and TLS failures', () => {
+    expect(describeFailure(failed({ code: 'ENOTFOUND' }), 30).message).toBe('City GIS server DNS lookup failed (ENOTFOUND)')
+    expect(describeFailure(failed({ code: 'ECONNREFUSED' }), 30).message).toBe('City GIS server refused the connection (ECONNREFUSED)')
+    expect(describeFailure(failed({ code: 'ECONNRESET' }), 1_500).message).toBe('City GIS server dropped the connection after 1.5 s (ECONNRESET)')
+    expect(describeFailure(failed({ code: 'CERT_HAS_EXPIRED' }), 30).message).toBe('City GIS server TLS error (CERT_HAS_EXPIRED)')
+  })
+
+  it('looks inside the per-address errors when every address failed', () => {
+    const all = failed({ errors: [{ code: 'ETIMEDOUT' }, { code: 'ETIMEDOUT' }] })
+    expect(describeFailure(all, 9_000)).toEqual({ status: 504, message: 'City GIS server timed out: could not connect after 9.0 s (ETIMEDOUT)' })
+  })
+
+  it('falls back to the error text for anything else', () => {
+    expect(describeFailure(new Error('boom'), 5).message).toBe('City GIS server unreachable: boom (unknown)')
   })
 })

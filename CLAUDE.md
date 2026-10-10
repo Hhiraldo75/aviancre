@@ -33,7 +33,7 @@ TypeScript is strict (`tsconfig.app.json`): `verbatimModuleSyntax` (use `import 
 ## Data sources & gotchas
 
 - Sample properties, tenants, rents, and market figures in `src/data/` are fictional; zoning FAR/height limits in `src/data/zoning.ts` are placeholders. Tests pin `AS_OF = '2026-10-04'` and assert on specific sample properties — editing `sampleProperties.ts` can break them.
-- Parcel click (`lookupParcel`) queries Providence Open Data tax roll (Socrata `6ub4-iebe`, CORS-enabled, primary) and City ArcGIS (secondary) in parallel. GIS has an 8s timeout and degrades to `{status:'unavailable'}` rather than failing the lookup. A newer click aborts the older one via the module-level `AbortController` — preserve the `current()` check before `set`.
+- Parcel click (`lookupParcel`) queries Providence Open Data tax roll (Socrata `6ub4-iebe`, CORS-enabled, primary) and City ArcGIS (secondary) in parallel. GIS has a 22 s client timeout (the relay gives up upstream at 20 s) and degrades to `{status:'unavailable'}` rather than failing the lookup. A newer click aborts the older one via the module-level `AbortController` — preserve the `current()` check before `set`.
 - City ArcGIS is called at `/pvdgis/…`: the Vite proxy in dev and preview, and in production the `api/pvdgis.ts` Vercel function (US region, via the `vercel.json` rewrite), since the GIS is blocked from some non-US networks. The relay forwards only the layers and query params `providenceGis.ts` sends; a new one must be added to its allowlist (`src/services/pvdgisRelay.test.ts` checks). `VITE_PVD_GIS_URL` (the only env var) optionally overrides the base URL. Deploy steps: `DEPLOY.md`.
 - Building footprints come from OSM 3D buildings by design (RIGIS outlines are from 2018 and have no heights).
 - Keys (e.g. future Google 3D Tiles) go in `.env.local` (gitignored via `*.local`).
@@ -44,4 +44,4 @@ Real deals live in `private-deals/` (Git ignores all of it except `README.md`) o
 
 ## Git
 
-Solo project: commit directly to `main` in small, focused commits. No remote is configured.
+Solo project: commit directly to `main` in small, focused commits. Pushing `main` to `origin` (GitHub) redeploys Vercel.
