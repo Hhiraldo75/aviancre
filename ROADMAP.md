@@ -8,14 +8,13 @@
 - [x] Map ↔ sidebar sync: occupancy-colored buildings, click to select, fly-to
 - [x] Persona dashboard: Analyst / Broker / Developer / Investment views
 - [x] Tested calculations: occupancy, WALT, mark-to-market, NOI, IRR, stacking plan, FAR capacity
-- [x] Click any building → live public record: Providence Open Data 2025 tax roll (owner, land use, assessed value, taxes, condo units), plus City GIS zoning, flood, year built, building size and parcel outline when that server is reachable
+- [x] Click any building → live public record: Providence Open Data 2025 tax roll (owner, land use, assessed value, taxes, condo units), plus year built, building and land area, zoning, overlay and historic districts and parcel outline from the city's ArcGIS Online `Parcel_Zoning_FL`, and flood zone and base flood elevation from RIGIS's FEMA DFIRM (2022)
 - [x] Filters synced across map and list: asset type, size, occupancy, lease expiration, submarket, levered IRR and max bid vs price; shareable in the URL
 
 ## Next
 1. **Real building footprints and parcels** (in progress)
    - [x] Live tax-roll lookup (Providence Open Data, works from any network)
-   - [x] City GIS enrichment (zoning, flood, building size, outline) when reachable; blocked from some non-US networks
-   - [ ] For deployment: a small US-hosted relay so GIS details work for every visitor
+   - [x] GIS enrichment (zoning, overlays, flood + BFE, building size, outline) from ArcGIS Online (city `Parcel_Zoning_FL` + RIGIS DFIRM), reachable from any network; replaced the city's webgis.providenceri.gov server, which drops non-US connections
    - [x] Attach each sample property to a real parcel (address, tax map, coordinates from the 2025 tax roll)
    - [ ] Decode state/municipal use codes into plain-language property types
    - Footprints: keep OpenStreetMap buildings (the statewide RIGIS layer is 2018 machine-generated outlines with no heights)

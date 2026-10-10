@@ -30,8 +30,8 @@ export interface TaxRecord {
 }
 
 /**
- * A real parcel from the City of Providence GIS server (assessor + geometry).
- * Richer than the tax roll but not reachable from every network.
+ * A real parcel from the City of Providence's ArcGIS Online parcel layer
+ * (Parcel_Zoning_FL: assessor data + outline). Adds what the tax roll lacks.
  */
 export interface ParcelRecord {
   /** City parcel identifier (plat/lot based). */
@@ -49,15 +49,22 @@ export interface ParcelRecord {
   geometry: Polygon | MultiPolygon | null
 }
 
-/** Layers that overlap the clicked point (zoning, flood, historic). */
+/** Layers that overlap the clicked point (zoning, overlay districts, flood, historic). */
 export interface ParcelOverlays {
   baseZoning?: Sourced<string>
   baseZoningDistrict?: Sourced<string>
+  /** Zoning overlay districts, e.g. "Downcity Overlay District"; empty when none. */
+  overlayDistricts?: Sourced<string>[]
+  /** FEMA flood zone, e.g. "X", "AE". */
   floodZone?: Sourced<string>
+  /** FEMA zone subtype, e.g. "Area with reduced flood risk due to levee". */
+  floodZoneSubtype?: Sourced<string>
+  /** Static base flood elevation in feet; datum in `notes`. */
+  baseFloodElevation?: Sourced<number>
   historicDistrict?: Sourced<string>
 }
 
-/** Optional enrichment from the city GIS server. */
+/** Optional enrichment from the ArcGIS Online parcel, zoning and flood layers. */
 export type GisDetails =
   | { status: 'loading' }
   | { status: 'unavailable'; reason: string }

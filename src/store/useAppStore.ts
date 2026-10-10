@@ -23,12 +23,8 @@ import type { AssumptionEdits } from '../lib/underwriting/edits'
 import { lookupParcelAt } from '../services/providenceGis'
 import { lookupTaxRecord } from '../services/providenceOpenData'
 
-/**
- * The city GIS server is optional enrichment; give up on it after this long.
- * A little over the relay's 20 s upstream timeout (api/pvdgis.ts), so the
- * relay's own message saying which failure it was reaches the panel first.
- */
-const GIS_TIMEOUT_MS = 22_000
+/** The ArcGIS Online parcel/zoning/flood layers are optional enrichment; give up on them after this long. */
+const GIS_TIMEOUT_MS = 10_000
 
 /** Browser only: tests import the store in Node. */
 const hasWindow = typeof window !== 'undefined'
@@ -191,7 +187,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
   /**
    * Two sources in parallel:
    * 1. Providence Open Data tax roll – reachable from anywhere; shown as soon as it arrives.
-   * 2. City GIS server – zoning, flood, building size, outline; merged in if it answers in time.
+   * 2. ArcGIS Online parcel, zoning and flood layers (city + RIGIS) – zoning, flood, building size,
+   *    outline; merged in if they answer in time.
    */
   lookupParcel: async (lng, lat) => {
     cancelInFlight()
@@ -208,7 +205,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       .then((r): GisDetails => (r.parcel ? { status: 'ok', parcel: r.parcel, overlays: r.overlays } : { status: 'none' }))
       .catch((err): GisDetails => ({
         status: 'unavailable',
-        reason: gisController.signal.aborted ? `City GIS server did not respond within ${GIS_TIMEOUT_MS / 1000} s` : err instanceof Error ? err.message : 'City GIS error',
+        reason: gisController.signal.aborted ? `no answer within ${GIS_TIMEOUT_MS / 1000} s` : err instanceof Error ? err.message : 'GIS error',
       }))
       .finally(() => clearTimeout(timer))
 

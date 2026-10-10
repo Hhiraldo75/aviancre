@@ -1,13 +1,13 @@
 # Deploying AVIANCRE
 
-AVIANCRE deploys as a static Vite site plus one serverless function on Vercel's
-free (Hobby) plan, from a public GitHub repo. `vercel.json` holds all the settings;
-no environment variables are needed.
+AVIANCRE deploys as a static Vite site on Vercel's free (Hobby) plan, from a
+public GitHub repo. `vercel.json` holds all the settings; there are no serverless
+functions and no environment variables.
 
-- **City GIS relay:** `api/pvdgis.ts` runs in Vercel's `iad1` (Washington, D.C.)
-  region. `vercel.json` rewrites `/pvdgis/*` to it, so the app uses the same URLs as
-  the Vite dev proxy. It forwards only the Providence GIS layer queries the app
-  sends and caches good answers for 5 minutes.
+- **Public data, straight from the browser:** the Providence Open Data tax roll,
+  the city's ArcGIS Online `Parcel_Zoning_FL` (parcels, zoning, overlay and
+  historic districts) and RIGIS's FEMA flood layer all allow cross-site requests,
+  so the deployed site needs nothing in between.
 - **Unlisted:** every response carries `X-Robots-Tag: noindex, nofollow`, and
   `index.html` has the matching meta tag. There is deliberately no `robots.txt`
   Disallow, because crawlers must be able to fetch a page to see its noindex.
@@ -52,18 +52,14 @@ git push -u origin main
 ```bash
 APP=https://<project>.vercel.app
 curl -sI $APP | grep -i x-robots-tag        # x-robots-tag: noindex, nofollow
-curl -s "$APP/pvdgis/server/rest/services/Viewpoint_Base/MapServer/14/query?geometry=-71.4128,41.824&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=PIN&returnGeometry=false&outSR=4326&f=geojson" | head -c 300   # GeoJSON with a PIN
-curl -s -o /dev/null -w '%{http_code}\n' "$APP/pvdgis/server/rest/services/Viewpoint_Base/MapServer/14/applyEdits?f=geojson"   # 400
+Q='geometry=-71.4128,41.824&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=false&f=geojson'
+curl -s -D - -H "Origin: $APP" "https://services6.arcgis.com/wv9mHoqblhTsnqdG/arcgis/rest/services/Parcel_Zoning_FL/FeatureServer/0/query?$Q&outFields=PIN" | grep -iE 'access-control-allow-origin|"PIN"'   # *, and a PIN
+curl -s -D - -H "Origin: $APP" "https://services2.arcgis.com/S8zZg9pg23JUEexQ/arcgis/rest/services/PLAN_DFIRM_Statewide_Flood_Hazard_Areas_2022/FeatureServer/1/query?$Q&outFields=FLD_ZONE" | grep -iE 'access-control-allow-origin|FLD_ZONE'   # *, and FLD_ZONE
 ```
 
 Then open the site, click a building outside the sample set, and check that the
-parcel card shows zoning and flood zone alongside the tax roll.
+parcel card shows zoning, overlay districts and flood zone alongside the tax roll.
 
 ## Notes
 
 - Vercel's Hobby plan is for personal, non-commercial use.
-- If `src/services/providenceGis.ts` starts using a new GIS layer or query
-  parameter, add it to the allowlist in `api/pvdgis.ts`.
-  `src/services/pvdgisRelay.test.ts` fails until you do.
-- `VITE_PVD_GIS_URL` overrides the GIS base URL at build time, for example to use a
-  different relay. It is not needed on Vercel.

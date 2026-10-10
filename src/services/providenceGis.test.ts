@@ -1,8 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { type Feature, type FeatureCollection, LAYERS, lookupParcelAt, parseOverlays, parseParcelFeature, pointQueryUrl } from './providenceGis'
+import {
+  type Feature,
+  type FeatureCollection,
+  LAYERS,
+  PVD_PARCELS_SERVICE,
+  RIGIS_FLOOD_LAYER,
+  lookupParcelAt,
+  parseOverlays,
+  parseParcelFeature,
+  pointQueryUrl,
+  pvdLayer,
+} from './providenceGis'
 import { normalizeZoningCode, parcelMetrics } from '../lib/parcelMetrics'
 
-/** Shape of a parcel feature as the city's ArcGIS server returns it with f=geojson. */
+/** Shape of a parcel feature as the city's ArcGIS Online layer returns it with f=geojson. */
 const FIXTURE: Feature = {
   type: 'Feature',
   geometry: {
@@ -25,9 +36,9 @@ const FIXTURE: Feature = {
 
 describe('pointQueryUrl', () => {
   it('asks for a WGS84 point intersect as GeoJSON', () => {
-    const url = pointQueryUrl(LAYERS.parcels, -71.41, 41.82, ['PIN', 'Owner1'], true)
+    const url = pointQueryUrl(pvdLayer(LAYERS.parcels), -71.41, 41.82, ['PIN', 'Owner1'], true)
     const q = new URLSearchParams(url.split('?')[1])
-    expect(url.includes('/14/query?')).toBe(true)
+    expect(url.startsWith(`${PVD_PARCELS_SERVICE}/0/query?`)).toBe(true)
     expect(q.get('geometry')).toBe('-71.41,41.82')
     expect(q.get('inSR')).toBe('4326')
     expect(q.get('outSR')).toBe('4326')
@@ -67,12 +78,38 @@ describe('parseOverlays', () => {
     type: 'FeatureCollection',
     features: [{ type: 'Feature', geometry: null, properties: props }],
   })
+  const empty: FeatureCollection = { type: 'FeatureCollection', features: [] }
+
   it('reads zoning, flood and historic layers, tolerating failed ones', () => {
-    const o = parseOverlays(fc({ Code: 'D-1', District: 'Downtown' }), fc({ FLD_ZONE: 'AE' }), null)
+    const o = parseOverlays({
+      zoning: fc({ Code: 'D-1', District: 'Downtown' }),
+      flood: fc({ FLD_ZONE: 'AE', ZONE_SUBTY: ' ', STATIC_BFE: 14, V_DATUM: 'NAVD88', LEN_UNIT: 'Feet' }),
+      historic: null,
+      overlays: [null, empty],
+    })
     expect(o.baseZoning?.value).toBe('D-1')
+    expect(o.baseZoning?.sourceName).toMatch(/ArcGIS Online.*Parcel_Zoning_FL/)
     expect(o.baseZoningDistrict?.value).toBe('Downtown')
     expect(o.floodZone?.value).toBe('AE')
+    expect(o.floodZone?.sourceName).toMatch(/RIGIS/)
+    expect(o.floodZoneSubtype).toBe(undefined)
+    expect(o.baseFloodElevation?.value).toBe(14)
+    expect(o.baseFloodElevation?.notes).toBe('Static BFE, feet above NAVD88')
     expect(o.historicDistrict).toBe(undefined)
+    expect(o.overlayDistricts).toEqual([])
+  })
+
+  it("lists each overlay district once, and drops FEMA's -9999 elevation", () => {
+    const o = parseOverlays({
+      zoning: null,
+      flood: fc({ FLD_ZONE: 'X', ZONE_SUBTY: 'AREA WITH REDUCED FLOOD RISK DUE TO LEVEE', STATIC_BFE: -9999, V_DATUM: ' ', LEN_UNIT: ' ' }),
+      historic: fc({ ZONE: 'HD', DISTRICT: 'Historic Overlay District' }),
+      overlays: [fc({ ZONE: 'DD', DISTRICT: 'Downcity Overlay District' }), fc({ ZONE: 'TOD', DISTRICT: null }), fc({ ZONE: 'DD', DISTRICT: 'Downcity Overlay District' })],
+    })
+    expect(o.overlayDistricts?.map((d) => d.value)).toEqual(['Downcity Overlay District', 'TOD'])
+    expect(o.floodZoneSubtype?.value).toBe('Area with reduced flood risk due to levee')
+    expect(o.baseFloodElevation).toBe(undefined)
+    expect(o.historicDistrict?.value).toBe('Historic Overlay District')
   })
 })
 
@@ -96,17 +133,56 @@ describe('parcelMetrics', () => {
   })
 })
 
-describe('lookupParcelAt errors', () => {
+describe('lookupParcelAt', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it("passes on the relay's explanation of a failed upstream call", async () => {
-    const message = 'City GIS server timed out: could not connect after 10.0 s (UND_ERR_CONNECT_TIMEOUT)'
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message } }), { status: 504 })))
-    await expect(lookupParcelAt(-71.41, 41.82)).rejects.toThrow(message)
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
+  const one = (props: Record<string, unknown>, geometry: Feature['geometry'] = null) => ({
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', geometry, properties: props }],
   })
 
-  it('falls back to the HTTP status when the body has no explanation', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>Bad gateway</html>', { status: 502 })))
-    await expect(lookupParcelAt(-71.41, 41.82)).rejects.toThrow('City GIS returned HTTP 502')
+  /** Answers by layer URL; anything not listed fails like a dropped connection. */
+  function stubLayers(answers: Record<string, () => Response>) {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const layer = String(input).split('/query?')[0]
+      const answer = answers[layer]
+      if (!answer) throw new TypeError('Failed to fetch')
+      return answer()
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  it('queries the city ArcGIS Online layers and RIGIS flood directly, keeping what answers', async () => {
+    const fetchMock = stubLayers({
+      [pvdLayer(0)]: () => json(one(FIXTURE.properties!, FIXTURE.geometry)),
+      [pvdLayer(12)]: () => json(one({ Code: 'D-1-120', District: 'Downtown/Mixed Use' })),
+      [pvdLayer(3)]: () => json(one({ ZONE: 'DD', DISTRICT: 'Downcity Overlay District' })),
+      [pvdLayer(4)]: () => json({ type: 'FeatureCollection', features: [] }),
+      [RIGIS_FLOOD_LAYER]: () => json({ error: { code: 500, message: 'busy' } }),
+    })
+    const r = await lookupParcelAt(-71.4128, 41.824)
+
+    const layers = fetchMock.mock.calls.map(([u]) => String(u).split('/query?')[0]).sort()
+    expect(layers).toEqual([...[0, 3, 4, 5, 6, 7, 8, 12].map(pvdLayer), RIGIS_FLOOD_LAYER].sort())
+    for (const [u] of fetchMock.mock.calls) expect(new URL(String(u)).searchParams.get('f')).toBe('geojson')
+
+    expect(r.parcel?.pin).toBe('020-0123-0000')
+    expect(r.parcel?.geometry?.type).toBe('Polygon')
+    expect(r.overlays.baseZoning?.value).toBe('D-1-120')
+    expect(r.overlays.overlayDistricts?.map((d) => d.value)).toEqual(['Downcity Overlay District'])
+    expect(r.overlays.floodZone).toBe(undefined)
+    expect(r.overlays.historicDistrict).toBe(undefined)
+  })
+
+  it("fails with the service's own message when the parcel layer errors", async () => {
+    stubLayers({ [pvdLayer(0)]: () => json({ error: { code: 400, message: 'Invalid query parameters' } }) })
+    await expect(lookupParcelAt(-71.41, 41.82)).rejects.toThrow('Invalid query parameters')
+  })
+
+  it('falls back to the HTTP status when the error body has no explanation', async () => {
+    stubLayers({ [pvdLayer(0)]: () => new Response('<html>Bad gateway</html>', { status: 502 }) })
+    await expect(lookupParcelAt(-71.41, 41.82)).rejects.toThrow('GIS service returned HTTP 502')
   })
 })

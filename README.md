@@ -5,8 +5,12 @@ buildings on an interactive map and switch between Analyst, Broker, Developer an
 Investment views of the same property.
 
 Click any building in Providence to pull its live public record: the City of
-Providence 2025 tax roll (Open Data portal), plus zoning, flood, building size and
-the parcel outline from the City GIS server when it's reachable.
+Providence 2025 tax roll (Open Data portal); year built, building and land area,
+base zoning, overlay and local historic districts and the parcel outline from the
+city's ArcGIS Online layer [`Parcel_Zoning_FL`](https://services6.arcgis.com/wv9mHoqblhTsnqdG/arcgis/rest/services/Parcel_Zoning_FL/FeatureServer); and the
+flood zone and base flood elevation from FEMA's DFIRM as published by RIGIS
+([Statewide Flood Hazard Areas 2022](https://services2.arcgis.com/S8zZg9pg23JUEexQ/arcgis/rest/services/PLAN_DFIRM_Statewide_Flood_Hazard_Areas_2022/FeatureServer/1)).
+Both ArcGIS Online services are called straight from the browser.
 
 **The colored sample properties and all tenant, rent and market figures are fictional sample data.**
 
@@ -33,6 +37,6 @@ Deploying to Vercel: see [`DEPLOY.md`](DEPLOY.md).
 - `src/types` – domain model (properties, leases, rent rolls, underwriting)
 - `src/data` – sample Providence properties, submarkets, comps, zoning placeholders
 - `src/lib` – pure, tested calculations (occupancy, WALT, NOI, IRR, FAR capacity)
-- `src/services` – Providence Open Data tax-roll client and City GIS client (`/pvdgis`: the Vite proxy in dev, the `api/pvdgis.ts` relay on Vercel)
+- `src/services` – Providence Open Data tax-roll client and the GIS client for the city's ArcGIS Online parcel/zoning layers and RIGIS flood zones (called directly from the browser)
 - `src/store` – shared app state (selection, parcel lookup, persona, analysis date)
 - `src/components` – map, persona dashboard and sidebar UI

@@ -100,14 +100,14 @@ function TaxRollCard({ r }: { r: TaxRecord }) {
 
 function GisSection({ gis, record }: { gis: GisDetails; record: TaxRecord | null }) {
   if (gis.status === 'loading') {
-    return <Status title="Checking city GIS…" body="Zoning, flood zone, building size and parcel outline." spinner />
+    return <Status title="Checking parcel GIS…" body="Zoning, flood zone, building size and parcel outline." spinner />
   }
   if (gis.status === 'unavailable') {
     return (
       <Card title="Zoning & building details">
         <p className="text-xs text-slate-400">
-          The City of Providence GIS server isn't reachable from your network ({gis.reason}). Zoning, flood zone, year built,
-          building size and the parcel outline will appear when it is, for example on a US connection or once AVIANCRE is deployed.
+          The parcel and flood layers on ArcGIS Online didn't answer ({gis.reason}). Zoning, flood zone, year built, building
+          size and the parcel outline are missing for now; click the building again to retry.
         </p>
       </Card>
     )
@@ -120,6 +120,8 @@ function GisSection({ gis, record }: { gis: GisDetails; record: TaxRecord | null
   const m = parcelMetrics({ ...p, assessedValue: p.assessedValue ?? record?.assessedValue }, zoningCode)
   const flood = o.floodZone?.value
   const inSFHA = flood ? /^(A|V)/.test(flood.toUpperCase()) : false
+  const overlays = o.overlayDistricts ?? []
+  const bfe = o.baseFloodElevation
   const parcelZoningDiffers =
     p.parcelZoning && o.baseZoning && normalizeZoningCode(p.parcelZoning.value) !== normalizeZoningCode(o.baseZoning.value)
 
@@ -150,7 +152,15 @@ function GisSection({ gis, record }: { gis: GisDetails; record: TaxRecord | null
       <Card title="Zoning & environment">
         <StatGrid>
           <Stat label="Base zoning" value={o.baseZoning?.value ?? '—'} hint={o.baseZoningDistrict?.value} src={o.baseZoning} />
-          <Stat label="Flood zone" value={flood ?? 'Not in mapped flood area'} src={o.floodZone} tone="warn" hint={inSFHA ? 'Special flood hazard area' : undefined} />
+          <Stat label="Overlay districts" value={overlays.length ? overlays.map((d) => d.value).join(', ') : 'None'} src={overlays[0]} />
+          <Stat
+            label="Flood zone"
+            value={flood ?? 'Not in mapped flood area'}
+            src={o.floodZone}
+            tone="warn"
+            hint={inSFHA ? 'Special flood hazard area' : o.floodZoneSubtype?.value}
+          />
+          <Stat label="Base flood elevation" value={bfe ? `${bfe.value} ft` : '—'} hint={bfe?.notes} src={bfe} />
           <Stat label="Historic district" value={o.historicDistrict?.value ?? 'None'} src={o.historicDistrict} />
           {parcelZoningDiffers && <Stat label="Zoning on parcel" value={p.parcelZoning!.value} src={p.parcelZoning} hint="Differs from zoning map" tone="warn" />}
         </StatGrid>

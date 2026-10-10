@@ -8,7 +8,7 @@ AVIANCRE is a browser-only (no backend) 3D commercial real estate app for Provid
 
 - `npm test` — Vitest suite (tests are colocated `*.test.ts`; single file: `npx vitest run src/lib/metrics.test.ts`)
 - `npm run build` — `tsc -b && vite build`; this is the only type check
-- `npm run dev` — app at http://localhost:5173 (also serves the `/pvdgis` proxy)
+- `npm run dev` — app at http://localhost:5173
 - `npm run underwrite -- <id> [--as-of YYYY-MM-DD] [--assumptions set.json] [--price N] [--json]` — prints one property's underwriting at Defaults or at an exported assumption set; writes `docs/underwriting-<id>.csv`, or with `--json` the AI analyst's input `docs/underwriting/<id>.json` (for an imported `deal-*` id, both go to `private-deals/<id>/`)
 - `npm run import -- <file.csv|.xlsx> [--asset-type …] [--class …] [--submarket …] [--check]` — validates a rent roll in the `npm run rent-roll` export format and saves the deal as `private-deals/deal-<name>.json` (`--check`: validate only, save nothing)
 - `npm run convert -- <file> [--name …] [--allow-mismatch] [--dump]` — converts a Yardi "Rent Roll with Lease Charges" or a plain table of apartment units into the unit rent roll CSV (written under `private-deals/`), checked against the file's own totals; the app's import does the same through a mapping screen. Rules in `docs/UNDERWRITING.md` ("Converting other rent roll layouts")
@@ -33,8 +33,8 @@ TypeScript is strict (`tsconfig.app.json`): `verbatimModuleSyntax` (use `import 
 ## Data sources & gotchas
 
 - Sample properties, tenants, rents, and market figures in `src/data/` are fictional; zoning FAR/height limits in `src/data/zoning.ts` are placeholders. Tests pin `AS_OF = '2026-10-04'` and assert on specific sample properties — editing `sampleProperties.ts` can break them.
-- Parcel click (`lookupParcel`) queries Providence Open Data tax roll (Socrata `6ub4-iebe`, CORS-enabled, primary) and City ArcGIS (secondary) in parallel. GIS has a 22 s client timeout (the relay gives up upstream at 20 s) and degrades to `{status:'unavailable'}` rather than failing the lookup. A newer click aborts the older one via the module-level `AbortController` — preserve the `current()` check before `set`.
-- City ArcGIS is called at `/pvdgis/…`: the Vite proxy in dev and preview, and in production the `api/pvdgis.ts` Vercel function (US region, via the `vercel.json` rewrite), since the GIS is blocked from some non-US networks. The relay forwards only the layers and query params `providenceGis.ts` sends; a new one must be added to its allowlist (`src/services/pvdgisRelay.test.ts` checks). `VITE_PVD_GIS_URL` (the only env var) optionally overrides the base URL. Deploy steps: `DEPLOY.md`.
+- Parcel click (`lookupParcel`) queries Providence Open Data tax roll (Socrata `6ub4-iebe`, primary) and, in parallel, the GIS layers in `src/services/providenceGis.ts` (secondary): the city's ArcGIS Online `Parcel_Zoning_FL` (layer 0 parcels with CAMA, 12 base zoning, 3–7 overlay districts, 8 local historic) and RIGIS `PLAN_DFIRM_Statewide_Flood_Hazard_Areas_2022` layer 1 (flood zone, static BFE; -9999 = none). Only the parcel layer must answer. GIS has a 10 s timeout and degrades to `{status:'unavailable'}` rather than failing the lookup. A newer click aborts the older one via the module-level `AbortController` — preserve the `current()` check before `set`.
+- Every source is CORS-enabled (`Access-Control-Allow-Origin: *`) and called straight from the browser: no proxy, no serverless functions, no env vars. Don't use the city's own `webgis.providenceri.gov`: it drops connections from outside the US, including Vercel. Deploy steps: `DEPLOY.md`.
 - Building footprints come from OSM 3D buildings by design (RIGIS outlines are from 2018 and have no heights).
 - Keys (e.g. future Google 3D Tiles) go in `.env.local` (gitignored via `*.local`).
 
