@@ -262,8 +262,9 @@ const csv: Row[] = [
   ['Asset type', 'multifamily'],
   ['Units', units.length],
   ['Rentable SF', totalSF],
-  ['Class', ''],
-  ['Submarket', ''],
+  // Not in the raw file (a Yardi export has no property block): importing the .xlsx still asks for them.
+  ['Class', 'B'],
+  ['Submarket', 'olneyville'],
   ['Address', ''],
   [],
   ['Units'],
@@ -279,6 +280,7 @@ const csv: Row[] = [
     'Lease end',
     'Balance owed ($)',
     'Pre-leased (applicant)',
+    'Future lease rent ($/mo)',
     'Note',
   ],
 ]
@@ -297,6 +299,7 @@ for (const u of units) {
     u.moveOut ?? u.leaseExpiration ?? '',
     u.balance,
     PRE_LEASED.has(u.unit) ? 'Yes' : '',
+    '',
     notes.join('; '),
   ])
 }

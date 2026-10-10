@@ -14,7 +14,6 @@ import { underwrite } from './underwriting/underwrite'
 import { operatingCashFlows } from './underwriting/waterfall'
 
 const AS_OF = '2026-10-04'
-const DETAILS: DealDetails = { buildingClass: 'B', submarket: 'olneyville' }
 
 const importCSV = (csv: string, details: DealDetails = {}) => parseRentRoll(parseCSV(csv), { fileName: 'test.csv', asOf: AS_OF, details })
 const loaded = (r: ReturnType<typeof parseRentRoll>): Property => {
@@ -24,13 +23,15 @@ const loaded = (r: ReturnType<typeof parseRentRoll>): Property => {
 const matching = (issues: ImportIssue[], re: RegExp) => issues.filter((i) => re.test(i.message))
 
 describe('Fernhill Commons unit rent roll (sample)', () => {
-  const r = importCSV(fernhillDoc, DETAILS)
+  // Class B and Olneyville come from the file's property block, as in the app with nothing chosen.
+  const r = importCSV(fernhillDoc)
   const p = loaded(r)
   const rr = p.rentRoll
 
   it('imports with warnings only', () => {
     expect(r.issues.filter((i) => i.severity === 'error')).toEqual([])
-    expect(r.fileDetails).toEqual({ assetType: 'multifamily' })
+    expect(r.fileDetails).toEqual({ assetType: 'multifamily', buildingClass: 'B', submarket: 'olneyville' })
+    expect(p).toMatchObject({ buildingClass: 'B', location: { submarket: 'olneyville' } })
     expect(p).toMatchObject({ id: 'deal-fernhill-commons-apartments', name: 'Fernhill Commons Apartments', assetType: 'multifamily', isSample: true })
     expect(r.summary).toEqual({ kind: 'multifamily', name: p.name, rentableSF: 95_040, units: 120, occupiedUnits: 110, floorPlans: 4 })
   })
