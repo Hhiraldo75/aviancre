@@ -11,6 +11,7 @@
     "underwrite": "vite-node scripts/underwrite.ts",
     "rent-roll": "vite-node scripts/rent-roll.ts",
     "import": "vite-node scripts/import.ts",
+    "convert": "vite-node scripts/convert.ts",
     "check-private": "vite-node scripts/check-private.ts"
   },
   "dependencies": {
