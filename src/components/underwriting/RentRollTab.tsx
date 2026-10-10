@@ -136,7 +136,10 @@ function UnitMix({ view }: { view: Extract<RentRollView, { kind: 'unit-mix' }> }
       <p className="mb-2 text-[10px] text-slate-400">
         Rents are per unit per month: market averages all units, in-place averages occupied units. Loss to lease is market − in-place
         on occupied units; it burns off as each lease rolls to market at its lease end
-        {view.byUnit ? ', and vacant units lease up at market, pre-leased first' : ''}. Unit mix
+        {view.byUnit
+          ? ', and vacant units lease up at market, pre-leased first; a unit on notice with a future resident goes straight to the new lease'
+          : ''}
+        . Unit mix
         <SourceBadge data={view.source} />
       </p>
       <div className="overflow-x-auto rounded border border-slate-700">

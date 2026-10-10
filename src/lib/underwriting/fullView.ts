@@ -468,7 +468,9 @@ export function rentRollView(property: Property, r: UnderwritingResult, asOf: IS
 interface PlanTotals {
   units: number
   occupied: number
-  preLeased: number
+  /** Pre-leased units: vacant with a signed applicant, or on notice with the next resident signed. */
+  preLeasedVacant: number
+  onNotice: number
   sf: number
   market: number
   /** Sums over occupied units. */
@@ -483,6 +485,16 @@ interface PlanTotals {
  * unit by unit; a unit-type rent roll uses each type's averages (in-place
  * assumed at market when missing, so no loss to lease).
  */
+/** "4 (3 vacant, 1 on notice)": every pre-leased unit, like the import's totals check. */
+function preLeasedCount(t: PlanTotals): string {
+  const parts = [
+    ...(t.preLeasedVacant ? [`${fmt.int(t.preLeasedVacant)} vacant`] : []),
+    ...(t.onNotice ? [`${fmt.int(t.onNotice)} on notice`] : []),
+  ]
+  const total = fmt.int(t.preLeasedVacant + t.onNotice)
+  return parts.length ? `${total} (${parts.join(', ')})` : total
+}
+
 function unitMixView(rr: MultifamilyRentRoll): RentRollView {
   const plans = rr.unitTypes.map((u): [string, string, PlanTotals] => {
     const units = rr.units?.filter((x) => x.floorPlan === u.id)
@@ -493,7 +505,8 @@ function unitMixView(rr: MultifamilyRentRoll): RentRollView {
       ? {
           units: units.length,
           occupied: occupied!.length,
-          preLeased: units.filter((x) => !x.occupied && x.preLeased).length,
+          preLeasedVacant: units.filter((x) => !x.occupied && x.preLeased).length,
+          onNotice: occupied!.filter((x) => x.preLeased).length,
           sf: units.reduce((s, x) => s + x.sf, 0),
           market: units.reduce((s, x) => s + x.marketRentMonthly, 0),
           occupiedMarket: occupied!.reduce((s, x) => s + x.marketRentMonthly, 0),
@@ -503,7 +516,8 @@ function unitMixView(rr: MultifamilyRentRoll): RentRollView {
       : {
           units: u.unitCount,
           occupied: u.occupiedUnits,
-          preLeased: 0,
+          preLeasedVacant: 0,
+          onNotice: 0,
           sf: u.avgSF * u.unitCount,
           market: market * u.unitCount,
           occupiedMarket: market * u.occupiedUnits,
@@ -524,7 +538,7 @@ function unitMixView(rr: MultifamilyRentRoll): RentRollView {
       units: fmt.int(t.units),
       occupied: fmt.int(t.occupied),
       vacant: fmt.int(t.units - t.occupied),
-      preLeased: byUnit ? fmt.int(t.preLeased) : '—',
+      preLeased: byUnit ? preLeasedCount(t) : '—',
       avgSF: t.units ? fmt.int(t.sf / t.units) : '—',
       market: t.units ? fmt.usdCents(t.market / t.units) : '—',
       inPlace: t.occupied ? fmt.usdCents(t.inPlace / t.occupied) : '—',
@@ -538,7 +552,7 @@ function unitMixView(rr: MultifamilyRentRoll): RentRollView {
       for (const k of Object.keys(s) as (keyof PlanTotals)[]) s[k] += t[k]
       return s
     },
-    { units: 0, occupied: 0, preLeased: 0, sf: 0, market: 0, occupiedMarket: 0, inPlace: 0, rented: 0 },
+    { units: 0, occupied: 0, preLeasedVacant: 0, onNotice: 0, sf: 0, market: 0, occupiedMarket: 0, inPlace: 0, rented: 0 },
   )
   const first = rr.unitTypes[0]?.marketRentMonthly
   return {

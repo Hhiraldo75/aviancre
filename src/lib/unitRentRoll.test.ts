@@ -156,11 +156,13 @@ describe('Fernhill Commons unit rent roll (sample)', () => {
     expect(view.byUnit).toBe(true)
     expect(view.source.source).toBe('imported')
     const b = view.rows.find((x) => x.floorPlan === '735 SF')!
-    expect(b).toMatchObject({ units: '48', occupied: '44', vacant: '4', preLeased: '1', market: '$1,525.00', inPlace: '$1,451.93' })
+    expect(b).toMatchObject({ units: '48', occupied: '44', vacant: '4', preLeased: '1 (1 vacant)', market: '$1,525.00', inPlace: '$1,451.93' })
     expect(b.lossToLease).toBe('$73.07')
+    expect(view.rows.find((x) => x.floorPlan === '560 SF')?.preLeased).toBe('2 (1 vacant, 1 on notice)')
+    expect(view.rows.find((x) => x.floorPlan === '1180 SF')?.preLeased).toBe('0')
     expect(view.rows.find((x) => x.floorPlan === '960 SF')).toMatchObject({ lossToLease: '$45.56', lossToLeasePct: '2.5%', lossToLeaseAnnual: '$14,760' })
     expect(view.totals).toMatchObject({ lossToLease: '$51.27', lossToLeasePct: '3.2%', lossToLeaseAnnual: '$67,680' })
-    expect(view.totals).toMatchObject({ units: '120', occupied: '110', vacant: '10', preLeased: '3', market: '$1,620.25', inPlace: '$1,566.45' })
+    expect(view.totals).toMatchObject({ units: '120', occupied: '110', vacant: '10', preLeased: '4 (3 vacant, 1 on notice)', market: '$1,620.25', inPlace: '$1,566.45' })
   })
 
   it('round-trips as a stored deal', () => {
