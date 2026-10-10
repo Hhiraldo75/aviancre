@@ -1,6 +1,7 @@
 import type { CommercialRentRoll, ISODate, MultifamilyRentRoll } from '../../types'
 import { fmt } from '../../lib/format'
 import { currentRentPerSF, isLeaseActive, monthsUntil } from '../../lib/metrics'
+import { bySF } from '../../lib/unitRentRoll'
 import SourceBadge from '../ui/SourceBadge'
 
 /** Leases expiring inside this window are flagged for re-leasing risk / prospecting. */
@@ -73,7 +74,7 @@ export function UnitMixTable({ rentRoll }: { rentRoll: MultifamilyRentRoll }) {
         </tr>
       </thead>
       <tbody>
-        {rentRoll.unitTypes.map((u) => (
+        {bySF(rentRoll.unitTypes).map((u) => (
           <tr key={u.id} className="border-t border-slate-700/70">
             <td className="py-1.5 font-medium">{u.label}</td>
             <td className="py-1.5 text-right tabular-nums">

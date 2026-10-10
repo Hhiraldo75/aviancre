@@ -171,12 +171,15 @@ export function readUnits(grid: Cell[][], unitsAt: number, sections: string[], a
   return { rows: table.rows, units, floorPlans, occupiedRows, totalSF }
 }
 
+/** Floor plans from smallest to largest average SF; ties keep their order. */
+export const bySF = <T extends { avgSF: number }>(types: T[]) => [...types].sort((a, b) => a.avgSF - b.avgSF)
+
 /**
- * The engine's unit mix, one type per floor plan in file order: averages of
- * SF and market rent over all units, in-place rent over occupied units.
+ * The engine's unit mix, one type per floor plan, smallest to largest: averages
+ * of SF and market rent over all units, in-place rent over occupied units.
  */
 export function unitMix(units: ApartmentUnit[], floorPlans: FloorPlan[], sourceName: string, importedAt?: ISODate): UnitType[] {
-  return floorPlans.flatMap(({ id, label }) => {
+  const types = floorPlans.flatMap(({ id, label }) => {
     const all = units.filter((u) => u.floorPlan === id)
     if (!all.length) return []
     const occupied = all.filter((u) => u.occupied)
@@ -193,4 +196,5 @@ export function unitMix(units: ApartmentUnit[], floorPlans: FloorPlan[], sourceN
       },
     ]
   })
+  return bySF(types)
 }

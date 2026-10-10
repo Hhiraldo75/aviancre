@@ -36,12 +36,13 @@ describe('Fernhill Commons unit rent roll (sample)', () => {
     expect(r.summary).toEqual({ kind: 'multifamily', name: p.name, rentableSF: 95_040, units: 120, occupiedUnits: 110, floorPlans: 4 })
   })
 
-  it('aggregates 120 units into 4 floor plans', () => {
+  it('aggregates 120 units into 4 floor plans, smallest to largest', () => {
     if (rr.kind !== 'multifamily') throw new Error('expected multifamily')
     expect(rr.units).toHaveLength(120)
+    // The file lists 735 SF first.
     expect(rr.unitTypes.map((u) => [u.label, u.unitCount, u.occupiedUnits, u.avgSF])).toEqual([
-      ['735 SF', 48, 44, 735],
       ['560 SF', 30, 28, 560],
+      ['735 SF', 48, 44, 735],
       ['960 SF', 30, 27, 960],
       ['1180 SF', 12, 11, 1180],
     ])
@@ -156,6 +157,7 @@ describe('Fernhill Commons unit rent roll (sample)', () => {
     if (view.kind !== 'unit-mix') throw new Error('expected unit mix')
     expect(view.byUnit).toBe(true)
     expect(view.source.source).toBe('imported')
+    expect(view.rows.map((x) => x.floorPlan)).toEqual(['560 SF', '735 SF', '960 SF', '1180 SF'])
     const b = view.rows.find((x) => x.floorPlan === '735 SF')!
     expect(b).toMatchObject({ units: '48', occupied: '44', vacant: '4', preLeased: '1 (1 vacant)', market: '$1,525.00', inPlace: '$1,451.93' })
     expect(b.lossToLease).toBe('$73.07')
@@ -164,6 +166,14 @@ describe('Fernhill Commons unit rent roll (sample)', () => {
     expect(view.rows.find((x) => x.floorPlan === '960 SF')).toMatchObject({ lossToLease: '$45.56', lossToLeasePct: '2.5%', lossToLeaseAnnual: '$14,760' })
     expect(view.totals).toMatchObject({ lossToLease: '$51.27', lossToLeasePct: '3.2%', lossToLeaseAnnual: '$67,680' })
     expect(view.totals).toMatchObject({ units: '120', occupied: '110', vacant: '10', preLeased: '4 (3 vacant, 1 on notice)', market: '$1,620.25', inPlace: '$1,566.45' })
+  })
+
+  it('sorts the unit mix of a deal saved in file order', () => {
+    if (rr.kind !== 'multifamily') throw new Error('expected multifamily')
+    const saved: Property = { ...p, rentRoll: { ...rr, unitTypes: [...rr.unitTypes].reverse() } }
+    const view = rentRollView(saved, underwrite(saved, AS_OF), AS_OF)
+    if (view.kind !== 'unit-mix') throw new Error('expected unit mix')
+    expect(view.rows.map((x) => x.floorPlan)).toEqual(['560 SF', '735 SF', '960 SF', '1180 SF'])
   })
 
   it('round-trips as a stored deal', () => {

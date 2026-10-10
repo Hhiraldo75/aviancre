@@ -1,6 +1,7 @@
 import type { ISODate, Property, SensitivityGrid, UnderwritingResult } from '../../types'
 import { fmt } from '../format'
 import { occupancy } from '../metrics'
+import { bySF } from '../unitRentRoll'
 import { isEstimate } from './defaults'
 import { DEFAULTS_SET, memoMarker, setSummary } from './assumptionSets'
 import { defaultsFor, editableFields, fieldValue, isEdited, type AssumptionEdits, type AssumptionGroupTitle } from './edits'
@@ -233,7 +234,7 @@ function rentRollSection(property: Property, asOf: ISODate, r: UnderwritingResul
       marketRent: fig(m.marketRent, `${fmt.usd(m.marketRent)}/unit/mo`),
       inPlaceVsMarket,
       markToMarketThreshold: pct(MARK_TO_MARKET_THRESHOLD, 0),
-      unitMix: rr.unitTypes.map((u) => ({
+      unitMix: bySF(rr.unitTypes).map((u) => ({
         label: u.label,
         units: u.unitCount,
         occupied: u.occupiedUnits,

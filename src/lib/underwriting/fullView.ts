@@ -10,6 +10,7 @@ import type {
   UnderwritingResult,
 } from '../../types'
 import { fmt } from '../format'
+import { bySF } from '../unitRentRoll'
 import { activeLeases, currentRentPerSF, occupancy, yearsBetween } from '../metrics'
 import { RULE_OF_THUMB } from './defaults'
 import { defaultsFor, editableFields, fieldValue, formatInput, isEdited, type AssumptionField, type AssumptionGroupTitle } from './edits'
@@ -496,7 +497,8 @@ function preLeasedCount(t: PlanTotals): string {
 }
 
 function unitMixView(rr: MultifamilyRentRoll): RentRollView {
-  const plans = rr.unitTypes.map((u): [string, string, PlanTotals] => {
+  // Sorted here too, for deals saved before the import sorted them.
+  const plans = bySF(rr.unitTypes).map((u): [string, string, PlanTotals] => {
     const units = rr.units?.filter((x) => x.floorPlan === u.id)
     const occupied = units?.filter((x) => x.occupied)
     const market = u.marketRentMonthly.value
