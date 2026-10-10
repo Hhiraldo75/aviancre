@@ -137,6 +137,28 @@ describe('Yardi Rent Roll with Lease Charges', () => {
     expect(c.flags).toContainEqual('1 notice-to-vacate unit: lease end set to the move-out date.')
   })
 
+  it('keeps a future resident\'s rent charges as the future lease rent', () => {
+    const withRent = convertRentRoll(
+      yardi((rows) => {
+        const at = rowOf(rows, 102, rows.findIndex((r) => r[0] === 'Future Residents/Applicants'))
+        rows[at][6] = 'rent'
+        rows[at][7] = 1250
+        rows.splice(at + 1, 1, charge('petrent', 25), blockTotal(1275), [], [103, 'tg2a', 850, 't004', 'Applicant', 1500, 'rnt', 1525], blockTotal(1525))
+      }),
+      MODEL_VACANT,
+    )
+    expect(withRent.units.map((u) => [u.unit, u.preLeased, u.futureRent])).toEqual([
+      ['101', false, undefined],
+      ['102', true, 1250],
+      ['103', true, 1525],
+      ['104', false, undefined],
+    ])
+    expect(withRent.flags).toContainEqual('2 future residents with a rent charge: kept as the future lease rent.')
+    expect(c.units.find((u) => u.unit === '102')?.futureRent).toBeUndefined()
+    const header = conversionGrid(withRent)[12]
+    expect(conversionGrid(withRent)[14][header.indexOf('Future lease rent ($/mo)')]).toBe(1250)
+  })
+
   it('groups floor plans by SF + market rent, named by SF, with the unit type codes as notes', () => {
     expect(c.plans.map((p) => [p.key, p.name, p.units, p.codes])).toEqual([
       ['600|1200', '600 SF', 2, ['tg1a', 'tg1b']],

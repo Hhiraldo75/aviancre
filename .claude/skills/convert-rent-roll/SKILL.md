@@ -36,7 +36,7 @@ A rent roll that isn't one of the public samples in `docs/samples/` is a **priva
    - **the file's own totals**: unit count, occupied/vacant counts, square feet, rent and market rent totals, totals per charge code. These are the cross-check.
 3. **Write the clean CSV** next to the source if it's in `private-deals/`, else in `private-deals/`, as `<file name>-unit-rent-roll.csv`. Use exactly the layout of `docs/samples/fernhill-commons-unit-rent-roll.csv`: a title row `<Property name>: unit rent roll`; an `As of YYYY-MM-DD` row if the file gives a date; the Property block (`Asset type,multifamily`, `Units`, `Rentable SF`, then `Class`, `Submarket` and `Address`, blank unless the file states them); then the `Units` title row and this header:
 
-   `Unit,Floor plan,SF,Status,Market rent ($/mo),In-place rent ($/mo),Other income ($/mo),Move-in,Lease end,Balance owed ($),Pre-leased (applicant),Note`
+   `Unit,Floor plan,SF,Status,Market rent ($/mo),In-place rent ($/mo),Other income ($/mo),Move-in,Lease end,Balance owed ($),Pre-leased (applicant),Future lease rent ($/mo),Note`
 
    Rules, the same ones the converter follows:
    - **One row per unit.** Status is `Occupied` or `Vacant` only. A vacant unit's in-place rent and other income are 0.
@@ -45,6 +45,7 @@ A rent roll that isn't one of the public samples in `docs/samples/` is a **priva
    - **Floor plan:** units are grouped by their (SF, market rent) pair, each group named `<SF> SF` (e.g. `571 SF`) unless the user gives names. The file's own unit type code goes in the Note column (`Unit type <code>`).
    - **Dates** as `YYYY-MM-DD`. A unit on notice to vacate keeps its status, and its lease end becomes the move-out date (say so in the Note).
    - **Pre-leased** is `Yes` only where the file shows a future resident or applicant for that unit.
+   - **Future lease rent** is the future resident's monthly rent charge(s), only on a pre-leased unit and only when the file gives it; otherwise blank.
    - **Rentable SF** is the sum of the units' SF unless the file states a total.
    - **Missing values:** leave them blank and list them. A blank required value (SF, market rent, or in-place rent on an occupied unit) makes the import check fail, which is correct: don't fill it in.
    - **Inferred values:** anything not read directly from a cell (a status from a blank tenant, a lease end from a move-out date, a monthly figure from an annual one) is described in that unit's Note.

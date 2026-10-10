@@ -22,7 +22,7 @@ import {
  * Total row), a "Future Residents/Applicants" section, and summary sections
  * whose totals are the cross-check. Rent is the rent charge; other charges are
  * other income; a VACANT resident is vacant at market; a future resident marks
- * the unit pre-leased.
+ * the unit pre-leased, and their rent charges, if any, are the future lease rent.
  */
 
 export const YARDI_FIELDS: FieldSpec[] = [
@@ -105,7 +105,7 @@ export function readYardi(grid: Cell[][], layout: Layout, fields: FieldMapping[]
 
   // ---- unit blocks ----
   const blocks: Block[] = []
-  const futureUnits: { unit: string; row: number }[] = []
+  const futureUnits: { unit: string; row: number; charges: [code: string, amount: number][] }[] = []
   const summaryRows: { label: string; row: Cell[] }[] = []
   let summaryHeader: string[] = []
   const chargeSummary = new Map<string, number>()
@@ -166,7 +166,10 @@ export function readYardi(grid: Cell[][], layout: Layout, fields: FieldMapping[]
       }
     } else if (section === 'future') {
       const unit = text(at(row, cUnit))
-      if (unit) futureUnits.push({ unit, row: i + 1 })
+      const code = text(at(row, cCode))
+      const amount = parseNumber(at(row, cAmt) ?? null) ?? 0
+      if (unit) futureUnits.push({ unit, row: i + 1, charges: code ? [[code, amount]] : [] })
+      else if (futureUnits.length && code && norm(code) !== 'total') futureUnits[futureUnits.length - 1].charges.push([code, amount])
     } else if (section === 'summary') {
       if (first) summaryRows.push({ label: headerKey(first), row })
     } else if (section === 'charges') {
@@ -249,14 +252,26 @@ export function readYardi(grid: Cell[][], layout: Layout, fields: FieldMapping[]
   if (noRent.length) blockers.push(`Occupied with no rent charge: units ${list(noRent)}. Check the rent code under Charge codes.`)
   if (notices) flags.push(`${notices} notice-to-vacate unit${notices === 1 ? '' : 's'}: lease end set to the move-out date.`)
 
-  // ---- future residents: pre-leased ----
+  // ---- future residents: pre-leased, at their rent charges when there are any ----
   const byUnit = new Map(units.map((u) => [u.unit, u]))
   const unknownFuture: string[] = []
+  let futureRents = 0
   for (const f of futureUnits) {
     const u = byUnit.get(f.unit)
-    if (!u) unknownFuture.push(`${f.unit} (row ${f.row})`)
-    else if (!u.preLeased) u.preLeased = true
+    if (!u) {
+      unknownFuture.push(`${f.unit} (row ${f.row})`)
+      continue
+    }
+    u.preLeased = true
+    // A code only future residents use isn't under Charge codes; the usual rent codes still count.
+    const isRent = (c: string) => (useOf.get(c) ?? (RENT_CODES.includes(c.toLowerCase()) ? 'rent' : 'other')) === 'rent'
+    const rent = round2(f.charges.filter(([c]) => isRent(c)).reduce((s, [, a]) => s + a, 0))
+    if (rent > 0) {
+      u.futureRent = rent
+      futureRents++
+    }
   }
+  if (futureRents) flags.push(`${futureRents} future resident${futureRents === 1 ? '' : 's'} with a rent charge: kept as the future lease rent.`)
   if (unknownFuture.length) blockers.push(`Future residents for units not in the current section: ${list(unknownFuture)}.`)
 
   // ---- the file's own totals ----

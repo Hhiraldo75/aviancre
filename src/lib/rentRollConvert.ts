@@ -331,6 +331,7 @@ export function conversionGrid(c: Conversion): Cell[][] {
       u.leaseEnd ?? '',
       u.balance,
       u.preLeased ? 'Yes' : '',
+      u.preLeased ? (u.futureRent ?? '') : '',
       u.notes.join('; '),
     ]),
   ]

@@ -270,7 +270,7 @@ export default function RentRollMapping({
             <table className="w-full whitespace-nowrap tabular-nums text-[11px]">
               <thead className="text-[10px] uppercase tracking-wide text-slate-500">
                 <tr>
-                  {['Row', 'Unit', 'Floor plan', 'SF', 'Status', 'Market', 'In-place', 'Other', 'Move-in', 'Lease end', 'Balance', 'Pre-leased'].map((h) => (
+                  {['Row', 'Unit', 'Floor plan', 'SF', 'Status', 'Market', 'In-place', 'Other', 'Move-in', 'Lease end', 'Balance', 'Pre-leased', 'Future rent'].map((h) => (
                     <th key={h} className="px-1.5 py-1 text-left font-normal">
                       {h}
                     </th>
@@ -294,6 +294,7 @@ export default function RentRollMapping({
                       <td className={`px-1.5 py-0.5 ${inferred('leaseEnd')}`}>{u.leaseEnd ?? ''}</td>
                       <td className="px-1.5 py-0.5">{u.balance ? fmt.usdCents(u.balance) : ''}</td>
                       <td className={`px-1.5 py-0.5 ${inferred('preLeased')}`}>{u.preLeased ? 'Yes' : ''}</td>
+                      <td className="px-1.5 py-0.5">{u.futureRent ? fmt.usdCents(u.futureRent) : ''}</td>
                     </tr>
                   )
                 })}

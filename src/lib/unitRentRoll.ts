@@ -22,6 +22,7 @@ export const UNIT_COLUMNS = {
   leaseEnd: { label: 'Lease end', required: false },
   balance: { label: 'Balance owed ($)', required: false },
   preLeased: { label: 'Pre-leased (applicant)', required: false },
+  futureRent: { label: 'Future lease rent ($/mo)', required: false },
   /** Free text for the analyst (e.g. what a converter inferred); the engine ignores it. */
   note: { label: 'Note', required: false },
 }
@@ -143,6 +144,14 @@ export function readUnits(grid: Cell[][], unitsAt: number, sections: string[], a
       warn(`Balance owed ${fmt.usdCents(balance)}. Not modeled: check collections and the credit loss assumption.`, row, col('balance'))
     }
 
+    const preLeased = isPreLeased(get('preLeased'))
+    const futureRent = parseNumber(get('futureRent'))
+    if (futureRent !== null && (!Number.isFinite(futureRent) || futureRent <= 0)) {
+      fail(`Future lease rent must be a positive $/month number, got "${text(get('futureRent'))}".`, row, col('futureRent'))
+    } else if (futureRent !== null && !preLeased) {
+      warn(`Future lease rent ${fmt.usdCents(futureRent)} on a unit that isn't pre-leased is ignored.`, row, col('futureRent'))
+    }
+
     if (errors) continue
     units.push({
       unit,
@@ -155,7 +164,8 @@ export function readUnits(grid: Cell[][], unitsAt: number, sections: string[], a
       moveInDate: moveIn,
       leaseEndDate: occupied ? leaseEnd : undefined,
       balanceOwed: balance ?? 0,
-      preLeased: isPreLeased(get('preLeased')),
+      preLeased,
+      ...(preLeased && futureRent !== null ? { futureRentMonthly: futureRent } : {}),
     })
   }
   return { rows: table.rows, units, floorPlans, occupiedRows, totalSF }

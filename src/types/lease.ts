@@ -129,8 +129,10 @@ export interface ApartmentUnit {
   leaseEndDate?: ISODate
   /** Delinquent balance (+) or prepaid credit (−); reported, not modeled. */
   balanceOwed: USD
-  /** A vacant unit with a signed applicant (or an occupied unit already re-let). */
+  /** A vacant unit with a signed applicant, or an occupied unit on notice whose next resident has signed. */
   preLeased: boolean
+  /** The signed future lease's rent, $/month, when the file gives one (pre-leased units only); otherwise the next lease is at market. */
+  futureRentMonthly?: USD
 }
 
 export interface MultifamilyRentRoll {

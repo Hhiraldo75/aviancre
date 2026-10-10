@@ -40,6 +40,7 @@ export const GENERIC_FIELDS: FieldSpec[] = [
   { key: 'moveOut', label: 'Move-out (notice)', synonyms: ['move out', 'move out date'] },
   { key: 'balance', label: 'Balance owed', synonyms: ['balance', 'balance owed', 'past due', 'amount owed', 'ar balance', 'delinquent'] },
   { key: 'preLeased', label: 'Pre-leased', synonyms: ['pre leased', 'preleased', 'pre lease', 'applicant', 'future resident'] },
+  { key: 'futureRent', label: 'Future lease rent ($/mo)', synonyms: ['future rent', 'future lease rent', 'new lease rent', 'applicant rent', 'pre lease rent'] },
 ]
 
 /** Status values every rent roll uses; anything else is the user's call. */
@@ -211,6 +212,7 @@ export function readGeneric(grid: Cell[][], layout: Layout, fields: FieldMapping
     if (inferred.includes('status')) notes.push(`Status from the tenant column: ${occupied ? 'occupied' : 'vacant'}`)
     const inPlace = occupied ? (num('inPlace') ?? 0) : 0
     if (occupied && !inPlace) noRent.push(unit)
+    const futureRent = preLeased ? num('futureRent') : null
     units.push({
       unit,
       sourceRow: n,
@@ -223,6 +225,7 @@ export function readGeneric(grid: Cell[][], layout: Layout, fields: FieldMapping
       leaseEnd,
       balance: num('balance') ?? 0,
       preLeased,
+      ...(futureRent !== null && futureRent > 0 ? { futureRent } : {}),
       unitType,
       notes,
       inferred,

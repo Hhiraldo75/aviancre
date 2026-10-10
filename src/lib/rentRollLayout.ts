@@ -24,6 +24,7 @@ export type FieldKey =
   | 'moveOut'
   | 'balance'
   | 'preLeased'
+  | 'futureRent'
 
 export interface FieldSpec {
   key: FieldKey
@@ -83,6 +84,8 @@ export interface RawUnit {
   leaseEnd?: ISODate
   balance: number
   preLeased: boolean
+  /** The future resident's rent, $/month, when the file gives one. */
+  futureRent?: number
   unitType?: string
   notes: string[]
   /** Output columns whose value was inferred rather than read. */

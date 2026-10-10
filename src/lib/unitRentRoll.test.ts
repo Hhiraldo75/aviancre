@@ -267,3 +267,33 @@ describe('unit rent roll warnings still allow the import', () => {
     ])
   })
 })
+
+describe('future lease rent', () => {
+  /** TINY with a Future lease rent column; one value per unit (101 occupied, 102 vacant, 103 vacant pre-leased). */
+  const withFuture = (values: [string, string, string]) =>
+    TINY.split('\n')
+      .map((line, i) => (i === 10 ? `${line},Future lease rent ($/mo)` : i >= 11 && i <= 13 ? `${line},${values[i - 11]}` : line))
+      .join('\n')
+  const unit = (csv: string, id: string) => {
+    const rr = loaded(importCSV(csv)).rentRoll
+    return rr.kind === 'multifamily' ? rr.units?.find((u) => u.unit === id) : undefined
+  }
+
+  it('keeps the future rent on a pre-leased unit; without the column there is none', () => {
+    expect(importCSV(withFuture(['', '', '1450'])).issues).toEqual([])
+    expect(unit(withFuture(['', '', '1450']), '103')?.futureRentMonthly).toBe(1450)
+    expect(unit(TINY, '103')).not.toHaveProperty('futureRentMonthly')
+  })
+  it('warns and ignores it on a unit that isn\'t pre-leased', () => {
+    const csv = withFuture(['950', '', ''])
+    expect(importCSV(csv).issues).toEqual([
+      expect.objectContaining({ severity: 'warning', row: ROW.u101, column: 'Future lease rent ($/mo)', message: expect.stringMatching(/^Future lease rent \$950\.00 on a unit that isn't pre-leased is ignored/) }),
+    ])
+    expect(unit(csv, '101')).not.toHaveProperty('futureRentMonthly')
+  })
+  it('rejects a rent that isn\'t positive', () => {
+    expect(importCSV(withFuture(['', '', '0'])).issues).toEqual([
+      expect.objectContaining({ severity: 'error', row: ROW.u103, message: expect.stringMatching(/^Future lease rent must be a positive/) }),
+    ])
+  })
+})
