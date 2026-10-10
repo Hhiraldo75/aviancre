@@ -200,7 +200,7 @@ export function convertRentRoll(grid: Cell[][], opts: ConvertOptions = {}): Conv
   const isSample = SAMPLE_SUFFIX.test(rawName)
   const name = rawName.replace(SAMPLE_SUFFIX, '').trim()
   if (!name) blockers.push('No property name in the file. Enter one under Property name.')
-  if (opts.name?.trim() && ex.name) flags.push(`Property name entered by hand (the file says "${ex.name}").`)
+  if (opts.name?.trim() && ex.name && opts.name.trim() !== ex.name) flags.push(`Property name entered by hand (the file says "${ex.name}").`)
   if (ex.asOf && opts.today) {
     const years = (Date.parse(opts.today) - Date.parse(ex.asOf)) / (365.25 * 86_400_000)
     if (years > 1) {
@@ -294,6 +294,10 @@ export function convertRentRoll(grid: Cell[][], opts: ConvertOptions = {}): Conv
 }
 
 export const totalsMismatches = (c: Conversion) => c.totals.filter((t) => t.match === false)
+
+/** Nothing blocks, and any totals mismatch has been acknowledged. */
+export const readyToLoad = (c: Conversion, mismatchOK: boolean) =>
+  (c.format === 'yardi-lease-charges' || c.format === 'generic') && !c.blockers.length && (!totalsMismatches(c).length || mismatchOK)
 
 export function formatTotal(kind: TotalsCheck['kind'], n: number): string {
   return kind === 'usd' ? fmt.usdCents(n) : kind === 'sf' ? fmt.sf(n) : fmt.int(n)

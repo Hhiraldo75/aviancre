@@ -41,7 +41,7 @@ export default function PortfolioList() {
       <button
         type="button"
         onClick={() => fileInput.current?.click()}
-        title="CSV or Excel in the rent roll export format. Read in this browser only; nothing is uploaded."
+        title="CSV or Excel: the rent roll export format, a Yardi rent roll or a table of units (converted first). Read in this browser only; nothing is uploaded."
         className="mt-3 w-full rounded border border-slate-600 px-2.5 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
       >
         Import rent roll

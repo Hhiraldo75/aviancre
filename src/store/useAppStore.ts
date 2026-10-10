@@ -17,6 +17,7 @@ import {
 } from '../lib/filters'
 import { isImportedDeal } from '../lib/importedDeals'
 import { todayISO } from '../lib/metrics'
+import { isRentRollPreset, withPreset, type RentRollPreset } from '../lib/rentRollConvert'
 import { DEFAULTS_SET, isSavedSet, type SavedAssumptionSet } from '../lib/underwriting/assumptionSets'
 import type { AssumptionEdits } from '../lib/underwriting/edits'
 import { lookupParcelAt } from '../services/providenceGis'
@@ -72,6 +73,19 @@ function loadAssumptionSets(): Record<string, SavedAssumptionSet[]> {
   }
 }
 
+/** Confirmed rent roll layout mappings (no deal data, only column labels and codes); browser only. */
+export const RENT_ROLL_PRESETS_KEY = 'aviancre.rentRollPresets.v1'
+
+function loadRentRollPresets(): RentRollPreset[] {
+  if (!hasWindow) return []
+  try {
+    const stored: unknown = JSON.parse(window.localStorage.getItem(RENT_ROLL_PRESETS_KEY) ?? '[]')
+    return Array.isArray(stored) ? stored.filter(isRentRollPreset) : []
+  } catch {
+    return []
+  }
+}
+
 /** Filters and sort start from the URL, so a shared link opens the same view. */
 const initialView = hasWindow ? filtersFromQuery(window.location.search) : { filters: EMPTY_FILTERS, sort: DEFAULT_SORT }
 
@@ -99,6 +113,8 @@ interface AppState {
   assumptionSets: Record<string, SavedAssumptionSet[]>
   /** The set last applied or saved, by property id; absent = Defaults. The edits may since differ from it. */
   activeSets: Record<string, string>
+  /** Saved rent roll layout mappings; a matching one converts the same layout automatically. Kept in local storage. */
+  rentRollPresets: RentRollPreset[]
   /** Portfolio filters; the map and the list show the same matching set. Mirrored in the URL. */
   filters: PropertyFilters
   sort: SortKey
@@ -122,6 +138,9 @@ interface AppState {
   applyAssumptionSet: (propertyId: string, name: string) => void
   /** Deletes a saved set; the current edits stay as they are. Defaults can't be deleted. */
   deleteAssumptionSet: (propertyId: string, name: string) => void
+  /** Saves a preset, replacing one for the same layout or with the same name. */
+  saveRentRollPreset: (preset: RentRollPreset) => void
+  deleteRentRollPreset: (name: string) => void
   setFilter: <K extends keyof PropertyFilters>(key: K, value: PropertyFilters[K]) => void
   /** Clears the filter behind an active-filter chip (see `activeFilterChips`). */
   removeFilter: (chipKey: string) => void
@@ -155,6 +174,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   assumptionEdits: {},
   assumptionSets: loadAssumptionSets(),
   activeSets: {},
+  rentRollPresets: loadRentRollPresets(),
   filters: initialView.filters,
   sort: initialView.sort,
   zoomRequest: 0,
@@ -275,6 +295,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
         activeSets: s.activeSets[propertyId] === name ? otherActive : s.activeSets,
       }
     }),
+  saveRentRollPreset: (preset) => set((s) => ({ rentRollPresets: withPreset(s.rentRollPresets, preset) })),
+  deleteRentRollPreset: (name) => set((s) => ({ rentRollPresets: s.rentRollPresets.filter((p) => p.name !== name) })),
 
   setFilter: (key, value) => set((s) => ({ filters: { ...s.filters, [key]: value } })),
   removeFilter: (chipKey) => set((s) => ({ filters: withoutFilter(s.filters, chipKey) })),
@@ -313,6 +335,18 @@ if (hasWindow) {
       window.localStorage.setItem(ASSUMPTION_SETS_KEY, JSON.stringify(s.assumptionSets))
     } catch {
       // Storage blocked or full: the sets last until reload.
+    }
+  })
+}
+
+// Persist rent roll presets whenever they change.
+if (hasWindow) {
+  useAppStore.subscribe((s, prev) => {
+    if (s.rentRollPresets === prev.rentRollPresets) return
+    try {
+      window.localStorage.setItem(RENT_ROLL_PRESETS_KEY, JSON.stringify(s.rentRollPresets))
+    } catch {
+      // Storage blocked or full: the presets last until reload.
     }
   })
 }

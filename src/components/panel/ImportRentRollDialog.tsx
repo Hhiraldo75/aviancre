@@ -2,16 +2,20 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { AssetType, BuildingClass, SubmarketId } from '../../types'
 import { SUBMARKETS } from '../../data/submarkets'
 import { fmt } from '../../lib/format'
+import { conversionGrid, convertRentRoll, detectLayout, readyToLoad, type ConvertOptions } from '../../lib/rentRollConvert'
 import { readRentRollFile, RENT_ROLL_EXTENSIONS } from '../../lib/rentRollFile'
 import { BUILDING_CLASSES, IMPORT_ASSET_TYPES, parseRentRoll, type Cell, type DealDetails, type ImportIssue } from '../../lib/rentRollImport'
 import { todayISO } from '../../lib/metrics'
 import { useAppStore } from '../../store/useAppStore'
+import RentRollMapping from './RentRollMapping'
 
 type FileState = { status: 'reading' } | { status: 'unreadable'; message: string } | { status: 'read'; grid: Cell[][] }
 
 /**
  * "Import rent roll": reads a CSV or .xlsx in the browser, shows every problem
  * with its row number, and loads the deal only when there are no errors.
+ * A file in another layout (Yardi, a plain table of units) goes through the
+ * mapping step first and is validated as the converted unit rent roll.
  * Nothing is uploaded; the store keeps the deal in local storage.
  */
 export default function ImportRentRollDialog({ file, onClose }: { file: File; onClose: () => void }) {
@@ -19,6 +23,10 @@ export default function ImportRentRollDialog({ file, onClose }: { file: File; on
   const importDeal = useAppStore((s) => s.importDeal)
   const [state, setState] = useState<FileState>({ status: 'reading' })
   const [details, setDetails] = useState<DealDetails>({})
+  const presets = useAppStore((s) => s.rentRollPresets)
+  const [options, setOptions] = useState<ConvertOptions>({})
+  const [mapped, setMapped] = useState(false)
+  const [mismatchOK, setMismatchOK] = useState(false)
 
   useEffect(() => {
     let live = true
@@ -38,9 +46,20 @@ export default function ImportRentRollDialog({ file, onClose }: { file: File; on
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const layout = state.status === 'read' ? detectLayout(state.grid) : null
+  const convertible = layout === 'yardi-lease-charges' || layout === 'generic'
+  const conversion = useMemo(
+    () => (state.status === 'read' && convertible ? convertRentRoll(state.grid, { ...options, presets, today: todayISO() }) : null),
+    [state, convertible, options, presets],
+  )
+  const mapping = convertible && !mapped
+  const grid = useMemo(
+    () => (state.status !== 'read' ? null : conversion ? (mapped && !conversion.blockers.length ? conversionGrid(conversion) : null) : state.grid),
+    [state, conversion, mapped],
+  )
   const result = useMemo(
-    () => (state.status === 'read' ? parseRentRoll(state.grid, { fileName: file.name, asOf, details, importedAt: todayISO() }) : null),
-    [state, file.name, asOf, details],
+    () => (grid ? parseRentRoll(grid, { fileName: file.name, asOf, details, importedAt: todayISO() }) : null),
+    [grid, file.name, asOf, details],
   )
   const errors = result?.issues.filter((i) => i.severity === 'error') ?? []
   const warnings = result?.issues.filter((i) => i.severity === 'warning') ?? []
@@ -61,11 +80,13 @@ export default function ImportRentRollDialog({ file, onClose }: { file: File; on
         role="dialog"
         aria-label="Import rent roll"
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-full w-full max-w-lg flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl"
+        className={`flex max-h-full w-full ${mapping ? 'max-w-4xl' : 'max-w-lg'} flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-900 text-slate-100 shadow-2xl`}
       >
         <header className="border-b border-slate-700 p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Import rent roll</div>
-          <h2 className="truncate text-base font-semibold">{result?.summary.name || file.name}</h2>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            Import rent roll{convertible ? (mapping ? ' · 1. Map columns' : ' · 2. Validate') : ''}
+          </div>
+          <h2 className="truncate text-base font-semibold">{(mapping ? conversion?.name : result?.summary.name) || file.name}</h2>
           <p className="mt-1 text-[11px] text-slate-400">
             {file.name} · read in this browser only; nothing is uploaded. The deal is saved in this browser until you remove it.
           </p>
@@ -74,6 +95,27 @@ export default function ImportRentRollDialog({ file, onClose }: { file: File; on
         <div className="flex-1 space-y-4 overflow-y-auto p-4 text-xs">
           {state.status === 'reading' && <p className="text-slate-400">Reading…</p>}
           {state.status === 'unreadable' && <p className="rounded-md bg-red-500/10 p-3 text-red-300">{state.message}</p>}
+
+          {mapping && conversion && (
+            <RentRollMapping
+              fileName={file.name}
+              conversion={conversion}
+              options={options}
+              setOptions={(update) => {
+                setOptions(update)
+                setMismatchOK(false)
+              }}
+              mismatchOK={mismatchOK}
+              setMismatchOK={setMismatchOK}
+            />
+          )}
+
+          {layout === 'unknown' && (
+            <p className="rounded-md bg-amber-500/10 p-3 text-amber-300">
+              Not a layout the converter knows (no header row naming Unit, SF, rent… in the first 30 rows). Below, the problems reading it as an
+              AVIANCRE rent roll. For other layouts, convert the file with /convert-rent-roll in Claude Code.
+            </p>
+          )}
 
           {result && (
             <>
@@ -155,24 +197,45 @@ export default function ImportRentRollDialog({ file, onClose }: { file: File; on
           )}
 
           <p className="text-[10px] leading-snug text-slate-500">
-            Format: the rent roll export (title, Rentable SF, Property block, Leases and Vacant suites tables), as {RENT_ROLL_EXTENSIONS.join(' or ')}.
+            Yardi “Rent Roll with Lease Charges” reports and plain tables of apartment units are converted first. Format: the rent roll export (title, Rentable SF, Property block, Leases and Vacant suites tables), as {RENT_ROLL_EXTENSIONS.join(' or ')}.
             Rents are annual $/SF; percentages are decimals (0.03 = 3%). Apartments: a unit rent roll (Property block, then a Units
             table, one row per unit, rents $/month). Values from the file are marked ACT; market figures and assumptions stay EST.
           </p>
         </div>
 
         <footer className="flex justify-end gap-2 border-t border-slate-700 p-3">
+          {convertible && !mapping && (
+            <button
+              type="button"
+              onClick={() => setMapped(false)}
+              className="mr-auto rounded border border-slate-600 px-2.5 py-1 text-xs text-slate-200 hover:bg-slate-800"
+            >
+              ← Back to mapping
+            </button>
+          )}
           <button type="button" onClick={onClose} className="rounded border border-slate-600 px-2.5 py-1 text-xs text-slate-200 hover:bg-slate-800">
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={load}
-            disabled={!result?.property}
-            className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {warnings.length && result?.property ? `Load deal with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}` : 'Load deal'}
-          </button>
+          {mapping && (
+            <button
+              type="button"
+              onClick={() => setMapped(true)}
+              disabled={!conversion || !readyToLoad(conversion, mismatchOK)}
+              className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Continue to validation
+            </button>
+          )}
+          {!mapping && (
+            <button
+              type="button"
+              onClick={load}
+              disabled={!result?.property}
+              className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {warnings.length && result?.property ? `Load deal with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}` : 'Load deal'}
+            </button>
+          )}
         </footer>
       </section>
     </div>
