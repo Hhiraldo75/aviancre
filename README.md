@@ -27,10 +27,12 @@ npm run dev     # open the printed localhost URL
 npm test        # metrics, NOI/IRR, stacking plan and zoning-capacity tests
 ```
 
+Deploying to Vercel: see [`DEPLOY.md`](DEPLOY.md).
+
 ## Structure
 - `src/types` – domain model (properties, leases, rent rolls, underwriting)
 - `src/data` – sample Providence properties, submarkets, comps, zoning placeholders
 - `src/lib` – pure, tested calculations (occupancy, WALT, NOI, IRR, FAR capacity)
-- `src/services` – Providence Open Data tax-roll client and City GIS client (proxied through Vite in dev as `/pvdgis`)
+- `src/services` – Providence Open Data tax-roll client and City GIS client (`/pvdgis`: the Vite proxy in dev, the `api/pvdgis.ts` relay on Vercel)
 - `src/store` – shared app state (selection, parcel lookup, persona, analysis date)
 - `src/components` – map, persona dashboard and sidebar UI
