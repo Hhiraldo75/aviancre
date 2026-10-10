@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
-import type { GisDetails, ISODate, ParcelLookup, Persona, Property, TaxRecord } from '../types'
+import type { GisDetails, ISODate, LngLat, ParcelLookup, Persona, Property, TaxRecord } from '../types'
 import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
 import {
   DEFAULT_SORT,
@@ -20,7 +20,7 @@ import { todayISO } from '../lib/metrics'
 import { isRentRollPreset, withPreset, type RentRollPreset } from '../lib/rentRollConvert'
 import { DEFAULTS_SET, isSavedSet, type SavedAssumptionSet } from '../lib/underwriting/assumptionSets'
 import type { AssumptionEdits } from '../lib/underwriting/edits'
-import { lookupParcelAt } from '../services/providenceGis'
+import { lookupParcelAt, parcelPointByPin } from '../services/providenceGis'
 import { lookupTaxRecord } from '../services/providenceOpenData'
 
 /** The ArcGIS Online parcel/zoning/flood layers are optional enrichment; give up on them after this long. */
@@ -120,8 +120,15 @@ interface AppState {
   sort: SortKey
   /** Bumped by "Zoom to results"; the map fits to the matching buildings on each change. */
   zoomRequest: number
+  /** Where the map should fly next (an address search pick); `request` changes on each pick. */
+  mapFocus: { lng: number; lat: number; request: number } | null
   select: (id: string | null) => void
   lookupParcel: (lng: number, lat: number) => Promise<void>
+  /**
+   * Flies to a city parcel picked in the address search and looks it up as a click there would.
+   * Rejects when the parcel's outline can't be fetched; resolves once the lookup has started.
+   */
+  goToParcel: (pin: string) => Promise<void>
   clearSelection: () => void
   setAsOf: (date: ISODate) => void
   setPersona: (persona: Persona) => void
@@ -178,6 +185,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   filters: initialView.filters,
   sort: initialView.sort,
   zoomRequest: 0,
+  mapFocus: null,
 
   select: (id) => {
     cancelInFlight()
@@ -233,6 +241,25 @@ export const useAppStore = create<AppState>()((set, get) => ({
     } else {
       set({ parcel: { status: 'not-found', lng, lat } })
     }
+  },
+
+  goToParcel: async (pin) => {
+    cancelInFlight()
+    const controller = new AbortController()
+    inFlight = controller
+    let point: LngLat
+    try {
+      point = await parcelPointByPin(pin, controller.signal)
+    } catch (err) {
+      // A newer click or pick aborted this one: nothing to report.
+      if (inFlight !== controller) return
+      inFlight = null
+      throw err
+    }
+    if (inFlight !== controller) return
+    const [lng, lat] = point
+    set((s) => ({ mapFocus: { lng, lat, request: (s.mapFocus?.request ?? 0) + 1 } }))
+    void get().lookupParcel(lng, lat)
   },
 
   clearSelection: () => {

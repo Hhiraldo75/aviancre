@@ -1,3 +1,4 @@
+import type { Polygon } from 'geojson'
 import { describe, expect, it } from 'vitest'
 import { SAMPLE_FOOTPRINTS } from '../data/sampleFootprints'
 import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
@@ -5,6 +6,8 @@ import type { LngLat, Property } from '../types'
 import {
   approximatePinsGeoJSON,
   featureBounds,
+  interiorPoint,
+  pointInRing,
   FILTERED_OUT_COLOR,
   offsetRing,
   OSM_DEFAULT_HEIGHT_M,
@@ -149,5 +152,35 @@ describe('deals without a known location are pins', () => {
     expect(east).toBeGreaterThanOrEqual(-71.44)
     expect(south).toBeLessThanOrEqual(41.82)
     expect(north).toBeGreaterThanOrEqual(41.82)
+  })
+})
+
+describe('interiorPoint', () => {
+  const rect: Polygon = { type: 'Polygon', coordinates: [[[0, 0], [4, 0], [4, 2], [0, 2], [0, 0]]] }
+  // An L whose box center (2, 2) is outside: the corner block is missing.
+  const ell: Polygon = { type: 'Polygon', coordinates: [[[0, 0], [4, 0], [4, 1], [1, 1], [1, 4], [0, 4], [0, 0]]] }
+
+  it('uses the box center when it is inside', () => {
+    expect(interiorPoint(rect)).toEqual([2, 1])
+  })
+
+  it('finds a point inside an L-shaped parcel', () => {
+    const p = interiorPoint(ell)
+    expect(pointInRing([2, 2], ell.coordinates[0])).toBe(false)
+    expect(pointInRing(p, ell.coordinates[0])).toBe(true)
+    expect(p).toEqual([0.5, 2])
+  })
+
+  it('takes the largest part of a multipolygon', () => {
+    const small = [[[10, 10], [11, 10], [11, 11], [10, 11], [10, 10]]]
+    expect(interiorPoint({ type: 'MultiPolygon', coordinates: [small, rect.coordinates] })).toEqual([2, 1])
+  })
+
+  it('stays out of holes', () => {
+    const donut: Polygon = {
+      type: 'Polygon',
+      coordinates: [rect.coordinates[0], [[1, 0.5], [3, 0.5], [3, 1.5], [1, 1.5], [1, 0.5]]],
+    }
+    expect(interiorPoint(donut)).toEqual([0.5, 1])
   })
 })

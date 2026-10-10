@@ -1,5 +1,7 @@
 import type { Feature as GeoFeature, FeatureCollection as GeoCollection, Geometry, MultiPolygon, Polygon } from 'geojson'
-import type { ParcelOverlays, ParcelRecord, Sourced } from '../types'
+import type { LngLat, ParcelOverlays, ParcelRecord, Sourced } from '../types'
+import { addressWhereClause, parseAddressQuery, rankParcelSuggestions, type AddressQuery, type ParcelSuggestion } from '../lib/addressSearch'
+import { interiorPoint } from '../lib/geo'
 import { fromPublic } from '../lib/sourced'
 
 /**
@@ -157,14 +159,15 @@ export function parseOverlays({ zoning, flood, historic, overlays }: OverlayResp
   }
 }
 
-async function getGeoJSON(url: string, signal?: AbortSignal): Promise<FeatureCollection> {
+/** Fetches a layer query (GeoJSON or Esri JSON: both have a `features` array). */
+async function getFeatures<T extends { features: unknown[] } = FeatureCollection>(url: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, { signal })
-  const body = (await res.json().catch(() => ({}))) as Partial<FeatureCollection> & { error?: { message?: string } }
+  const body = (await res.json().catch(() => ({}))) as Partial<T> & { error?: { message?: string } }
   if (!res.ok) throw new Error(body.error?.message ?? `GIS service returned HTTP ${res.status}`)
   // ArcGIS reports query errors as HTTP 200 with an {"error": …} body.
   if (body.error) throw new Error(body.error.message ?? 'GIS service returned an error')
   if (!Array.isArray(body.features)) throw new Error('Unexpected response from GIS service')
-  return body as FeatureCollection
+  return body as T
 }
 
 export interface ParcelLookupResult {
@@ -178,7 +181,7 @@ export interface ParcelLookupResult {
  */
 export async function lookupParcelAt(lng: number, lat: number, signal?: AbortSignal): Promise<ParcelLookupResult> {
   const query = (layerUrl: string, fields: readonly string[] | '*', withGeometry = false) =>
-    getGeoJSON(pointQueryUrl(layerUrl, lng, lat, fields, withGeometry), signal)
+    getFeatures(pointQueryUrl(layerUrl, lng, lat, fields, withGeometry), signal)
   const [parcelRes, zoningRes, floodRes, historicRes, ...overlayRes] = await Promise.allSettled([
     query(pvdLayer(LAYERS.parcels), PARCEL_FIELDS, true),
     query(pvdLayer(LAYERS.baseZoning), ['Code', 'District']),
@@ -195,4 +198,51 @@ export async function lookupParcelAt(lng: number, lat: number, signal?: AbortSig
     parcel: first ? parseParcelFeature(first) : null,
     overlays: parseOverlays({ zoning: ok(zoningRes), flood: ok(floodRes), historic: ok(historicRes), overlays: overlayRes.map(ok) }),
   }
+}
+
+// ---------- address search ----------
+
+/** Parcel rows asked for per search; condo units (one row each) collapse into one suggestion. */
+export const SUGGEST_ROWS = 100
+
+/** Parcel-layer query for addresses matching what was typed: attributes only, to stay light per keystroke. */
+export function addressSuggestUrl(q: AddressQuery): string {
+  const params = new URLSearchParams({
+    where: addressWhereClause(q),
+    outFields: 'PIN,ParcAddress',
+    returnGeometry: 'false',
+    orderByFields: 'ParcAddress',
+    resultRecordCount: String(SUGGEST_ROWS),
+    f: 'json',
+  })
+  return `${pvdLayer(LAYERS.parcels)}/query?${params.toString()}`
+}
+
+/** Up to `limit` parcels whose address matches the typed text; empty when it's too short to search. */
+export async function searchParcelAddresses(text: string, signal?: AbortSignal, limit = 8): Promise<ParcelSuggestion[]> {
+  const q = parseAddressQuery(text)
+  if (!q) return []
+  const body = await getFeatures<{ features: { attributes?: Props }[] }>(addressSuggestUrl(q), signal)
+  return rankParcelSuggestions(body.features.map((f) => f.attributes ?? {}), q, limit)
+}
+
+/** One parcel's outline by PIN, in WGS84 (a few rows: condo units repeat the PIN). */
+export function parcelByPinUrl(pin: string): string {
+  const params = new URLSearchParams({
+    where: `PIN='${pin.replace(/'/g, "''")}'`,
+    outFields: 'PIN',
+    returnGeometry: 'true',
+    outSR: '4326',
+    resultRecordCount: '5',
+    f: 'geojson',
+  })
+  return `${pvdLayer(LAYERS.parcels)}/query?${params.toString()}`
+}
+
+/** A point inside the parcel, to look it up exactly as a click there would. */
+export async function parcelPointByPin(pin: string, signal?: AbortSignal): Promise<LngLat> {
+  const fc = await getFeatures(parcelByPinUrl(pin), signal)
+  const geom = fc.features.map((f) => f.geometry).find((g) => g?.type === 'Polygon' || g?.type === 'MultiPolygon')
+  if (!geom) throw new Error('the city parcel layer has no outline for it')
+  return interiorPoint(geom as Polygon | MultiPolygon)
 }

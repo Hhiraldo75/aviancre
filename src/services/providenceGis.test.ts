@@ -5,12 +5,18 @@ import {
   LAYERS,
   PVD_PARCELS_SERVICE,
   RIGIS_FLOOD_LAYER,
+  SUGGEST_ROWS,
+  addressSuggestUrl,
   lookupParcelAt,
+  parcelByPinUrl,
+  parcelPointByPin,
   parseOverlays,
   parseParcelFeature,
   pointQueryUrl,
   pvdLayer,
+  searchParcelAddresses,
 } from './providenceGis'
+import { parseAddressQuery } from '../lib/addressSearch'
 import { normalizeZoningCode, parcelMetrics } from '../lib/parcelMetrics'
 
 /** Shape of a parcel feature as the city's ArcGIS Online layer returns it with f=geojson. */
@@ -184,5 +190,70 @@ describe('lookupParcelAt', () => {
   it('falls back to the HTTP status when the error body has no explanation', async () => {
     stubLayers({ [pvdLayer(0)]: () => new Response('<html>Bad gateway</html>', { status: 502 }) })
     await expect(lookupParcelAt(-71.41, 41.82)).rejects.toThrow('GIS service returned HTTP 502')
+  })
+})
+
+describe('address search queries', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
+
+  it('asks the parcel layer for matching addresses, attributes only', () => {
+    const url = addressSuggestUrl(parseAddressQuery('100 Westminster Street')!)
+    const q = new URLSearchParams(url.split('?')[1])
+    expect(url.startsWith(`${PVD_PARCELS_SERVICE}/0/query?`)).toBe(true)
+    expect(q.get('where')).toBe("UPPER(ParcAddress) LIKE '100 WESTMINSTER%' OR UPPER(ParcAddress) LIKE '100-% WESTMINSTER%'")
+    expect(q.get('outFields')).toBe('PIN,ParcAddress')
+    expect(q.get('returnGeometry')).toBe('false')
+    expect(q.get('resultRecordCount')).toBe(String(SUGGEST_ROWS))
+    expect(q.get('f')).toBe('json')
+  })
+
+  it('asks for one parcel outline by PIN, quoting it safely', () => {
+    const q = new URLSearchParams(parcelByPinUrl("29'0062").split('?')[1])
+    expect(q.get('where')).toBe("PIN='29''0062'")
+    expect(q.get('returnGeometry')).toBe('true')
+    expect(q.get('outSR')).toBe('4326')
+    expect(q.get('f')).toBe('geojson')
+  })
+
+  it('groups condo units into one suggestion', async () => {
+    const fetchMock = vi.fn(async () =>
+      json({
+        features: [
+          { attributes: { PIN: '290062', ParcAddress: '1029 Westminster St Unit 1A' } },
+          { attributes: { PIN: '290062', ParcAddress: '1029 Westminster St Unit 1B' } },
+          { attributes: { PIN: '290558', ParcAddress: '1000 Westminster St' } },
+        ],
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const s = await searchParcelAddresses('Westminster st')
+    expect(s).toEqual([
+      { pin: '290558', address: '1000 Westminster St', units: 0 },
+      { pin: '290062', address: '1029 Westminster St', units: 2 },
+    ])
+  })
+
+  it("doesn't call the service for under 3 characters", async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await searchParcelAddresses('10')).toEqual([])
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("rejects with the service's message on an error body", async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({ error: { code: 400, message: 'Unable to perform query' } })))
+    await expect(searchParcelAddresses('100 Main')).rejects.toThrow('Unable to perform query')
+  })
+
+  it('returns a point inside the parcel, or fails when it has no outline', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({ type: 'FeatureCollection', features: [FIXTURE] })))
+    const [lng, lat] = await parcelPointByPin('020-0123-0000')
+    expect(lng).toBeCloseTo(-71.41125, 6)
+    expect(lat).toBeCloseTo(41.8247, 6)
+
+    vi.stubGlobal('fetch', vi.fn(async () => json({ type: 'FeatureCollection', features: [] })))
+    await expect(parcelPointByPin('nope')).rejects.toThrow('no outline')
   })
 })

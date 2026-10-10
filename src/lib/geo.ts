@@ -1,4 +1,4 @@
-import type { Feature, FeatureCollection, Point, Polygon } from 'geojson'
+import type { Feature, FeatureCollection, MultiPolygon, Point, Polygon, Position } from 'geojson'
 import type { ISODate, LngLat, Property } from '../types'
 import { occupancy, occupancyColor } from './metrics'
 
@@ -93,6 +93,55 @@ export function featureBounds(features: Feature<Polygon | Point>[]): [[number, n
     [Math.min(...lngs), Math.min(...lats)],
     [Math.max(...lngs), Math.max(...lats)],
   ]
+}
+
+/** Ray casting: true when the point is inside the ring (either winding). */
+export function pointInRing([x, y]: LngLat, ring: Position[]): boolean {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i]
+    const [xj, yj] = ring[j]
+    if (yi > y !== yj > y && x < xi + ((y - yi) * (xj - xi)) / (yj - yi)) inside = !inside
+  }
+  return inside
+}
+
+const ringArea = (ring: Position[]) =>
+  Math.abs(ring.reduce((s, [x1, y1], i) => s + x1 * ring[(i + 1) % ring.length][1] - ring[(i + 1) % ring.length][0] * y1, 0)) / 2
+
+/**
+ * A point inside a parcel (the largest part of a multipolygon): its box
+ * center when that's inside, else the middle of the widest stretch of the
+ * parcel along the center line, so L- and U-shaped lots work too.
+ */
+export function interiorPoint(geometry: Polygon | MultiPolygon): LngLat {
+  const parts = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
+  const rings = parts.reduce((best, p) => (ringArea(p[0]) > ringArea(best[0]) ? p : best))
+  const [outer, ...holes] = rings
+  const xs = outer.map((p) => p[0])
+  const ys = outer.map((p) => p[1])
+  const center: LngLat = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2]
+  const inside = (pt: LngLat) => pointInRing(pt, outer) && !holes.some((h) => pointInRing(pt, h))
+  if (inside(center)) return center
+
+  const y = center[1]
+  const crossings = rings
+    .flatMap((ring) =>
+      ring.slice(1).flatMap((b, i) => {
+        const a = ring[i]
+        return a[1] > y !== b[1] > y ? [a[0] + ((y - a[1]) * (b[0] - a[0])) / (b[1] - a[1])] : []
+      }),
+    )
+    .sort((a, b) => a - b)
+  let best: LngLat = [outer[0][0], outer[0][1]]
+  let widest = 0
+  for (let i = 0; i + 1 < crossings.length; i += 2) {
+    if (crossings[i + 1] - crossings[i] > widest) {
+      widest = crossings[i + 1] - crossings[i]
+      best = [(crossings[i] + crossings[i + 1]) / 2, y]
+    }
+  }
+  return best
 }
 
 /**

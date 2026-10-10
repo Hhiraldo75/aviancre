@@ -53,6 +53,7 @@ export default function MapView() {
   const parcel = useAppStore((s) => s.parcel)
   const { matchIds } = usePropertyView()
   const zoomRequest = useAppStore((s) => s.zoomRequest)
+  const mapFocus = useAppStore((s) => s.mapFocus)
   const filtered = useAppStore((s) => hasActiveFilters(s.filters))
 
   const geojson = useMemo(() => propertiesToGeoJSON(properties, asOf, matchIds), [properties, asOf, matchIds])
@@ -251,7 +252,14 @@ export default function MapView() {
     ;(map.getSource(SOURCE_IDS.clickPoint) as GeoJSONSource | undefined)?.setData(clickPointGeoJSON(parcel))
   }, [parcel, loaded])
 
-  // 5. "Zoom to results": fit the matching buildings, keeping the current tilt and rotation.
+  // 5. Fly to a parcel picked in the address search, keeping the current tilt and rotation.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !loaded || !mapFocus) return
+    map.flyTo({ center: [mapFocus.lng, mapFocus.lat], zoom: 17, pitch: map.getPitch(), bearing: map.getBearing(), duration: 1200 })
+  }, [mapFocus, loaded])
+
+  // 6. "Zoom to results": fit the matching buildings, keeping the current tilt and rotation.
   const fitTo = (features: Feature<Polygon | Point>[]) => {
     const map = mapRef.current
     const bounds = featureBounds(features)

@@ -9,6 +9,7 @@
 - [x] Persona dashboard: Analyst / Broker / Developer / Investment views
 - [x] Tested calculations: occupancy, WALT, mark-to-market, NOI, IRR, stacking plan, FAR capacity
 - [x] Click any building → live public record: Providence Open Data 2025 tax roll (owner, land use, assessed value, taxes, condo units), plus year built, building and land area, zoning, overlay and historic districts and parcel outline from the city's ArcGIS Online `Parcel_Zoning_FL`, and flood zone and base flood elevation from RIGIS's FEMA DFIRM (2022)
+- [x] Address search: type-ahead over the city's parcel addresses (ArcGIS Online `Parcel_Zoning_FL`) plus the sample properties and imported deals; picking one flies there and opens its public record
 - [x] Filters synced across map and list: asset type, size, occupancy, lease expiration, submarket, levered IRR and max bid vs price; shareable in the URL
 
 ## Next

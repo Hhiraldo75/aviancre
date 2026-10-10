@@ -1,5 +1,6 @@
 import { useAppStore, useSelectedProperty } from '../store/useAppStore'
 import MapView from './map/MapView'
+import AddressSearch from './panel/AddressSearch'
 import PropertyPanel from './panel/PropertyPanel'
 import PersonaToggle from './ui/PersonaToggle'
 import FullUnderwritingPanel from './underwriting/FullUnderwritingPanel'
@@ -25,6 +26,7 @@ export default function DashboardLayout() {
           <h1 className="text-base font-semibold">AVIANCRE</h1>
           <p className="text-xs text-slate-400">Providence CRE · sample dataset</p>
         </header>
+        <AddressSearch />
         <PersonaToggle />
         <div className="mt-5">
           <PropertyPanel />
