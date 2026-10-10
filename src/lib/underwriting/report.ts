@@ -198,7 +198,7 @@ export function toTable(r: UnderwritingResult): string {
   ].join('\n')
 }
 
-function csvCell(v: string | number | boolean | null | undefined): string {
+export function csvCell(v: string | number | boolean | null | undefined): string {
   if (v === null || v === undefined) return ''
   if (typeof v === 'number') return Number.isFinite(v) ? String(Math.round(v * 1e4) / 1e4) : ''
   const s = String(v)
