@@ -3,6 +3,33 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "regions": ["iad1"],
-  "rewrites": [{ "source": "/pvdgis/:path*", "destination": "/api/pvdgis?path=:path*" }]
+  "regions": [
+    "iad1"
+  ],
+  "rewrites": [
+    {
+      "source": "/pvdgis/:path*",
+      "destination": "/api/pvdgis?path=:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ]
 }
