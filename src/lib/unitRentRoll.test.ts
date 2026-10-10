@@ -83,6 +83,42 @@ describe('Fernhill Commons unit rent roll (sample)', () => {
     expect(years[1].occupancy).toBe(1)
   })
 
+  it('moves unit 214 (on notice, future resident signed) straight to the new lease at its move-out', () => {
+    if (rr.kind !== 'multifamily') throw new Error('expected multifamily')
+    const u214 = rr.units!.find((u) => u.unit === '214')!
+    // In place $1,260 against $1,295 market; moves out 2026-10-31, so the new lease starts in month 1 (Nov 2026).
+    expect(u214).toMatchObject({ occupied: true, preLeased: true, inPlaceRentMonthly: 1260, marketRentMonthly: 1295, leaseEndDate: '2026-10-31' })
+    const only = (unit: typeof u214): Property => ({ ...p, rentRoll: { ...rr, units: [unit] } })
+    // No renewal cap, so a renewal would stay below market and the two paths differ.
+    const a = defaultAssumptions(p, AS_OF)
+    a.multifamily!.maxRenewalIncreasePct = estimate(0, 'test')
+    const t = a.multifamily!.turnoverRate.value
+    const cost = a.multifamily!.turnoverCostPerUnit.value
+    const g = a.leasing.marketRentGrowth.value
+    const costG = a.operating.expenseGrowth.value
+    const years = (unit: typeof u214) => operatingCashFlows(only(unit), a, AS_OF).years
+
+    const [y1, y2] = years(u214)
+    expect(y1.lossToLease).toBe(0)
+    expect(y1.tenantImprovements).toBe(cost)
+    expect(y1.absorptionTurnoverVacancy).toBe(0)
+    expect(y1.occupancy).toBe(1)
+    // A year later it rolls like any lease: the turnover blend, at turnover rate × cost.
+    const m2 = 1295 * (1 + g)
+    expect(y2.lossToLease).toBeCloseTo((m2 - (t * m2 + (1 - t) * 1295)) * 12, 6)
+    expect(y2.tenantImprovements).toBeCloseTo(t * cost * (1 + costG), 6)
+
+    // Without the future resident, the lease end is a renewal-or-turnover blend.
+    const [n1] = years({ ...u214, preLeased: false })
+    expect(n1.lossToLease).toBeCloseTo((1295 - (t * 1295 + (1 - t) * 1260)) * 12, 6)
+    expect(n1.tenantImprovements).toBe(t * cost)
+
+    // At the future lease rent when the file gives one.
+    const [f1] = years({ ...u214, futureRentMonthly: 1250 })
+    expect(f1.lossToLease).toBeCloseTo(45 * 12, 6)
+    expect(f1.tenantImprovements).toBe(cost)
+  })
+
   it('defaults the max renewal increase to an EST 5%, so loss to lease burns off over several years', () => {
     const a = defaultAssumptions(p, AS_OF)
     expect(a.multifamily?.maxRenewalIncreasePct).toMatchObject({ value: 0.05, source: 'estimated' })
@@ -205,6 +241,13 @@ describe('unit rent roll model', () => {
   })
   it('counts other income as Other income', () => {
     expect(y1.otherIncome).toBe(25 * 12)
+  })
+  it('leases a pre-leased vacant unit at its future lease rent when the file gives one', () => {
+    if (p.rentRoll.kind !== 'multifamily') throw new Error('expected multifamily')
+    const units = p.rentRoll.units!.map((u) => (u.unit === '103' ? { ...u, futureRentMonthly: 1450 } : u))
+    const [f1] = operatingCashFlows({ ...p, rentRoll: { ...p.rentRoll, units } }, a, AS_OF).years
+    expect(f1.lossToLease).toBeCloseTo(y1.lossToLease + 50 * 12, 6)
+    expect(f1.tenantImprovements).toBe(y1.tenantImprovements)
   })
 })
 

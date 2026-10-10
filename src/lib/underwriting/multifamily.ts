@@ -63,6 +63,10 @@ export function multifamilyYears(property: Property, a: UnderwritingAssumptions)
  * rolls. Every roll costs turnover rate × turnover cost (the general vacancy
  * floor stands in for make-ready downtime). Vacant units lease at market at
  * the lease-up pace, pre-leased first; until then their rent is absorption vacancy.
+ * A unit on notice with a future resident (occupied, pre-leased) skips the
+ * renewal blend at its lease end: it goes straight to the signed lease, with a
+ * full turnover cost and no downtime. A pre-leased unit's next lease is at the
+ * file's future lease rent when it gives one, else at market.
  */
 function unitYears(property: Property, units: ApartmentUnit[], a: UnderwritingAssumptions, mf: MultifamilyAssumptions): OperatingInputs[] {
   const pace = mf.leaseUpUnitsPerMonth?.value
@@ -91,6 +95,8 @@ function unitYears(property: Property, units: ApartmentUnit[], a: UnderwritingAs
     const leaseUp = u.occupied ? 0 : Math.floor(vacant.indexOf(u) / pace)
     let next = u.occupied ? Math.max(0, u.leaseEndDate ? monthAfter(start, u.leaseEndDate) : 0) : leaseUp
     let current = u.inPlaceRentMonthly
+    // On notice with the next resident signed: the first roll is that lease, not a renewal.
+    let signed = u.occupied && u.preLeased
     for (let m = 0; m < months; m++) {
       const market = u.marketRentMonthly * rentGrowth(m)
       if (m < leaseUp) {
@@ -99,10 +105,13 @@ function unitYears(property: Property, units: ApartmentUnit[], a: UnderwritingAs
         continue
       }
       if (m === next) {
+        const firstLease = m === leaseUp && !u.occupied
         const renewal = Math.min(market, current * (1 + maxRenewal))
-        current = m === leaseUp && !u.occupied ? market : turnoverRate * market + (1 - turnoverRate) * renewal
+        current = firstLease || signed ? (u.futureRentMonthly ?? market) : turnoverRate * market + (1 - turnoverRate) * renewal
         next += 12
-        if (u.occupied || m > leaseUp) turnover[m] += turnoverCost * costGrowth(m)
+        if (signed) turnover[m] += mf.turnoverCostPerUnit.value * costGrowth(m)
+        else if (!firstLease) turnover[m] += turnoverCost * costGrowth(m)
+        signed = false
       }
       rent[m] += market
       lossToLease[m] += market - current
