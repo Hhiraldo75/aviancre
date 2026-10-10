@@ -5,9 +5,9 @@ import { fromPublic } from '../lib/sourced'
 /**
  * Client for the City of Providence public GIS (ArcGIS MapServer "Viewpoint_Base").
  *
- * In development the request goes through Vite's proxy (`/pvdgis` → the city
- * server, see vite.config.ts) so the browser never hits CORS limits. Override
- * the base URL with VITE_PVD_GIS_URL when deploying.
+ * Requests go to `/pvdgis/…`: Vite's proxy in development (see vite.config.ts),
+ * so the browser never hits CORS limits, and the api/pvdgis.ts relay on Vercel
+ * (see vercel.json). VITE_PVD_GIS_URL overrides the base URL.
  */
 export const PVD_GIS_BASE: string =
   import.meta.env?.VITE_PVD_GIS_URL ?? '/pvdgis/server/rest/services/Viewpoint_Base/MapServer'
