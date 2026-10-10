@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import maplibregl, { type GeoJSONSource, type Map as MaplibreMap } from 'maplibre-gl'
-import type { Feature, FeatureCollection, Polygon } from 'geojson'
+import type { Feature, FeatureCollection, Point, Polygon } from 'geojson'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { LAYER_IDS, MAP_CONFIG, SOURCE_IDS } from '../../config/map'
 import { hasActiveFilters } from '../../lib/filters'
-import { featureBounds, propertiesToGeoJSON } from '../../lib/geo'
+import { approximatePinsGeoJSON, featureBounds, isApproximatePin, propertiesToGeoJSON } from '../../lib/geo'
 import { fmt } from '../../lib/format'
 import { useAppStore, usePropertyView } from '../../store/useAppStore'
 import type { ParcelLookup } from '../../types'
 import MapLegend from './MapLegend'
+import { PIN_PIXEL_RATIO, PIN_TIP_OFFSET, pinIcon } from './pinIcon'
 
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
 
@@ -58,6 +59,9 @@ export default function MapView() {
   // Read the latest data inside map callbacks without re-creating the map.
   const geojsonRef = useRef(geojson)
   geojsonRef.current = geojson
+  const pins = useMemo(() => approximatePinsGeoJSON(properties, asOf, matchIds), [properties, asOf, matchIds])
+  const pinsRef = useRef(pins)
+  pinsRef.current = pins
 
   // 1. Create the map once.
   useEffect(() => {
@@ -117,6 +121,27 @@ export default function MapView() {
         },
       })
 
+      // Imported deals without a known location: a pin colored by occupancy, drawn over the buildings without hiding them.
+      map.addImage('deal-pin', pinIcon(), { sdf: true, pixelRatio: PIN_PIXEL_RATIO })
+      map.addSource(SOURCE_IDS.approxPins, { type: 'geojson', data: pinsRef.current, promoteId: 'id' })
+      map.addLayer({
+        id: LAYER_IDS.approxPins,
+        type: 'symbol',
+        source: SOURCE_IDS.approxPins,
+        layout: {
+          'icon-image': 'deal-pin',
+          'icon-anchor': 'bottom',
+          'icon-offset': [0, PIN_TIP_OFFSET],
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+        paint: {
+          'icon-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#3b82f6', ['get', 'color']],
+          'icon-halo-color': '#ffffff',
+          'icon-halo-width': 2,
+        },
+      })
+
       // Looked-up public parcel: translucent footprint + outline drawn over the buildings.
       map.addSource(SOURCE_IDS.parcel, { type: 'geojson', data: EMPTY })
       map.addLayer({
@@ -150,16 +175,16 @@ export default function MapView() {
 
     // Matching sample building → its dashboard. Anywhere else, including a
     // filtered-out sample building → look up the real public parcel there.
+    const clickable = [LAYER_IDS.approxPins, LAYER_IDS.properties]
     map.on('click', (e) => {
-      const hit = map.getLayer(LAYER_IDS.properties)
-        ? map.queryRenderedFeatures(e.point, { layers: [LAYER_IDS.properties] })[0]
-        : undefined
+      const layers = clickable.filter((l) => map.getLayer(l))
+      const hit = layers.length ? map.queryRenderedFeatures(e.point, { layers })[0] : undefined
       const id = hit?.properties?.matches ? hit.properties.id : undefined
       if (typeof id === 'string') useAppStore.getState().select(id)
       else void useAppStore.getState().lookupParcel(e.lngLat.lng, e.lngLat.lat)
     })
 
-    map.on('mousemove', LAYER_IDS.properties, (e) => {
+    const hover = (e: maplibregl.MapLayerMouseEvent) => {
       const props = e.features?.[0]?.properties
       if (!props?.matches) {
         map.getCanvas().style.cursor = ''
@@ -173,13 +198,17 @@ export default function MapView() {
       const title = document.createElement('strong')
       title.textContent = String(props.name)
       el.append(title, document.createElement('br'), `${fmt.pct(Number(props.occupancy))} leased`)
+      if (e.features?.[0]?.layer.id === LAYER_IDS.approxPins) el.append(document.createElement('br'), 'Location approximate')
       popup.setLngLat(e.lngLat).setDOMContent(el).addTo(map)
-    })
-
-    map.on('mouseleave', LAYER_IDS.properties, () => {
+    }
+    const leave = () => {
       map.getCanvas().style.cursor = ''
       popup.remove()
-    })
+    }
+    for (const layer of clickable) {
+      map.on('mousemove', layer, hover)
+      map.on('mouseleave', layer, leave)
+    }
 
     return () => {
       popup.remove()
@@ -192,22 +221,24 @@ export default function MapView() {
   // 2. Push new data when properties, the analysis date or the filters change.
   useEffect(() => {
     if (!loaded) return
-    const source = mapRef.current?.getSource(SOURCE_IDS.properties) as GeoJSONSource | undefined
-    source?.setData(geojson)
-  }, [geojson, loaded])
+    const map = mapRef.current
+    ;(map?.getSource(SOURCE_IDS.properties) as GeoJSONSource | undefined)?.setData(geojson)
+    ;(map?.getSource(SOURCE_IDS.approxPins) as GeoJSONSource | undefined)?.setData(pins)
+  }, [geojson, pins, loaded])
 
   // 3. Highlight and fly to the selected property.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !loaded) return
 
+    // The previous pick may have been deleted since, so clear it on both sources.
     const prev = prevSelectedRef.current
-    if (prev) map.setFeatureState({ source: SOURCE_IDS.properties, id: prev }, { selected: false })
+    if (prev) for (const source of [SOURCE_IDS.properties, SOURCE_IDS.approxPins]) map.setFeatureState({ source, id: prev }, { selected: false })
 
-    if (selectedId) {
-      map.setFeatureState({ source: SOURCE_IDS.properties, id: selectedId }, { selected: true })
-      const p = properties.find((x) => x.id === selectedId)
-      if (p) map.flyTo({ center: [p.location.lng, p.location.lat], zoom: 16.3, pitch: 60, duration: 1200 })
+    const p = selectedId ? properties.find((x) => x.id === selectedId) : undefined
+    if (p) {
+      map.setFeatureState({ source: isApproximatePin(p) ? SOURCE_IDS.approxPins : SOURCE_IDS.properties, id: p.id }, { selected: true })
+      map.flyTo({ center: [p.location.lng, p.location.lat], zoom: 16.3, pitch: 60, duration: 1200 })
     }
     prevSelectedRef.current = selectedId
   }, [selectedId, loaded, properties])
@@ -221,7 +252,7 @@ export default function MapView() {
   }, [parcel, loaded])
 
   // 5. "Zoom to results": fit the matching buildings, keeping the current tilt and rotation.
-  const fitTo = (features: Feature<Polygon>[]) => {
+  const fitTo = (features: Feature<Polygon | Point>[]) => {
     const map = mapRef.current
     const bounds = featureBounds(features)
     if (!map || !bounds) return false
@@ -231,13 +262,14 @@ export default function MapView() {
 
   useEffect(() => {
     if (!loaded || zoomRequest === 0) return
-    if (fitTo(geojsonRef.current.features.filter((f) => f.properties.matches))) zoomedToResultsRef.current = true
+    const all = [...geojsonRef.current.features, ...pinsRef.current.features]
+    if (fitTo(all.filter((f) => f.properties.matches))) zoomedToResultsRef.current = true
   }, [zoomRequest, loaded])
 
   useEffect(() => {
     if (!loaded || filtered || !zoomedToResultsRef.current) return
     zoomedToResultsRef.current = false
-    fitTo(geojsonRef.current.features)
+    fitTo([...geojsonRef.current.features, ...pinsRef.current.features])
   }, [filtered, loaded])
 
   return (

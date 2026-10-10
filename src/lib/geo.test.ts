@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { SAMPLE_FOOTPRINTS } from '../data/sampleFootprints'
 import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
-import type { LngLat } from '../types'
-import { featureBounds, offsetRing, OSM_DEFAULT_HEIGHT_M, OUTLINE_CLEARANCE_M, propertiesToGeoJSON, ROOF_CLEARANCE_M } from './geo'
+import type { LngLat, Property } from '../types'
+import {
+  approximatePinsGeoJSON,
+  featureBounds,
+  FILTERED_OUT_COLOR,
+  offsetRing,
+  OSM_DEFAULT_HEIGHT_M,
+  OUTLINE_CLEARANCE_M,
+  PIN_SPREAD_M,
+  propertiesToGeoJSON,
+  ROOF_CLEARANCE_M,
+} from './geo'
+import { occupancy, occupancyColor } from './metrics'
 
 const AS_OF = '2026-10-04'
 
@@ -91,10 +102,52 @@ describe('colored buildings enclose their gray OpenStreetMap copy', () => {
     }
   })
 
-  it('leaves a building without a saved outline (an imported deal) as it was', () => {
+  it('leaves a building without a saved outline at a known location as it was', () => {
     const p = SAMPLE_PROPERTIES[0]
     const placeholder = { ...p, physical: { ...p.physical, footprint: undefined, heightFt: undefined } }
     const f = propertiesToGeoJSON([placeholder], AS_OF).features[0]
     expect(f.properties.heightM).toBe(Math.max(1, p.physical.floors.value) * 4)
+  })
+})
+
+describe('deals without a known location are pins', () => {
+  /** Like an imported deal with no address: at its submarket's center, no outline. */
+  const approximate = (id: string, i = 0): Property => {
+    const p = SAMPLE_PROPERTIES[i]
+    return { ...p, id, location: { ...p.location, lng: -71.44, lat: 41.82, isApproximate: true }, physical: { ...p.physical, footprint: undefined } }
+  }
+
+  it('draws a pin colored by occupancy instead of a building', () => {
+    const deal = approximate('deal-a')
+    expect(propertiesToGeoJSON([deal], AS_OF).features).toEqual([])
+    const [pin] = approximatePinsGeoJSON([deal], AS_OF).features
+    expect(pin.geometry.coordinates).toEqual([-71.44, 41.82])
+    expect(pin.properties).toMatchObject({ id: 'deal-a', matches: true, color: occupancyColor(occupancy(deal, AS_OF)) })
+  })
+
+  it('keeps a deal with a real outline as a building', () => {
+    const p = SAMPLE_PROPERTIES[0]
+    const traced = { ...p, location: { ...p.location, isApproximate: true } }
+    expect(propertiesToGeoJSON([traced], AS_OF).features).toHaveLength(1)
+    expect(approximatePinsGeoJSON([traced], AS_OF).features).toEqual([])
+    expect(approximatePinsGeoJSON(SAMPLE_PROPERTIES, AS_OF).features).toEqual([])
+  })
+
+  it('spreads deals sharing a point so each can be clicked', () => {
+    const pins = approximatePinsGeoJSON([approximate('deal-a'), approximate('deal-b', 1), approximate('deal-c', 2)], AS_OF).features
+    const [x, y] = pins.map((f) => f.geometry.coordinates)
+    expect(new Set(pins.map((f) => f.geometry.coordinates.join())).size).toBe(3)
+    const apartM = Math.hypot((x[0] - y[0]) * 111_320 * Math.cos((41.82 * Math.PI) / 180), (x[1] - y[1]) * 111_320)
+    expect(apartM).toBeCloseTo(PIN_SPREAD_M * Math.sqrt(3), 1)
+  })
+
+  it('fades a pin outside the filters, and zooms to it with the buildings', () => {
+    const [pin] = approximatePinsGeoJSON([approximate('deal-a')], AS_OF, new Set()).features
+    expect(pin.properties).toMatchObject({ matches: false, color: FILTERED_OUT_COLOR })
+    const [[west, south], [east, north]] = featureBounds([...propertiesToGeoJSON(SAMPLE_PROPERTIES, AS_OF).features, pin])!
+    expect(west).toBeLessThanOrEqual(-71.44)
+    expect(east).toBeGreaterThanOrEqual(-71.44)
+    expect(south).toBeLessThanOrEqual(41.82)
+    expect(north).toBeGreaterThanOrEqual(41.82)
   })
 })

@@ -28,6 +28,13 @@ export default function MapLegend() {
         <span className="inline-block h-3 w-3 rounded-sm border-2 border-blue-600 bg-blue-500/20" />
         Public parcel
       </div>
+      <div className="flex items-center gap-2">
+        <svg viewBox="0 0 12 16" className="h-3.5 w-3 shrink-0" aria-hidden>
+          <path d="M6 15.5C6 15.5 1 9.6 1 6a5 5 0 0 1 10 0c0 3.6-5 9.5-5 9.5Z" fill="#94a3b8" stroke="#fff" />
+          <circle cx="6" cy="6" r="1.8" fill="#0f172a" />
+        </svg>
+        Deal, location approximate
+      </div>
       <div className="mt-1 text-[10px] text-slate-400">Colored buildings: sample data on real footprints</div>
     </div>
   )

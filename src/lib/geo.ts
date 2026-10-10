@@ -1,4 +1,4 @@
-import type { Feature, FeatureCollection, Polygon } from 'geojson'
+import type { Feature, FeatureCollection, Point, Polygon } from 'geojson'
 import type { ISODate, LngLat, Property } from '../types'
 import { occupancy, occupancyColor } from './metrics'
 
@@ -83,9 +83,9 @@ export function offsetRing(ring: LngLat[], metres: number): LngLat[] {
   return [...out, out[0]]
 }
 
-/** South-west and north-east corners around every feature's outline; null when there are none. */
-export function featureBounds(features: Feature<Polygon>[]): [[number, number], [number, number]] | null {
-  const points = features.flatMap((f) => f.geometry.coordinates.flat())
+/** South-west and north-east corners around every outline and pin; null when there are none. */
+export function featureBounds(features: Feature<Polygon | Point>[]): [[number, number], [number, number]] | null {
+  const points = features.flatMap((f) => (f.geometry.type === 'Point' ? [f.geometry.coordinates] : f.geometry.coordinates.flat()))
   if (points.length === 0) return null
   const lngs = points.map((p) => p[0])
   const lats = points.map((p) => p[1])
@@ -95,6 +95,15 @@ export function featureBounds(features: Feature<Polygon>[]): [[number, number], 
   ]
 }
 
+/**
+ * An imported deal with no address sits at its submarket's center: drawn as a
+ * pin, not a made-up building over the real ones there.
+ */
+export const isApproximatePin = (p: Property) => p.location.isApproximate && !p.physical.footprint
+
+/** Pins sharing a point are spread on a ring this wide, so each stays clickable. */
+export const PIN_SPREAD_M = 25
+
 /** `matchIds` is the filtered set; without it every building matches. */
 export function propertiesToGeoJSON(
   properties: Property[],
@@ -103,7 +112,7 @@ export function propertiesToGeoJSON(
 ): FeatureCollection<Polygon, PropertyFeatureProps> {
   return {
     type: 'FeatureCollection',
-    features: properties.map((p): Feature<Polygon, PropertyFeatureProps> => {
+    features: properties.filter((p) => !isApproximatePin(p)).map((p): Feature<Polygon, PropertyFeatureProps> => {
       const floors = Math.max(1, p.physical.floors.value)
       const occ = occupancy(p, asOf)
       const matches = !matchIds || matchIds.has(p.id)
@@ -122,6 +131,46 @@ export function propertiesToGeoJSON(
           matches,
           color: matches ? occupancyColor(occ) : FILTERED_OUT_COLOR,
           heightM: traced ? Math.max(heightM, OSM_DEFAULT_HEIGHT_M) + ROOF_CLEARANCE_M : heightM,
+        },
+      }
+    }),
+  }
+}
+
+/** Deals without a known location, as pins colored by occupancy (`isApproximatePin`). */
+export function approximatePinsGeoJSON(
+  properties: Property[],
+  asOf: ISODate,
+  matchIds?: Set<string>,
+): FeatureCollection<Point, PropertyFeatureProps> {
+  const pins = properties.filter(isApproximatePin)
+  const at = (p: Property) => `${p.location.lng},${p.location.lat}`
+  return {
+    type: 'FeatureCollection',
+    features: pins.map((p): Feature<Point, PropertyFeatureProps> => {
+      const occ = occupancy(p, asOf)
+      const matches = !matchIds || matchIds.has(p.id)
+      const shared = pins.filter((x) => at(x) === at(p))
+      const { lng, lat } = p.location
+      let coordinates: LngLat = [lng, lat]
+      if (shared.length > 1) {
+        const angle = (2 * Math.PI * shared.indexOf(p)) / shared.length
+        coordinates = [
+          lng + (PIN_SPREAD_M * Math.sin(angle)) / (METERS_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180)),
+          lat + (PIN_SPREAD_M * Math.cos(angle)) / METERS_PER_DEG_LAT,
+        ]
+      }
+      return {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates },
+        properties: {
+          id: p.id,
+          name: p.name,
+          assetType: p.assetType,
+          occupancy: occ,
+          matches,
+          color: matches ? occupancyColor(occ) : FILTERED_OUT_COLOR,
+          heightM: 0,
         },
       }
     }),
