@@ -25,7 +25,7 @@ describe('yearOneNOI', () => {
     // NOI = rent × (1 − 3% management); landlord opex is zero.
     const y1 = yearOneNOI(byId('sample-olneyville-distribution'), AS_OF)
     expect(y1.landlordOpex).toBe(0)
-    expect(y1.noi).toBeCloseTo(36_000 * 7.25 * Math.pow(1.03, 7) * 0.97, 2)
+    expect(y1.noi).toBeCloseTo(41_900 * 7.25 * Math.pow(1.03, 7) * 0.97, 2)
   })
   it('makes the landlord carry opex on full-service and vacant space', () => {
     const y1 = yearOneNOI(byId('sample-westminster-tower'), AS_OF)
@@ -65,8 +65,8 @@ describe('stackingPlan', () => {
 describe('developmentCapacity', () => {
   it('computes unused FAR for an underbuilt industrial site', () => {
     const d = developmentCapacity(byId('sample-olneyville-distribution'))
-    expect(d.existingFAR).toBeCloseTo(36_000 / 392_000, 6)
-    expect(d.additionalBuildableSF).toBeCloseTo(392_000 * 2 - 36_000, 6)
+    expect(d.existingFAR).toBeCloseTo(41_900 / 392_000, 6)
+    expect(d.additionalBuildableSF).toBeCloseTo(392_000 * 2 - 41_900, 6)
   })
   it('flags buildings that exceed current zoning as negative capacity', () => {
     expect((developmentCapacity(byId('sample-westminster-tower')).additionalBuildableSF ?? 0) < 0).toBe(true)

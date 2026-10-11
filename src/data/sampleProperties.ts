@@ -471,8 +471,8 @@ export const SAMPLE_PROPERTIES: Property[] = [
     parcelId: '105-0001-0000',
     lng: -71.44764,
     lat: 41.81707,
-    grossSF: 36_000,
-    rentableSF: 36_000,
+    grossSF: 41_900,
+    rentableSF: 41_900,
     yearBuilt: 1968,
     yearRenovated: 2005,
     floors: 1,
@@ -488,7 +488,7 @@ export const SAMPLE_PROPERTIES: Property[] = [
       kind: 'commercial',
       leases: leases('sample-olneyville-distribution', [
         {
-          tenant: 'Mill River Logistics', suite: 'Entire', sf: 36_000, start: '2019-01-01', end: '2028-12-31', rent: 7.25, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'national', industry: 'Logistics',
+          tenant: 'Mill River Logistics', suite: 'Entire', sf: 41_900, start: '2019-01-01', end: '2028-12-31', rent: 7.25, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'national', industry: 'Logistics',
           renewalOptions: [{ termMonths: 60, rentBasis: 'percent-of-market', value: 0.95, noticeMonths: 12 }],
         },
       ]),

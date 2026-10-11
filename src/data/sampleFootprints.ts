@@ -8,6 +8,8 @@ import type { LngLat } from '../types'
  * Each building was matched to its parcel's tax-roll point by proximity, and
  * where possible confirmed by name, address tags or a business address inside
  * the outline. `levels` and `heightM` are only set when OSM has them.
+ * Olneyville Distribution and Fernhill Commons were matched to the city's
+ * parcel outline (Parcel_Zoning_FL) instead, on 2026-10-10.
  */
 export interface BuildingFootprint {
   osmWayId: number
@@ -54,9 +56,9 @@ export const SAMPLE_FOOTPRINTS: Record<string, BuildingFootprint> = {
     ring: [[-71.400636, 41.828602], [-71.400626, 41.828531], [-71.400619, 41.828532], [-71.400617, 41.828519], [-71.400623, 41.828519], [-71.400615, 41.828461], [-71.400605, 41.828461], [-71.400603, 41.828446], [-71.400613, 41.828445], [-71.400603, 41.82838], [-71.400442, 41.828393], [-71.400475, 41.828615], [-71.400517, 41.828611], [-71.400516, 41.828603], [-71.400531, 41.828602], [-71.400533, 41.828611], [-71.400636, 41.828602]],
   },
   'sample-olneyville-distribution': {
-    osmWayId: 486872066,
-    footprintSF: 36043,
-    ring: [[-71.4464, 41.817319], [-71.446452, 41.817026], [-71.447668, 41.817145], [-71.447617, 41.817438], [-71.4464, 41.817319]],
+    osmWayId: 486872063,
+    footprintSF: 41874,
+    ring: [[-71.447044, 41.81775], [-71.44712, 41.817723], [-71.447063, 41.817659], [-71.447049, 41.81762], [-71.447216, 41.817546], [-71.44725, 41.817593], [-71.44728, 41.817577], [-71.44733, 41.817647], [-71.447453, 41.817605], [-71.447682, 41.817766], [-71.447599, 41.817796], [-71.447646, 41.817863], [-71.447819, 41.817802], [-71.448028, 41.818118], [-71.447775, 41.818211], [-71.447788, 41.818232], [-71.447441, 41.818358], [-71.447044, 41.81775]],
   },
   'sample-allens-ave-flex': {
     osmWayId: 141543203,
