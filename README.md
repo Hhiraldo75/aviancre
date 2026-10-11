@@ -6,9 +6,9 @@
 
 AVIANCRE puts Providence, RI on a 3D map and takes a property from first click to an
 investment committee memo. Click any building to pull its public record (tax roll,
-zoning, flood zone), then underwrite it with a lease-by-lease 10-year cash flow model,
-stress it with sensitivity grids, solve for a max bid, and have an AI analyst write the
-memo from the engine's output. It runs entirely in the browser: no backend, no accounts,
+zoning, flood zone), then open a sample property or import a rent roll to underwrite it:
+a lease-by-lease 10-year cash flow model, sensitivity grids, a max bid solved to a
+target IRR, and an AI analyst memo written from the engine's output. It runs entirely in the browser: no backend, no accounts,
 and an imported rent roll never leaves the user's machine.
 
 ## Screenshots
@@ -102,3 +102,5 @@ npm test        # full test suite
 
 More detail: [`docs/UNDERWRITING.md`](docs/UNDERWRITING.md) (engine, conventions,
 validation) · [`ROADMAP.md`](ROADMAP.md) · [`DEPLOY.md`](DEPLOY.md)
+
+Built by Henly Hiraldo · [LinkedIn](https://www.linkedin.com/in/henly-hiraldo-42801b296)
