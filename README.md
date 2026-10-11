@@ -19,7 +19,7 @@ and an imported rent roll never leaves the user's machine.
 | ![Underwriting](docs/screenshots/underwriting.png) | ![Sensitivity grids](docs/screenshots/sensitivity.png) |
 | ![AI analyst memo](docs/screenshots/memo.png) | |
 
-**Demo video:** [link coming soon](#)
+**Demo video:** [watch the 2-minute demo](https://youtu.be/-qvyq65yE5A)
 
 ## What it does
 

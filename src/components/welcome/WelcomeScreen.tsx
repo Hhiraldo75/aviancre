@@ -8,6 +8,7 @@ import StarField from './StarField'
 const RETAIL_DEMO_ID = 'sample-atwells-retail-row'
 const MEMO_DEMO_ID = 'sample-fernhill-commons'
 const GITHUB_URL = 'https://github.com/Hhiraldo75/aviancre'
+const DEMO_URL = 'https://youtu.be/-qvyq65yE5A'
 
 /** Page column: 1240px wide, gutters from 20 to 48px. */
 const COLUMN = 'mx-auto max-w-[1240px] px-[clamp(20px,4vw,48px)]'
@@ -154,13 +155,21 @@ export default function WelcomeScreen({ onSearch }: { onSearch: () => void }) {
                 Enter the map
                 <ArrowIcon size={18} />
               </button>
-              <a href={GITHUB_URL} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center gap-2 text-base font-semibold ${link}`}>
-                Read the code on GitHub
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M7 17L17 7" />
-                  <path d="M8 7h9v9" />
-                </svg>
-              </a>
+              <div className="flex flex-col items-start">
+                <a href={GITHUB_URL} target="_blank" rel="noreferrer" className={`inline-flex min-h-9 items-center gap-2 text-base font-semibold ${link}`}>
+                  Read the code on GitHub
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M7 17L17 7" />
+                    <path d="M8 7h9v9" />
+                  </svg>
+                </a>
+                <a href={DEMO_URL} target="_blank" rel="noreferrer" className={`inline-flex min-h-8 items-center gap-1.5 text-sm font-semibold ${link}`}>
+                  Watch the 2-minute demo
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </a>
+              </div>
             </div>
           </div>
 
