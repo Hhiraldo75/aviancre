@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
-import type { GisDetails, ISODate, LngLat, ParcelLookup, Persona, PickedParcel, Property, TaxRecord } from '../types'
+import type { GisDetails, ISODate, LngLat, ParcelLookup, Persona, PickedParcel, Property, TaxRecord, UnderwritingTab } from '../types'
 import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
 import {
   DEFAULT_SORT,
@@ -20,6 +20,7 @@ import { todayISO } from '../lib/metrics'
 import { isRentRollPreset, withPreset, type RentRollPreset } from '../lib/rentRollConvert'
 import { DEFAULTS_SET, isSavedSet, type SavedAssumptionSet } from '../lib/underwriting/assumptionSets'
 import type { AssumptionEdits } from '../lib/underwriting/edits'
+import { shouldShowWelcome } from '../lib/welcome'
 import { lookupParcelAt, parcelPointByPin } from '../services/providenceGis'
 import { isOnPin, lookupTaxRecord, lookupTaxRecordByPin } from '../services/providenceOpenData'
 
@@ -86,6 +87,25 @@ function loadRentRollPresets(): RentRollPreset[] {
   }
 }
 
+/** Set once the welcome overlay has been closed; browser only. */
+export const WELCOME_SEEN_KEY = 'aviancre.welcomeSeen.v1'
+
+function hasSeenWelcome(): boolean {
+  try {
+    return window.localStorage.getItem(WELCOME_SEEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function markWelcomeSeen() {
+  try {
+    window.localStorage.setItem(WELCOME_SEEN_KEY, '1')
+  } catch {
+    // Storage blocked: the overlay shows again next visit.
+  }
+}
+
 /** Filters and sort start from the URL, so a shared link opens the same view. */
 const initialView = hasWindow ? filtersFromQuery(window.location.search) : { filters: EMPTY_FILTERS, sort: DEFAULT_SORT }
 
@@ -107,6 +127,10 @@ interface AppState {
   activePersona: Persona
   /** Whether the full underwriting panel is open over the map (selected property only). */
   underwritingOpen: boolean
+  /** The underwriting panel's section; set when it opens. */
+  underwritingTab: UnderwritingTab
+  /** The welcome overlay: first visit only, and not when the link already sets filters. */
+  welcomeOpen: boolean
   /** Analyst edits to the default underwriting assumptions, by property id; kept for the session. */
   assumptionEdits: Record<string, AssumptionEdits>
   /** Named assumption sets, by property id. Kept in local storage; an imported deal's sets go when the deal is removed. */
@@ -134,8 +158,13 @@ interface AppState {
   clearSelection: () => void
   setAsOf: (date: ISODate) => void
   setPersona: (persona: Persona) => void
-  openUnderwriting: () => void
+  /** Opens the panel on `tab` (Cash flow by default). */
+  openUnderwriting: (tab?: UnderwritingTab) => void
   closeUnderwriting: () => void
+  setUnderwritingTab: (tab: UnderwritingTab) => void
+  openWelcome: () => void
+  /** Closes the welcome overlay and remembers that it was seen. */
+  closeWelcome: () => void
   /** `value` in engine units (Pct as a decimal); callers validate it first. */
   setAssumption: (propertyId: string, key: string, value: number) => void
   resetAssumption: (propertyId: string, key: string) => void
@@ -180,6 +209,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
   asOf: todayISO(),
   activePersona: 'Analyst',
   underwritingOpen: false,
+  underwritingTab: 'Cash flow',
+  welcomeOpen: hasWindow && shouldShowWelcome(window.location.search, hasSeenWelcome()),
   assumptionEdits: {},
   assumptionSets: loadAssumptionSets(),
   activeSets: {},
@@ -286,8 +317,14 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   setAsOf: (date) => set({ asOf: date }),
   setPersona: (persona) => set({ activePersona: persona }),
-  openUnderwriting: () => set({ underwritingOpen: true }),
+  openUnderwriting: (tab = 'Cash flow') => set({ underwritingOpen: true, underwritingTab: tab }),
   closeUnderwriting: () => set({ underwritingOpen: false }),
+  setUnderwritingTab: (tab) => set({ underwritingTab: tab }),
+  openWelcome: () => set({ welcomeOpen: true }),
+  closeWelcome: () => {
+    if (hasWindow) markWelcomeSeen()
+    set({ welcomeOpen: false })
+  },
 
   setAssumption: (propertyId, key, value) =>
     set((s) => ({

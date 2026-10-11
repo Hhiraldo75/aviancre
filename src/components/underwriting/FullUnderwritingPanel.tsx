@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Property } from '../../types'
+import { useEffect, useMemo, useRef } from 'react'
+import type { Property, UnderwritingTab } from '../../types'
 import { fmt } from '../../lib/format'
 import { fullUnderwriting, toCSV } from '../../lib/underwriting'
 import { appliedSetLabel } from '../../lib/underwriting/assumptionSets'
@@ -15,8 +15,7 @@ import CashFlowTab from './CashFlowTab'
 import RentRollTab from './RentRollTab'
 import ReturnsTab from './ReturnsTab'
 
-const TABS = ['Cash flow', 'Rent roll', 'Returns', 'Assumptions', 'Analyst memo'] as const
-type Tab = (typeof TABS)[number]
+const TABS: readonly UnderwritingTab[] = ['Cash flow', 'Rent roll', 'Returns', 'Assumptions', 'Analyst memo']
 
 /** Full underwriting over the map; renders the mapped view only, no math. Assumption edits recalculate everything. */
 export default function FullUnderwritingPanel({ property: p }: { property: Property }) {
@@ -29,7 +28,8 @@ export default function FullUnderwritingPanel({ property: p }: { property: Prope
   const sets = useAssumptionSets(p.id)
   const activeSet = useActiveSetName(p.id)
   const view = useMemo(() => fullUnderwriting(p, asOf, edits), [p, asOf, edits])
-  const [tab, setTab] = useState<Tab>('Cash flow')
+  const tab = useAppStore((s) => s.underwritingTab)
+  const setTab = useAppStore((s) => s.setUnderwritingTab)
   const closeRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {

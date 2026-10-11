@@ -54,3 +54,6 @@ export interface SubmarketTrendPoint {
 
 /** Dashboard lenses on the same property. */
 export type Persona = 'Analyst' | 'Broker' | 'Developer' | 'Investment'
+
+/** Sections of the full underwriting panel. */
+export type UnderwritingTab = 'Cash flow' | 'Rent roll' | 'Returns' | 'Assumptions' | 'Analyst memo'

@@ -13,7 +13,7 @@ export default function InvestmentView({ property: p }: { property: Property }) 
 
   return (
     <div className="space-y-4">
-      <UnderwritingSummaryCard summary={summary} onOpenFull={openUnderwriting} />
+      <UnderwritingSummaryCard summary={summary} onOpenFull={() => openUnderwriting()} />
 
       {summary.status === 'ok' && <NOIChart noiByYear={summary.noiByYear} />}
     </div>

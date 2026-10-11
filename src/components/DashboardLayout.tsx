@@ -1,8 +1,10 @@
+import { useRef } from 'react'
 import { useAppStore, useSelectedProperty } from '../store/useAppStore'
 import MapView from './map/MapView'
 import AddressSearch from './panel/AddressSearch'
 import PropertyPanel from './panel/PropertyPanel'
 import PersonaToggle from './ui/PersonaToggle'
+import WelcomeOverlay from './ui/WelcomeOverlay'
 import FullUnderwritingPanel from './underwriting/FullUnderwritingPanel'
 
 /**
@@ -13,6 +15,9 @@ import FullUnderwritingPanel from './underwriting/FullUnderwritingPanel'
 export default function DashboardLayout() {
   const selected = useSelectedProperty()
   const underwritingOpen = useAppStore((s) => s.underwritingOpen)
+  const welcomeOpen = useAppStore((s) => s.welcomeOpen)
+  const openWelcome = useAppStore((s) => s.openWelcome)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -22,16 +27,29 @@ export default function DashboardLayout() {
       </main>
 
       <aside className="w-96 shrink-0 overflow-y-auto border-l border-slate-700 bg-slate-800 p-6">
-        <header className="mb-4">
-          <h1 className="text-base font-semibold">AVIANCRE</h1>
-          <p className="text-xs text-slate-400">Providence CRE · sample dataset</p>
+        <header className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-base font-semibold">AVIANCRE</h1>
+            <p className="text-xs text-slate-400">Providence CRE · sample dataset</p>
+          </div>
+          <button
+            type="button"
+            onClick={openWelcome}
+            aria-label="About AVIANCRE"
+            title="About AVIANCRE"
+            className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 text-xs font-semibold text-slate-400 hover:border-slate-400 hover:text-slate-100"
+          >
+            ?
+          </button>
         </header>
-        <AddressSearch />
+        <AddressSearch inputRef={searchRef} />
         <PersonaToggle />
         <div className="mt-5">
           <PropertyPanel />
         </div>
       </aside>
+
+      {welcomeOpen && <WelcomeOverlay onSearch={() => searchRef.current?.focus()} />}
     </div>
   )
 }

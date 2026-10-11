@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type Ref } from 'react'
 import { matchLocalProperties, parseAddressQuery, type ParcelSuggestion } from '../../lib/addressSearch'
 import { searchParcelAddresses } from '../../services/providenceGis'
 import { useAppStore } from '../../store/useAppStore'
@@ -34,7 +34,7 @@ function optionsFor(properties: Property[], text: string, parcels: ParcelSuggest
  * imported deals. Picking a parcel flies there and opens its public record,
  * the same as clicking it on the map; picking one of ours selects it.
  */
-export default function AddressSearch() {
+export default function AddressSearch({ inputRef }: { inputRef?: Ref<HTMLInputElement> }) {
   const properties = useAppStore((s) => s.properties)
   const select = useAppStore((s) => s.select)
   const goToParcel = useAppStore((s) => s.goToParcel)
@@ -176,6 +176,7 @@ export default function AddressSearch() {
   return (
     <div className="relative mb-4">
       <input
+        ref={inputRef}
         type="search"
         role="combobox"
         aria-label="Search an address in Providence"
