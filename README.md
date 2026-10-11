@@ -1,42 +1,104 @@
 # AVIANCRE
 
-A 3D commercial real estate intelligence platform for Providence, RI. Explore
-buildings on an interactive map and switch between Analyst, Broker, Developer and
-Investment views of the same property.
+**A bird's-eye view of Providence commercial real estate, from 3D map to underwriting.**
 
-Click any building in Providence to pull its live public record: the City of
-Providence 2025 tax roll (Open Data portal); year built, building and land area,
-base zoning, overlay and local historic districts and the parcel outline from the
-city's ArcGIS Online layer [`Parcel_Zoning_FL`](https://services6.arcgis.com/wv9mHoqblhTsnqdG/arcgis/rest/services/Parcel_Zoning_FL/FeatureServer); and the
-flood zone and base flood elevation from FEMA's DFIRM as published by RIGIS
-([Statewide Flood Hazard Areas 2022](https://services2.arcgis.com/S8zZg9pg23JUEexQ/arcgis/rest/services/PLAN_DFIRM_Statewide_Flood_Hazard_Areas_2022/FeatureServer/1)).
-Both ArcGIS Online services are called straight from the browser.
+**Live:** https://aviancre.vercel.app
 
-**The colored sample properties and all tenant, rent and market figures are fictional sample data.**
+AVIANCRE puts Providence, RI on a 3D map and takes a property from first click to an
+investment committee memo. Click any building to pull its public record (tax roll,
+zoning, flood zone), then underwrite it with a lease-by-lease 10-year cash flow model,
+stress it with sensitivity grids, solve for a max bid, and have an AI analyst write the
+memo from the engine's output. It runs entirely in the browser: no backend, no accounts,
+and an imported rent roll never leaves the user's machine.
 
-To underwrite a real deal, use **Import rent roll** (CSV or Excel, in the format
-`npm run rent-roll` exports). The file is read in your browser and the deal is kept
-in that browser only. From the command line, `npm run import -- <file>` saves it in
-`private-deals/`, which Git ignores (see `private-deals/README.md`).
+## Screenshots
 
-## Stack
-React 19 · TypeScript · Vite · Tailwind CSS v4 · MapLibre GL JS · Zustand · Vitest
+| | |
+|---|---|
+| ![Welcome screen](docs/screenshots/welcome.png) | ![3D map with public record](docs/screenshots/map.png) |
+| ![Underwriting](docs/screenshots/underwriting.png) | ![Sensitivity grids](docs/screenshots/sensitivity.png) |
+| ![AI analyst memo](docs/screenshots/memo.png) | |
 
-## Run it
+**Demo video:** [link coming soon](#)
+
+## What it does
+
+- **3D map and public records.** Click any building in Providence for its live record:
+  owner, land use, assessed value and taxes from the city's 2025 tax roll; year built,
+  building and land area, base zoning, overlay and historic districts and the parcel
+  outline from the city's parcel/zoning layer; flood zone and base flood elevation from
+  RIGIS's FEMA flood map.
+- **Address search.** Type-ahead over every city parcel address, the sample properties
+  and imported deals; picking one flies there and opens its record.
+- **Filters.** Asset type, size, occupancy, lease expiration, submarket, levered IRR and
+  max bid vs price, synced between map and list and shareable in the URL.
+- **Four persona views** of the same property: Analyst, Broker, Developer and Investment.
+- **Underwriting engine.** Commercial properties are modeled lease by lease, monthly:
+  escalations, renewal-probability rollover (downtime, free rent, TI, leasing
+  commissions), NNN / base-year / expense-stop recoveries, vacancy and credit loss,
+  debt, and a sale on normalized Year-11 NOI. Apartments are modeled unit by unit, with
+  loss to lease burning off at each roll, turnover costs and lease-up of vacant units.
+  Outputs include IRR (levered and unlevered), equity multiple, cash-on-cash, DSCR, debt
+  yield, WALT, NPV and plain-language warnings.
+- **Live assumptions and saved cases.** Edit any assumption and every figure updates.
+  Save edits as named assumption sets, switch between them, and export or import them as
+  files.
+- **Sensitivity grids and max bid.** Exit cap × rent growth and price × exit cap grids,
+  every cell a full engine run. Max bid solves for the price that hits the target
+  levered IRR.
+- **Rent roll import.** Load a rent roll from CSV or Excel. Yardi "Rent Roll with Lease
+  Charges" reports and plain apartment unit tables are converted automatically through a
+  mapping screen, checked against the file's own totals, and nothing is guessed
+  silently.
+- **AI analyst memo.** A Claude Code skill runs the tests, exports the engine's results
+  as JSON, reviews a 12-point checklist and writes an investment committee memo, shown
+  in the app's *Analyst memo* tab. Every number in the memo is quoted from the engine;
+  the AI interprets, it doesn't calculate.
+
+## How it was validated
+
+- **Two independent Excel models.** The engine's output for Atwells Retail Row (retail,
+  NNN) and Westminster Office Tower (office, base-year recoveries, vacant-suite lease-up)
+  was matched to the cent against two separately built Excel models.
+- **Golden tests** freeze both results and check every cash-flow line in every year
+  within $1, plus price, loan, equity, sale proceeds, both IRRs, minimum DSCR and WALT.
+  They also run after an assumption edit and reset, and after importing the same rent
+  roll from CSV and from Excel.
+- **648 automated tests** (Vitest) across the engine, sensitivity, max bid, rent roll
+  import and conversion, assumption sets, search, filters and the public-record clients.
+- **Not yet validated:** the apartment model's rent catch-up (how loss to lease burns
+  off across successive rolls) has unit tests but no independent Excel model yet.
+
+## Data sources
+
+| Data | Source |
+|---|---|
+| Tax roll (owner, land use, assessed value, taxes) | [Providence Open Data](https://data.providenceri.gov/), 2025 tax roll |
+| Parcels, zoning, overlay and historic districts, building size | City of Providence ArcGIS Online, [`Parcel_Zoning_FL`](https://services6.arcgis.com/wv9mHoqblhTsnqdG/arcgis/rest/services/Parcel_Zoning_FL/FeatureServer) |
+| Flood zone and base flood elevation | RIGIS, [FEMA DFIRM Statewide Flood Hazard Areas 2022](https://services2.arcgis.com/S8zZg9pg23JUEexQ/arcgis/rest/services/PLAN_DFIRM_Statewide_Flood_Hazard_Areas_2022/FeatureServer/1) |
+| Basemap and 3D buildings | OpenStreetMap via [OpenFreeMap](https://openfreemap.org/) |
+
+All sources are called straight from the browser.
+
+> **Sample data.** The 11 sample properties sit on real Providence buildings, but their
+> names, tenants, rents and leases are fictional. Market figures and underwriting
+> assumptions are placeholders, labeled **EST** in the app with a note on what should
+> replace each one. Public-record data is real.
+
+## Tech stack
+
+React 19 · TypeScript (strict) · Vite 7 · Tailwind CSS v4 · MapLibre GL JS · Zustand ·
+SheetJS · Vitest · Claude Code (AI analyst and rent roll skills) · deployed on Vercel
+
+## Run it locally
+
 Requires Node.js 20.19+ (or 22+).
 
 ```bash
 npm install
 npm run dev     # open the printed localhost URL
-npm test        # metrics, NOI/IRR, stacking plan and zoning-capacity tests
+npm test        # full test suite
 ```
 
-Deploying to Vercel: see [`DEPLOY.md`](DEPLOY.md).
-
-## Structure
-- `src/types` – domain model (properties, leases, rent rolls, underwriting)
-- `src/data` – sample Providence properties, submarkets, comps, zoning placeholders
-- `src/lib` – pure, tested calculations (occupancy, WALT, NOI, IRR, FAR capacity)
-- `src/services` – Providence Open Data tax-roll client and the GIS client for the city's ArcGIS Online parcel/zoning layers and RIGIS flood zones (called directly from the browser)
-- `src/store` – shared app state (selection, parcel lookup, persona, analysis date)
-- `src/components` – map, persona dashboard and sidebar UI
+More detail: [`docs/UNDERWRITING.md`](docs/UNDERWRITING.md) (engine, conventions,
+validation) · [`ROADMAP.md`](ROADMAP.md) · [`DEPLOY.md`](DEPLOY.md)
