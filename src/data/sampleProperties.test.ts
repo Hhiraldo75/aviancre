@@ -31,6 +31,10 @@ describe('Fernhill Commons built-in sample', () => {
     expect(p.id.startsWith('deal-')).toBe(false)
   })
 
+  it('says the rent roll is fictional and gives the real building\'s unit count', () => {
+    expect(p.physical.unitCount?.notes).toMatch(/^Fictional rent roll\b.*\b102 units\b/)
+  })
+
   it('has the same units as the CSV import, unchanged', () => {
     expect(rr.units).toEqual(irr.units)
     expect(rr.units).toHaveLength(120)

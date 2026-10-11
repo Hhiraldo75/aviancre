@@ -642,6 +642,10 @@ export const SAMPLE_PROPERTIES: Property[] = [
     },
   }),
 
+  // The rent roll is fictional: 120 invented units and rents from the public
+  // sample file. The real building on this parcel has 102 units in the city's
+  // assessor records (CAMA fields of Parcel_Zoning_FL; the Open Data tax roll
+  // itself has no unit count).
   property({
     id: 'sample-fernhill-commons',
     name: 'Fernhill Commons (Sample)',
@@ -663,7 +667,11 @@ export const SAMPLE_PROPERTIES: Property[] = [
     landAreaSF: 96_000,
     assessedValue: 14_400_000,
     floodZone: 'X',
-    extras: { unitCount: estimate(FERNHILL.units.length, SAMPLE_RENT_ROLL) },
+    extras: {
+      unitCount: estimate(FERNHILL.units.length, SAMPLE_RENT_ROLL, {
+        notes: 'Fictional rent roll with invented units and rents. The real building at 91 Hartford Ave has 102 units in the City of Providence assessor records.',
+      }),
+    },
     tags: ['mill conversion', 'loss-to-lease', 'lease-up'],
     marketRentOverride: averageMarketRent(FERNHILL.units),
     rentRoll: FERNHILL,
