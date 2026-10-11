@@ -1,5 +1,40 @@
 @import "tailwindcss";
 
+/* Welcome screen palette, fonts and star twinkle (from the welcome design). */
+@theme {
+  --font-manrope: 'Manrope', 'Helvetica Neue', system-ui, sans-serif;
+  --font-plex: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-av-bg: #0a0c10;
+  --color-av-ink: #f2f4f7;
+  --color-av-link: #d6dee8;
+  --color-av-body: #aab4c2;
+  --color-av-muted: #94a0b0;
+  --color-av-card: #11151b;
+  --color-av-line: #1f2630;
+  --color-av-edge: #161c25;
+  --color-av-callout-line: #252d39;
+  --color-av-icon-bg: #15233d;
+  --color-av-accent: #5b95ff;
+  --color-av-blue: #2563eb;
+  --color-av-amber: #e5a93b;
+  --color-av-green: #3fbf7f;
+  --color-av-red: #e0614f;
+  --color-av-context: #2a323e;
+
+  --animate-twinkle: twinkle 3.4s ease-in-out infinite;
+
+  @keyframes twinkle {
+    0%,
+    100% {
+      opacity: 0.2;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}
+
 html,
 body,
 #root {

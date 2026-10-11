@@ -87,8 +87,8 @@ function loadRentRollPresets(): RentRollPreset[] {
   }
 }
 
-/** Set once the welcome overlay has been closed; browser only. */
-export const WELCOME_SEEN_KEY = 'aviancre.welcomeSeen.v1'
+/** Set once the welcome screen has been dismissed; browser only. v2: the full-page screen replaced the v1 overlay. */
+export const WELCOME_SEEN_KEY = 'aviancre.welcomeSeen.v2'
 
 function hasSeenWelcome(): boolean {
   try {
@@ -102,7 +102,7 @@ function markWelcomeSeen() {
   try {
     window.localStorage.setItem(WELCOME_SEEN_KEY, '1')
   } catch {
-    // Storage blocked: the overlay shows again next visit.
+    // Storage blocked: the welcome screen shows again next visit.
   }
 }
 
@@ -129,7 +129,7 @@ interface AppState {
   underwritingOpen: boolean
   /** The underwriting panel's section; set when it opens. */
   underwritingTab: UnderwritingTab
-  /** The welcome overlay: first visit only, and not when the link already sets filters. */
+  /** The welcome screen: first visit only, and not when the link already sets filters. */
   welcomeOpen: boolean
   /** Analyst edits to the default underwriting assumptions, by property id; kept for the session. */
   assumptionEdits: Record<string, AssumptionEdits>
@@ -163,7 +163,7 @@ interface AppState {
   closeUnderwriting: () => void
   setUnderwritingTab: (tab: UnderwritingTab) => void
   openWelcome: () => void
-  /** Closes the welcome overlay and remembers that it was seen. */
+  /** Closes the welcome screen and remembers that it was seen. */
   closeWelcome: () => void
   /** `value` in engine units (Pct as a decimal); callers validate it first. */
   setAssumption: (propertyId: string, key: string, value: number) => void
