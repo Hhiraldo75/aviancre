@@ -79,7 +79,6 @@ describe('filterProperties: each filter alone', () => {
 
   it('filters by rentable SF range', () => {
     expect(ids(filters({ minSF: 30_000, maxSF: 52_400 }))).toEqual([
-      'allens-ave-flex',
       'innovation-lab',
       'jewelry-lofts',
       'olneyville-distribution',

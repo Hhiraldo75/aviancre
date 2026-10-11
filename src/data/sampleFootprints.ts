@@ -8,8 +8,10 @@ import type { LngLat } from '../types'
  * Each building was matched to its parcel's tax-roll point by proximity, and
  * where possible confirmed by name, address tags or a business address inside
  * the outline. `levels` and `heightM` are only set when OSM has them.
- * Olneyville Distribution and Fernhill Commons were matched to the city's
- * parcel outline (Parcel_Zoning_FL) instead, on 2026-10-10.
+ * Olneyville Distribution, Allens Ave Flex and Fernhill Commons were matched
+ * to the city's parcel outline (Parcel_Zoning_FL) instead, on 2026-10-10.
+ * On 2026-10-10 every other outline was checked against its own parcel
+ * outline; all sit on it except Innovation Lab (see its entry).
  */
 export interface BuildingFootprint {
   osmWayId: number
@@ -40,6 +42,10 @@ export const SAMPLE_FOOTPRINTS: Record<string, BuildingFootprint> = {
     footprintSF: 15080, levels: 13, heightM: 53,
     ring: [[-71.410997, 41.827393], [-71.410795, 41.827579], [-71.410796, 41.827593], [-71.410797, 41.827607], [-71.410792, 41.827622], [-71.410781, 41.827635], [-71.410766, 41.827646], [-71.410749, 41.827652], [-71.410731, 41.827655], [-71.410712, 41.827654], [-71.410694, 41.827649], [-71.410678, 41.827642], [-71.410666, 41.827631], [-71.410658, 41.827618], [-71.410654, 41.827605], [-71.410656, 41.827591], [-71.410661, 41.827579], [-71.41067, 41.827568], [-71.41054, 41.827368], [-71.410514, 41.827358], [-71.410494, 41.827342], [-71.41048, 41.827323], [-71.410474, 41.827301], [-71.410476, 41.82728], [-71.410489, 41.827255], [-71.410512, 41.827236], [-71.41054, 41.827224], [-71.410573, 41.827218], [-71.410608, 41.827221], [-71.410625, 41.827226], [-71.410635, 41.827194], [-71.411004, 41.827266], [-71.410996, 41.82729], [-71.411018, 41.827288], [-71.411039, 41.82729], [-71.411058, 41.827297], [-71.411073, 41.827307], [-71.411084, 41.82732], [-71.411089, 41.827335], [-71.411089, 41.82735], [-71.411083, 41.827364], [-71.411071, 41.827378], [-71.411055, 41.827388], [-71.411034, 41.827394], [-71.411016, 41.827396], [-71.410997, 41.827393]],
   },
+  // Parcel quirk: the city's parcel outlines put this building on 7 Point St
+  // (021-0407), not on 1 Davol Sq (021-0441), whose parcel holds ways
+  // 141535770 ("3 Davol Square") and 976060224. It is kept on purpose: OSM
+  // names it "1 Davol Square" (name and addr:housenumber), the sample's address.
   'sample-innovation-lab': {
     osmWayId: 141535758,
     footprintSF: 14399, levels: 4,
@@ -61,9 +67,9 @@ export const SAMPLE_FOOTPRINTS: Record<string, BuildingFootprint> = {
     ring: [[-71.447044, 41.81775], [-71.44712, 41.817723], [-71.447063, 41.817659], [-71.447049, 41.81762], [-71.447216, 41.817546], [-71.44725, 41.817593], [-71.44728, 41.817577], [-71.44733, 41.817647], [-71.447453, 41.817605], [-71.447682, 41.817766], [-71.447599, 41.817796], [-71.447646, 41.817863], [-71.447819, 41.817802], [-71.448028, 41.818118], [-71.447775, 41.818211], [-71.447788, 41.818232], [-71.447441, 41.818358], [-71.447044, 41.81775]],
   },
   'sample-allens-ave-flex': {
-    osmWayId: 141543203,
-    footprintSF: 32441,
-    ring: [[-71.400311, 41.80523], [-71.400078, 41.804829], [-71.400764, 41.804608], [-71.400996, 41.805009], [-71.400311, 41.80523]],
+    osmWayId: 141543169,
+    footprintSF: 21457,
+    ring: [[-71.401236, 41.803316], [-71.400475, 41.803602], [-71.400323, 41.803375], [-71.401083, 41.80309], [-71.401236, 41.803316]],
   },
   'sample-jewelry-lofts': {
     osmWayId: 425693246,

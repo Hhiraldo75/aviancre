@@ -551,8 +551,8 @@ export const SAMPLE_PROPERTIES: Property[] = [
     parcelId: '047-0368-0000',
     lng: -71.40006,
     lat: 41.80472,
-    grossSF: 32_400,
-    rentableSF: 32_400,
+    grossSF: 21_500,
+    rentableSF: 21_500,
     yearBuilt: 1985,
     floors: 1,
     zoning: 'W-3',
@@ -567,11 +567,11 @@ export const SAMPLE_PROPERTIES: Property[] = [
     rentRoll: {
       kind: 'commercial',
       leases: leases('sample-allens-ave-flex', [
-        { tenant: 'Harbor Marine Supply', suite: '1', sf: 14_600, start: '2018-06-01', end: '2027-05-31', rent: 8.0, esc: perSF(0.25), type: 'NNN', recovery: NET, credit: 'regional', industry: 'Marine distribution' },
-        { tenant: 'Ironbound Fabrication', suite: '2', sf: 9_400, start: '2021-03-01', end: '2026-12-31', rent: 8.75, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Manufacturing' },
-        { tenant: 'Quayside Brewing Co.', suite: '3', sf: 4_700, start: '2023-01-01', end: '2032-12-31', rent: 9.5, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Food & beverage', freeRentMonths: 4, tiPerSF: 15 },
+        { tenant: 'Harbor Marine Supply', suite: '1', sf: 9_700, start: '2018-06-01', end: '2027-05-31', rent: 8.0, esc: perSF(0.25), type: 'NNN', recovery: NET, credit: 'regional', industry: 'Marine distribution' },
+        { tenant: 'Ironbound Fabrication', suite: '2', sf: 6_300, start: '2021-03-01', end: '2026-12-31', rent: 8.75, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Manufacturing' },
+        { tenant: 'Quayside Brewing Co.', suite: '3', sf: 3_100, start: '2023-01-01', end: '2032-12-31', rent: 9.5, esc: pct(0.03), type: 'NNN', recovery: NET, credit: 'local', industry: 'Food & beverage', freeRentMonths: 4, tiPerSF: 15 },
       ]),
-      vacancies: [vacant('sample-allens-ave-flex', 0, '4', 3_700, 6)],
+      vacancies: [vacant('sample-allens-ave-flex', 0, '4', 2_400, 6)],
     },
   }),
 
