@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import type { GisDetails, ParcelLookup, TaxRecord } from '../../types'
+import type { GisDetails, ParcelLookup, PickedParcel, TaxRecord } from '../../types'
+import { normalizeAddress } from '../../lib/addressSearch'
 import { fmt } from '../../lib/format'
 import { normalizeZoningCode, parcelMetrics } from '../../lib/parcelMetrics'
 import { useAppStore } from '../../store/useAppStore'
@@ -25,7 +26,7 @@ export default function ParcelDetail({ lookup }: { lookup: Exclude<ParcelLookup,
       {lookup.status === 'error' && (
         <Status title="Couldn't load public records" body={`${lookup.message}. Check your connection and try again.`}>
           <button
-            onClick={() => void retry(lookup.lng, lookup.lat)}
+            onClick={() => void retry(lookup.lng, lookup.lat, lookup.picked)}
             className="mt-3 rounded-md bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-600"
           >
             Try again
@@ -33,19 +34,23 @@ export default function ParcelDetail({ lookup }: { lookup: Exclude<ParcelLookup,
         </Status>
       )}
 
-      {lookup.status === 'loaded' && <Loaded record={lookup.record} gis={lookup.gis} />}
+      {lookup.status === 'loaded' && <Loaded record={lookup.record} gis={lookup.gis} picked={lookup.picked} />}
     </div>
   )
 }
 
-function Loaded({ record: r, gis }: { record: TaxRecord | null; gis: GisDetails }) {
+function Loaded({ record: r, gis, picked }: { record: TaxRecord | null; gis: GisDetails; picked?: PickedParcel }) {
   const g = gis.status === 'ok' ? gis : null
-  const title = r?.address?.value ?? g?.parcel.address?.value ?? `Parcel ${r?.taxMap ?? g?.parcel.pin ?? ''}`
+  // A searched parcel keeps the address it was found by; the tax roll sometimes files the lot under another street.
+  const title = picked?.address ?? r?.address?.value ?? g?.parcel.address?.value ?? `Parcel ${r?.taxMap ?? g?.parcel.pin ?? ''}`
+  const taxRollAddress =
+    picked && r?.matchedBy === 'plat-lot' && r.address && normalizeAddress(r.address.value) !== normalizeAddress(picked.address) ? r.address.value : null
   const zoning = g?.overlays.baseZoning?.value ?? g?.parcel.parcelZoning?.value
 
   return (
     <>
       <h2 className="text-lg font-semibold leading-tight">{title}</h2>
+      {taxRollAddress && <p className="mt-0.5 text-xs text-slate-400">Tax roll: {taxRollAddress}</p>}
       <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
         <Chip>Public record</Chip>
         {r && <Chip>Plat {r.plat} · Lot {r.lot}</Chip>}
@@ -92,7 +97,9 @@ function TaxRollCard({ r }: { r: TaxRecord }) {
         )}
       </StatGrid>
       <Note>
-        Closest tax-roll record to your click ({Math.round(r.distanceM)} m away). Tax map {r.taxMap}.
+        {r.matchedBy === 'plat-lot'
+          ? `Tax-roll record for this parcel's plat and lot. Tax map ${r.taxMap}.`
+          : `Closest tax-roll record to your click (${Math.round(r.distanceM)} m away). Tax map ${r.taxMap}.`}
       </Note>
     </Card>
   )

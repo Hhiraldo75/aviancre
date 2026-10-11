@@ -21,8 +21,10 @@ export interface TaxRecord {
   annualTaxes?: Sourced<USD>
   lng: number
   lat: number
-  /** Meters from the clicked point. */
+  /** Meters from the clicked point (0 when a plat/lot match has no location). */
   distanceM: number
+  /** How the record was found: the city parcel's plat and lot (PIN), or nearest to the click. */
+  matchedBy: 'plat-lot' | 'distance'
   /** Condo / multi-unit lots: every record sharing this plat + lot. */
   unitCount: number
   /** Sum of assessed values across those units. */
@@ -71,9 +73,16 @@ export type GisDetails =
   | { status: 'none' }
   | { status: 'ok'; parcel: ParcelRecord; overlays: ParcelOverlays }
 
+/** A parcel picked from the address search: its city PIN and `ParcAddress` (without a unit). */
+export interface PickedParcel {
+  pin: string
+  address: string
+}
+
+/** `picked` is set when the lookup came from the address search rather than a map click. */
 export type ParcelLookup =
   | { status: 'idle' }
-  | { status: 'loading'; lng: number; lat: number }
-  | { status: 'not-found'; lng: number; lat: number }
-  | { status: 'error'; lng: number; lat: number; message: string }
-  | { status: 'loaded'; lng: number; lat: number; record: TaxRecord | null; gis: GisDetails }
+  | { status: 'loading'; lng: number; lat: number; picked?: PickedParcel }
+  | { status: 'not-found'; lng: number; lat: number; picked?: PickedParcel }
+  | { status: 'error'; lng: number; lat: number; message: string; picked?: PickedParcel }
+  | { status: 'loaded'; lng: number; lat: number; record: TaxRecord | null; gis: GisDetails; picked?: PickedParcel }

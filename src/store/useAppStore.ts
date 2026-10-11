@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
-import type { GisDetails, ISODate, LngLat, ParcelLookup, Persona, Property, TaxRecord } from '../types'
+import type { GisDetails, ISODate, LngLat, ParcelLookup, Persona, PickedParcel, Property, TaxRecord } from '../types'
 import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
 import {
   DEFAULT_SORT,
@@ -21,7 +21,7 @@ import { isRentRollPreset, withPreset, type RentRollPreset } from '../lib/rentRo
 import { DEFAULTS_SET, isSavedSet, type SavedAssumptionSet } from '../lib/underwriting/assumptionSets'
 import type { AssumptionEdits } from '../lib/underwriting/edits'
 import { lookupParcelAt, parcelPointByPin } from '../services/providenceGis'
-import { lookupTaxRecord } from '../services/providenceOpenData'
+import { isOnPin, lookupTaxRecord, lookupTaxRecordByPin } from '../services/providenceOpenData'
 
 /** The ArcGIS Online parcel/zoning/flood layers are optional enrichment; give up on them after this long. */
 const GIS_TIMEOUT_MS = 10_000
@@ -123,12 +123,14 @@ interface AppState {
   /** Where the map should fly next (an address search pick); `request` changes on each pick. */
   mapFocus: { lng: number; lat: number; request: number } | null
   select: (id: string | null) => void
-  lookupParcel: (lng: number, lat: number) => Promise<void>
+  /** `picked`: the parcel chosen in the address search, matched to the tax roll by its PIN. */
+  lookupParcel: (lng: number, lat: number, picked?: PickedParcel) => Promise<void>
   /**
-   * Flies to a city parcel picked in the address search and looks it up as a click there would.
+   * Flies to a city parcel picked in the address search and looks it up as a click there would,
+   * except that the tax-roll record is matched by its plat and lot.
    * Rejects when the parcel's outline can't be fetched; resolves once the lookup has started.
    */
-  goToParcel: (pin: string) => Promise<void>
+  goToParcel: (picked: PickedParcel) => Promise<void>
   clearSelection: () => void
   setAsOf: (date: ISODate) => void
   setPersona: (persona: Persona) => void
@@ -195,15 +197,17 @@ export const useAppStore = create<AppState>()((set, get) => ({
   /**
    * Two sources in parallel:
    * 1. Providence Open Data tax roll – reachable from anywhere; shown as soon as it arrives.
+   *    By plat and lot for a searched parcel, else the record nearest the click.
    * 2. ArcGIS Online parcel, zoning and flood layers (city + RIGIS) – zoning, flood, building size,
-   *    outline; merged in if they answer in time.
+   *    outline; merged in if they answer in time. Once the parcel's PIN is known, a nearest-record
+   *    match is replaced by the record on that plat and lot.
    */
-  lookupParcel: async (lng, lat) => {
+  lookupParcel: async (lng, lat, picked) => {
     cancelInFlight()
     const controller = new AbortController()
     inFlight = controller
     const current = () => inFlight === controller
-    set({ selectedId: null, parcel: { status: 'loading', lng, lat }, underwritingOpen: false })
+    set({ selectedId: null, parcel: { status: 'loading', lng, lat, picked }, underwritingOpen: false })
 
     const gisController = new AbortController()
     controller.signal.addEventListener('abort', () => gisController.abort())
@@ -220,7 +224,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
     let record: TaxRecord | null = null
     let taxError: string | null = null
     try {
-      record = await lookupTaxRecord(lng, lat, controller.signal)
+      if (picked) record = await lookupTaxRecordByPin(picked.pin, lng, lat, controller.signal)
+      record ??= await lookupTaxRecord(lng, lat, controller.signal)
     } catch (err) {
       if (!current()) return
       taxError = err instanceof Error ? err.message : 'Lookup failed'
@@ -228,28 +233,40 @@ export const useAppStore = create<AppState>()((set, get) => ({
     if (!current()) return
 
     // Show the tax-roll result right away; GIS fills in when (if) it answers.
-    if (record) set({ parcel: { status: 'loaded', lng, lat, record, gis: { status: 'loading' } } })
+    if (record) set({ parcel: { status: 'loaded', lng, lat, record, gis: { status: 'loading' }, picked } })
 
     const gis = await gisPromise
     if (!current()) return
+
+    const pin = gis.status === 'ok' ? gis.parcel.pin : undefined
+    if (record?.matchedBy === 'distance' && pin) {
+      if (isOnPin(record, pin)) record = { ...record, matchedBy: 'plat-lot' }
+      // A searched PIN was already tried above.
+      else if (pin !== picked?.pin) {
+        // Keep the nearest record if the roll has no such lot or doesn't answer.
+        const onLot = await lookupTaxRecordByPin(pin, lng, lat, controller.signal).catch(() => null)
+        if (!current()) return
+        record = onLot ?? record
+      }
+    }
     inFlight = null
 
     if (record || gis.status === 'ok') {
-      set({ parcel: { status: 'loaded', lng, lat, record, gis } })
+      set({ parcel: { status: 'loaded', lng, lat, record, gis, picked } })
     } else if (taxError) {
-      set({ parcel: { status: 'error', lng, lat, message: taxError } })
+      set({ parcel: { status: 'error', lng, lat, message: taxError, picked } })
     } else {
-      set({ parcel: { status: 'not-found', lng, lat } })
+      set({ parcel: { status: 'not-found', lng, lat, picked } })
     }
   },
 
-  goToParcel: async (pin) => {
+  goToParcel: async (picked) => {
     cancelInFlight()
     const controller = new AbortController()
     inFlight = controller
     let point: LngLat
     try {
-      point = await parcelPointByPin(pin, controller.signal)
+      point = await parcelPointByPin(picked.pin, controller.signal)
     } catch (err) {
       // A newer click or pick aborted this one: nothing to report.
       if (inFlight !== controller) return
@@ -259,7 +276,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     if (inFlight !== controller) return
     const [lng, lat] = point
     set((s) => ({ mapFocus: { lng, lat, request: (s.mapFocus?.request ?? 0) + 1 } }))
-    void get().lookupParcel(lng, lat)
+    void get().lookupParcel(lng, lat, picked)
   },
 
   clearSelection: () => {

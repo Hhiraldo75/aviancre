@@ -82,7 +82,7 @@ export default function AddressSearch() {
     setText(option.parcel.address)
     setPicking(true)
     try {
-      await goToParcel(option.parcel.pin)
+      await goToParcel({ pin: option.parcel.pin, address: option.parcel.address })
     } catch (err) {
       setPickError(`Couldn't load that parcel: ${err instanceof Error ? err.message : 'lookup failed'}`)
     } finally {
