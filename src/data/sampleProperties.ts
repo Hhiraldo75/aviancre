@@ -1,9 +1,11 @@
 import type {
+  ApartmentUnit,
   AssetType,
   BuildingClass,
   Escalation,
   Lease,
   LeaseType,
+  MultifamilyRentRoll,
   Property,
   Recovery,
   SubmarketId,
@@ -11,8 +13,11 @@ import type {
   UnitType,
   VacantSpace,
 } from '../types'
+import fernhillCsv from '../../docs/samples/fernhill-commons-unit-rent-roll.csv?raw'
+import { parseCSV } from '../lib/csv'
 import { estimate, estimateWithBand, fromPublic } from '../lib/sourced'
 import { marketViewFor } from '../lib/marketView'
+import { parseRentRoll } from '../lib/rentRollImport'
 import { OSM_AS_OF, OSM_SOURCE, SAMPLE_FOOTPRINTS } from './sampleFootprints'
 import { ZONING_LIMITS, ZONING_SOURCE } from './zoning'
 
@@ -28,7 +33,9 @@ import { ZONING_LIMITS, ZONING_SOURCE } from './zoning'
  * - Building outline, floors and height come from OpenStreetMap when OSM has
  *   them (see sampleFootprints.ts). Gross SF is the OSM footprint × floors;
  *   rentable SF and every lease, vacancy and unit count were rescaled from the
- *   original sample to fit that size.
+ *   original sample to fit that size. Fernhill Commons is the exception: its
+ *   units come from the public sample rent roll in docs/samples, unchanged,
+ *   so its rentable SF is the units' total.
  * - Zoning districts are plausible guesses and must be verified against the
  *   City of Providence zoning map.
  */
@@ -114,6 +121,8 @@ interface PropertyInput {
   lat: number
   grossSF: number
   rentableSF: number
+  /** Where rentable SF comes from, when not the OSM footprint (or a placeholder). */
+  rentableSFSource?: string
   yearBuilt: number
   yearRenovated?: number
   floors: number
@@ -158,7 +167,7 @@ function property(p: PropertyInput): Property {
     },
     physical: {
       grossBuildingSF: estimate(p.grossSF, fp ? OSM_SIZE : SAMPLE),
-      rentableSF: estimate(p.rentableSF, fp ? `${OSM_SIZE}, × sample efficiency ratio` : SAMPLE),
+      rentableSF: estimate(p.rentableSF, p.rentableSFSource ?? (fp ? `${OSM_SIZE}, × sample efficiency ratio` : SAMPLE)),
       yearBuilt: estimate(p.yearBuilt, SAMPLE),
       yearRenovated: p.yearRenovated !== undefined ? estimate(p.yearRenovated, SAMPLE) : undefined,
       floors: fp?.levels !== undefined ? fromPublic(fp.levels, osmSource, OSM_AS_OF) : estimate(p.floors, SAMPLE),
@@ -229,6 +238,41 @@ function unitType(
     inPlaceRentMonthly: estimate(inPlaceRent, SAMPLE_RENT_ROLL),
   }
 }
+
+type UnitRentRoll = MultifamilyRentRoll & { units: ApartmentUnit[] }
+
+/**
+ * A unit-level rent roll read from a CSV in the unit rent roll format, with
+ * the import's own parser. Every unit keeps its lease dates and rents, so the
+ * engine models it unit by unit; the unit mix is relabeled as sample figures,
+ * like `unitType()`, since the rents are invented, not imported.
+ */
+function sampleUnitRentRoll(csv: string, fileName: string, asOf: string): UnitRentRoll {
+  const { property, issues } = parseRentRoll(parseCSV(csv), { fileName, asOf })
+  const rr = property?.rentRoll
+  if (rr?.kind !== 'multifamily' || !rr.units) {
+    const errors = issues.filter((i) => i.severity === 'error').map((i) => i.message)
+    throw new Error(`${fileName} is not a valid unit rent roll: ${errors.join(' ') || 'no units'}`)
+  }
+  return {
+    kind: 'multifamily',
+    unitTypes: rr.unitTypes.map((u) => ({
+      ...u,
+      marketRentMonthly: estimateWithBand(u.marketRentMonthly.value, SAMPLE, 0.1),
+      inPlaceRentMonthly: u.inPlaceRentMonthly && estimate(u.inPlaceRentMonthly.value, SAMPLE_RENT_ROLL),
+    })),
+    units: rr.units,
+    otherIncomePerUnitMonthly: rr.otherIncomePerUnitMonthly && estimate(rr.otherIncomePerUnitMonthly.value, SAMPLE_RENT_ROLL),
+  }
+}
+
+/** Average market rent per unit, to the cent, as the import computes it. */
+const averageMarketRent = (units: ApartmentUnit[]) => Math.round((units.reduce((s, u) => s + u.marketRentMonthly, 0) / units.length) * 100) / 100
+
+const FERNHILL_FILE = 'docs/samples/fernhill-commons-unit-rent-roll.csv'
+// As of the file's own date; it only matters for the import's expired-lease warnings, which are ignored here.
+const FERNHILL = sampleUnitRentRoll(fernhillCsv, FERNHILL_FILE, '2026-09-30')
+const FERNHILL_RSF = FERNHILL.units.reduce((s, u) => s + u.sf, 0)
 
 // ---------- the dataset ----------
 
@@ -596,5 +640,32 @@ export const SAMPLE_PROPERTIES: Property[] = [
       ],
       otherIncomePerUnitMonthly: estimate(40, SAMPLE, { notes: 'Laundry, storage' }),
     },
+  }),
+
+  property({
+    id: 'sample-fernhill-commons',
+    name: 'Fernhill Commons (Sample)',
+    assetType: 'multifamily',
+    cls: 'B',
+    submarket: 'olneyville',
+    address: '91 Hartford Ave',
+    zip: '02909',
+    parcelId: '105-0464-0000',
+    lng: -71.4467,
+    lat: 41.817,
+    grossSF: 144_200,
+    rentableSF: FERNHILL_RSF,
+    rentableSFSource: `Sample rent roll: total of unit SF (${FERNHILL_FILE})`,
+    yearBuilt: 1898,
+    yearRenovated: 2014,
+    floors: 4,
+    zoning: 'M-MU-75',
+    landAreaSF: 96_000,
+    assessedValue: 14_400_000,
+    floodZone: 'X',
+    extras: { unitCount: estimate(FERNHILL.units.length, SAMPLE_RENT_ROLL) },
+    tags: ['mill conversion', 'loss-to-lease', 'lease-up'],
+    marketRentOverride: averageMarketRent(FERNHILL.units),
+    rentRoll: FERNHILL,
   }),
 ]

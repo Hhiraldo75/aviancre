@@ -4,7 +4,7 @@
 - [x] Vite + React + TypeScript + Tailwind setup
 - [x] MapLibre 3D map of Providence (OpenStreetMap buildings via OpenFreeMap)
 - [x] Domain model: properties, leases, rent rolls, underwriting types, data-source labels
-- [x] Sample dataset: 10 Providence properties, 9 submarkets, sale comps, zoning placeholders
+- [x] Sample dataset: 11 Providence properties, 9 submarkets, sale comps, zoning placeholders
 - [x] Map ↔ sidebar sync: occupancy-colored buildings, click to select, fly-to
 - [x] Persona dashboard: Analyst / Broker / Developer / Investment views
 - [x] Tested calculations: occupancy, WALT, mark-to-market, NOI, IRR, stacking plan, FAR capacity

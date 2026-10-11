@@ -52,7 +52,7 @@ const FACTS: FactsById = {
 
 describe('filterProperties: each filter alone', () => {
   it('returns every property with no filters set', () => {
-    expect(ids(EMPTY_FILTERS)).toHaveLength(10)
+    expect(ids(EMPTY_FILTERS)).toHaveLength(11)
     expect(hasActiveFilters(EMPTY_FILTERS)).toBe(false)
   })
 
@@ -90,8 +90,8 @@ describe('filterProperties: each filter alone', () => {
 
   it('splits the portfolio into the three occupancy presets, matching the map colors', () => {
     const groups = OCCUPANCY_PRESETS.map((o) => filterProperties(ALL, filters({ minOccupancy: o.min, maxOccupancy: o.max }), AS_OF, {}))
-    expect(groups.map((g) => g.length)).toEqual([3, 4, 3])
-    expect(groups.flat()).toHaveLength(10)
+    expect(groups.map((g) => g.length)).toEqual([3, 4, 4])
+    expect(groups.flat()).toHaveLength(11)
     groups.forEach((g) => expect(new Set(g.map((p) => occupancyColor(occupancy(p, AS_OF)))).size).toBe(1))
   })
 
@@ -104,7 +104,7 @@ describe('filterProperties: each filter alone', () => {
       'weybosset-commons',
     ])
     // Setting only the window, with no threshold, filters nothing.
-    expect(ids(filters({ expiring: { years: 5, minShare: null } }))).toHaveLength(10)
+    expect(ids(filters({ expiring: { years: 5, minShare: null } }))).toHaveLength(11)
   })
 
   it('filters by levered IRR at or above the threshold', () => {
@@ -230,7 +230,7 @@ describe('propertyView', () => {
     const v = propertyView(ALL, filters({ assetTypes: ['industrial'] }), 'size', AS_OF, {})
     expect(v.matching.map((p) => p.id)).toEqual(['sample-olneyville-distribution', 'sample-allens-ave-flex'])
     expect([...v.matchIds].sort()).toEqual(['sample-allens-ave-flex', 'sample-olneyville-distribution'])
-    expect(v.total).toBe(10)
+    expect(v.total).toBe(11)
   })
 })
 
