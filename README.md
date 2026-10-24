@@ -57,17 +57,21 @@ and an imported rent roll never leaves the user's machine.
 
 ## How it was validated
 
-- **Two independent Excel models.** The engine's output for Atwells Retail Row (retail,
-  NNN) and Westminster Office Tower (office, base-year recoveries, vacant-suite lease-up)
-  was matched to the cent against two separately built Excel models.
-- **Golden tests** freeze both results and check every cash-flow line in every year
-  within $1, plus price, loan, equity, sale proceeds, both IRRs, minimum DSCR and WALT.
+- **Three independent Excel models.** The engine's output was matched to the cent against
+  separately built Excel models for:
+  - Atwells Retail Row (retail, NNN)
+  - Westminster Office Tower (office, base-year recoveries, vacant-suite lease-up)
+  - Fernhill Commons (apartments, unit by unit and month by month: renewals vs turnover,
+    loss to lease burning off, lease-up). The Fernhill model was built only from the written
+    inputs, rules and rent roll, and matched all 185 annual and 1,140 monthly values
+    ([`docs/validation/`](docs/validation/)).
+- **Golden tests** freeze all three results and check every cash-flow line in every year
+  within $1, plus price, loan, equity, sale proceeds, both IRRs, minimum DSCR and WALT
+  (Fernhill also checks its loan schedule by year to the cent, and every return metric).
   They also run after an assumption edit and reset, and after importing the same rent
   roll from CSV and from Excel.
-- **648 automated tests** (Vitest) across the engine, sensitivity, max bid, rent roll
+- **744 automated tests** (Vitest) across the engine, sensitivity, max bid, rent roll
   import and conversion, assumption sets, search, filters and the public-record clients.
-- **Not yet validated:** the apartment model's rent catch-up (how loss to lease burns
-  off across successive rolls) has unit tests but no independent Excel model yet.
 
 ## Data sources
 

@@ -1,0 +1,104 @@
+AVIANCRE underwriting: Fernhill Commons (Sample)
+Analysis start 2026-11-01; losses and costs are positive amounts
+
+Line,Year 0,Year 1,Year 2,Year 3,Year 4,Year 5,Year 6,Year 7,Year 8,Year 9,Year 10,"Year 11 (forward, raw)",Year 11 (normalized for sale)
+Physical occupancy (before general vacancy),,0.9986,1,1,1,1,1,1,1,1,1,1,
+Gross potential rent (at market),,2333160,2403154.8,2475249.444,2549506.9273,2625992.1351,2704771.8992,2785915.0562,2869492.5079,2955577.2831,3044244.6016,3135571.9396,3135571.9396
+Less: loss to lease,,40080.5,38024.9125,30904.6544,29883.6925,30440.0414,31353.2426,32293.8399,33262.6551,34260.5348,35288.3508,36347.0013,36347.0013
+Less: absorption & turnover vacancy,,3375,0,0,0,0,0,0,0,0,0,0,0
+Less: free rent,,0,0,0,0,0,0,0,0,0,0,0,0
+Expense recoveries,,0,0,0,0,0,0,0,0,0,0,0,0
+Other income,,39144,40318.32,41527.8696,42773.7057,44056.9169,45378.6244,46739.9831,48142.1826,49586.4481,51074.0415,52606.2628,52606.2628
+Less: general vacancy,,113236.175,120272.4104,124293.633,128119.847,131980.4505,135939.864,140018.06,144218.6018,148545.1598,153001.5146,157591.5601,157591.5601
+Less: credit loss,,22156.1233,22851.758,23615.7903,24342.7709,25076.2856,25828.5742,26603.4314,27401.5343,28223.5804,29070.2878,29942.3964,29942.3964
+Effective gross income,,2193456.2018,2262324.0392,2337963.236,2409934.3225,2482552.2745,2557028.8427,2633739.708,2712751.8992,2794134.4562,2877958.4899,2964297.2446,2964297.2446
+Operating expenses (incl. mgmt),,881803.6861,908349.7212,935833.2971,963963.2617,992891.7572,1022678.5099,1053358.8652,1084959.6312,1117508.4201,1151033.6727,1185564.6829,1185564.6829
+  of which management fee,,65803.6861,67869.7212,70138.8971,72298.0297,74476.5682,76710.8653,79012.1912,81382.557,83824.0337,86338.7547,88928.9173,88928.9173
+Net operating income,,1311652.5157,1353974.318,1402129.9389,1445971.0608,1489660.5173,1534350.3328,1580380.8428,1627792.2681,1676626.0361,1726924.8172,1778732.5617,1778732.5617
+Turnover costs,,55500,61800,63654,65563.62,67530.5286,69556.4445,71643.1378,73792.4319,76006.2049,78286.391,80634.9828,80634.9828
+Leasing commissions,,0,0,0,0,0,0,0,0,0,0,0,0
+Capital reserves,,36000,36000,36000,36000,36000,36000,36000,36000,36000,36000,36000,36000
+Cash flow before debt,,1220152.5157,1256174.318,1302475.9389,1344407.4408,1386129.9887,1428793.8883,1472737.705,1517999.8361,1564619.8312,1612638.4262,1662097.5789,1662097.5789
+Debt service,,818471.1698,818471.1698,955069.7623,955069.7623,955069.7623,955069.7623,955069.7623,955069.7623,955069.7623,955069.7623,,
+Cash flow after debt,,401681.3459,437703.1482,347406.1766,389337.6785,431060.2264,473724.126,517667.9427,562930.0738,609550.0689,657568.6639,,
+Net sale proceeds,,0,0,0,0,0,0,0,0,0,26817814.0071,,
+Loan payoff,,0,0,0,0,0,0,0,0,0,11163528.3886,,
+Unlevered cash flow,-21301236.8549,1220152.5157,1256174.318,1302475.9389,1344407.4408,1386129.9887,1428793.8883,1472737.705,1517999.8361,1564619.8312,28430452.4333,,
+Levered cash flow,-8835291.3457,401681.3459,437703.1482,347406.1766,389337.6785,431060.2264,473724.126,517667.9427,562930.0738,609550.0689,16311854.2823,,
+
+Metric,Value
+Purchase price,"$20,986,440"
+Price per SF,$221
+"Total cost (incl. closing, capex)","$21,301,237"
+Going-in cap rate,6.25%
+Loan amount,"$12,591,864"
+Equity required,"$8,835,291"
+Year-11 NOI (raw),"$1,778,733"
+"Year-11 NOI (normalized, used for sale)","$1,778,733"
+Exit value (gross),"$27,365,116"
+Net sale proceeds,"$26,817,814"
+Loan payoff at sale,"$11,163,528"
+Unlevered IRR,8.26%
+Levered IRR,10.04%
+Unlevered equity multiple,1.92x
+Levered equity multiple,2.32x
+NPV (unlevered),"$402,344"
+Debt yield (year-1 NOI / loan),10.42%
+Minimum DSCR,1.47x
+DSCR by year,1.60 | 1.65 | 1.47 | 1.51 | 1.56 | 1.61 | 1.65 | 1.70 | 1.76 | 1.81
+Average cash-on-cash,5.47%
+Cash-on-cash by year,4.5% | 5.0% | 3.9% | 4.4% | 4.9% | 5.4% | 5.9% | 6.4% | 6.9% | 7.4%
+WALT (years),n/a
+In-place vs market rent,"$1,566.45 vs $1,620.25/unit/mo (−3.3%)"
+
+Warning
+"Negative leverage: the 6.25% going-in cap rate is below the 7.58% loan constant, so debt lowers the yearly cash yield. The levered IRR can still be higher because the sale gain goes to a smaller equity check."
+
+Note
+"Purchase price is a model estimate at default assumptions (default year-1 NOI ÷ market cap rate), not an asking price or offer. At defaults the going-in cap equals the market cap by construction; other assumption edits move the going-in cap and returns, not the price."
+
+Assumption,Value,Source,Source type
+scenario,base,,
+acquisition.purchasePrice,20986440.2512,Default year-1 NOI ÷ market cap rate,estimated
+acquisition.marketCapRate,0.0625,Placeholder benchmark – replace with quarterly market report,estimated
+acquisition.closingCostsPct,0.015,Industry rule of thumb – replace with market report,estimated
+acquisition.analysisStartDate,2026-11-01,,
+acquisition.holdYears,10,Placeholder – replace with investor return target,estimated
+acquisition.initialCapex,0,Placeholder – replace with capital plan,estimated
+leasing.marketRent,1620.25,Weighted average of unit-type market rents,estimated
+leasing.marketRentGrowth,0.03,Industry rule of thumb – replace with market report,estimated
+leasing.renewalProbability,0,Not used for multifamily,estimated
+leasing.downtimeMonths,0,Not used for multifamily,estimated
+leasing.newLease.termMonths,0,Not used for multifamily,estimated
+leasing.newLease.freeRentMonths,0,Not used for multifamily,estimated
+leasing.newLease.tiPerSF,0,Not used for multifamily,estimated
+leasing.newLease.leasingCommissionPct,0,Not used for multifamily,estimated
+leasing.renewal.termMonths,0,Not used for multifamily,estimated
+leasing.renewal.freeRentMonths,0,Not used for multifamily,estimated
+leasing.renewal.tiPerSF,0,Not used for multifamily,estimated
+leasing.renewal.leasingCommissionPct,0,Not used for multifamily,estimated
+leasing.newLeaseEscalationPct,0,Not used for multifamily,estimated
+leasing.vacantSpaceRecovery,none,,
+operating.generalVacancyPct,0.05,Industry rule of thumb – replace with market report,estimated
+operating.creditLossPct,0.01,Industry rule of thumb – replace with market report,estimated
+operating.expenses[Operating expenses].annualAmount,816000,Placeholder benchmark – replace with quarterly market report × units,estimated
+operating.expenses[Operating expenses].recoverable,false,,
+operating.expenseGrowth,0.03,Industry rule of thumb – replace with market report,estimated
+operating.managementFeePct,0.03,Industry rule of thumb – replace with market report,estimated
+operating.capitalReservesPerYear,300,Industry rule of thumb – replace with market report,estimated
+multifamily.turnoverRate,0.5,Industry rule of thumb – replace with market report,estimated
+multifamily.turnoverCostPerUnit,1000,Industry rule of thumb – replace with market report,estimated
+multifamily.leaseUpUnitsPerMonth,8,Industry rule of thumb – replace with market report,estimated
+multifamily.maxRenewalIncreasePct,0.05,Industry rule of thumb – replace with market report,estimated
+debt.enabled,true,,
+debt.ltv,0.6,Placeholder – replace with lender term sheet,estimated
+debt.rate.type,fixed,,
+debt.rate.rate,0.065,Placeholder – replace with lender term sheet,estimated
+debt.amortizationYears,30,Placeholder – replace with lender term sheet,estimated
+debt.interestOnlyYears,2,Placeholder – replace with lender term sheet,estimated
+debt.loanFeesPct,0.01,Placeholder – replace with lender term sheet,estimated
+exit.exitCapRate,0.065,"Market cap rate + 25 bps – rule of thumb, replace with broker opinion of value",estimated
+exit.sellingCostsPct,0.02,Industry rule of thumb – replace with market report,estimated
+exit.capForwardNOI,true,,
+discountRate,0.08,Placeholder – replace with investor return target,estimated
+targetLeveredIRR,0.1,Placeholder – replace with investor return target,estimated

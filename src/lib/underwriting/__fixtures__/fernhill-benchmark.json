@@ -1,0 +1,127 @@
+{
+  "_comment": "Frozen engine output for Fernhill Commons (Sample), base scenario, as of 2026-10-04, matched by the independent Excel model (docs/validation/Fernhill-Excel-Check.xlsx) on Oct 24, 2026. loanScheduleByYear: sums of the monthly loan schedule (full precision). metrics: UnderwritingMetrics fields from the engine summary JSON; dollar amounts are whole dollars, rates and multiples full precision. Update only on purpose (see docs/UNDERWRITING.md).",
+  "analysisStartDate": "2026-11-01",
+  "loanScheduleByYear": [
+    {
+      "year": 1,
+      "interest": 818471.1697952398,
+      "principal": 0.0,
+      "payment": 818471.1697952398,
+      "endingBalance": 12591864.150696
+    },
+    {
+      "year": 2,
+      "interest": 818471.1697952398,
+      "principal": 0.0,
+      "payment": 818471.1697952398,
+      "endingBalance": 12591864.150696
+    },
+    {
+      "year": 3,
+      "interest": 814327.2896695079,
+      "principal": 140742.47262917354,
+      "payment": 955069.7622986817,
+      "endingBalance": 12451121.678066827
+    },
+    {
+      "year": 4,
+      "interest": 804901.5056221149,
+      "principal": 150168.2566765666,
+      "payment": 955069.7622986817,
+      "endingBalance": 12300953.42139026
+    },
+    {
+      "year": 5,
+      "interest": 794844.4593604918,
+      "principal": 160225.30293818974,
+      "payment": 955069.7622986817,
+      "endingBalance": 12140728.118452068
+    },
+    {
+      "year": 6,
+      "interest": 784113.8740850526,
+      "principal": 170955.88821362905,
+      "payment": 955069.7622986817,
+      "endingBalance": 11969772.230238436
+    },
+    {
+      "year": 7,
+      "interest": 772664.6416406458,
+      "principal": 182405.12065803583,
+      "payment": 955069.7622986817,
+      "endingBalance": 11787367.109580401
+    },
+    {
+      "year": 8,
+      "interest": 760448.6328954299,
+      "principal": 194621.12940325175,
+      "payment": 955069.7622986817,
+      "endingBalance": 11592745.98017715
+    },
+    {
+      "year": 9,
+      "interest": 747414.4954204673,
+      "principal": 207655.26687821426,
+      "payment": 955069.7622986817,
+      "endingBalance": 11385090.713298937
+    },
+    {
+      "year": 10,
+      "interest": 733507.4376195511,
+      "principal": 221562.32467913063,
+      "payment": 955069.7622986817,
+      "endingBalance": 11163528.388619808
+    }
+  ],
+  "loanScheduleTotal": {
+    "interest": 7849164.67590374,
+    "principal": 1428335.7620761914,
+    "payment": 9277500.437979933
+  },
+  "metrics": {
+    "purchasePrice": 20986440,
+    "totalCost": 21301237,
+    "loanAmount": 12591864,
+    "equityRequired": 8835291,
+    "goingInCapRate": 0.0625,
+    "unleveredIRR": 0.08256012643985886,
+    "leveredIRR": 0.10043024448562896,
+    "unleveredEquityMultiple": 1.9212003591488114,
+    "equityMultiple": 2.3183066939021164,
+    "npv": 402344,
+    "averageCashOnCash": 0.05465161545846291,
+    "cashOnCashByYear": [
+      0.0454632824412755,
+      0.049540318599117,
+      0.03932028531933563,
+      0.044066195816778,
+      0.048788456373929985,
+      0.05361726144561765,
+      0.058590930669454935,
+      0.06371380997000814,
+      0.06899037564957776,
+      0.07442523829953454
+    ],
+    "exitNOIRaw": 1778733,
+    "exitNOI": 1778733,
+    "exitValue": 27365116,
+    "sellingCosts": 547302,
+    "netSaleProceeds": 26817814,
+    "loanPayoff": 11163528,
+    "loanConstant": 0.07584816281915584,
+    "debtYield": 0.10416666666666666,
+    "minimumDSCR": 1.4680916454918387,
+    "dscrByYear": [
+      1.6025641025641029,
+      1.6542724630335708,
+      1.4680916454918387,
+      1.5139952262315155,
+      1.5597400065162288,
+      1.6065322067117194,
+      1.6547281729130652,
+      1.7043700181004589,
+      1.7555011186434728,
+      1.8081661522027779
+    ]
+  }
+}

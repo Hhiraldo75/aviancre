@@ -13,8 +13,10 @@ const DSCR = 0.01
 /** Years. WALT runs from the analysis start (Nov 1, 2026), not the Oct 4 analysis date. */
 const WALT = 0.01
 
-/** Fixture line label → engine field. */
-const LINES: Record<string, keyof Omit<AnnualCashFlow, 'year'>> = {
+type LineField = keyof Omit<AnnualCashFlow, 'year'>
+
+/** Fixture line label → engine field, in report order (commercial). */
+const LINES: Record<string, LineField> = {
   Occupancy: 'occupancy',
   'Gross potential rent': 'grossPotentialRent',
   'Less: absorption & turnover vacancy': 'absorptionTurnoverVacancy',
@@ -39,8 +41,18 @@ const LINES: Record<string, keyof Omit<AnnualCashFlow, 'year'>> = {
   'Levered cash flow': 'leveredCashFlow',
 }
 
+/** Multifamily report order: physical occupancy, rent at market, then loss to lease; turnover costs in place of TI. */
+const MULTIFAMILY_LINES: Record<string, LineField> = Object.fromEntries(
+  Object.entries(LINES).flatMap(([label, key]): [string, LineField][] => {
+    if (key === 'occupancy') return [['Physical occupancy (before general vacancy)', key]]
+    if (key === 'grossPotentialRent') return [['Gross potential rent (at market)', key], ['Less: loss to lease', 'lossToLease']]
+    if (key === 'tenantImprovements') return [['Turnover costs', key]]
+    return [[label, key]]
+  }),
+)
+
 /** Engine value for a fixture column: Year 0, Years 1–10, then both Year-11 columns. */
-function engineValue(r: UnderwritingResult, key: keyof Omit<AnnualCashFlow, 'year'>, column: number): number | null {
+function engineValue(r: UnderwritingResult, key: LineField, column: number): number | null {
   if (column === 0) {
     if (key === 'unleveredCashFlow') return -r.metrics.totalCost
     if (key === 'leveredCashFlow') return -r.metrics.equityRequired
@@ -53,9 +65,11 @@ function engineValue(r: UnderwritingResult, key: keyof Omit<AnnualCashFlow, 'yea
 /**
  * Every fixture check, against one engine result: each cash-flow line in every
  * year (both Year-11 columns included) within $1, price, loan, equity, sale and
- * payoff within $1, IRRs within 0.0001, minimum DSCR within 0.01, WALT within 0.01 years.
+ * payoff within $1, IRRs within 0.0001, minimum DSCR within 0.01, WALT within 0.01 years
+ * (multifamily has no WALT: the fixture's "n/a" must stay n/a).
  */
 export function goldenChecks(r: UnderwritingResult, fixture: string) {
+  const lines = r.assumptions.multifamily ? MULTIFAMILY_LINES : LINES
   const rows = parseCSV(fixture)
   const headerAt = rows.findIndex((row) => row[0] === 'Line')
   const header = rows[headerAt]
@@ -87,14 +101,14 @@ export function goldenChecks(r: UnderwritingResult, fixture: string) {
       'Year 11 (forward, raw)',
       'Year 11 (normalized for sale)',
     ])
-    expect(cashFlowRows.map((row) => row[0])).toEqual(Object.keys(LINES))
+    expect(cashFlowRows.map((row) => row[0])).toEqual(Object.keys(lines))
     expect(r.cashFlows).toHaveLength(10)
     expect(r.normalizedExitYear.year).toBe(11)
   })
 
   for (const row of cashFlowRows) {
     const [label, ...cells] = row
-    const key = LINES[label]
+    const key = lines[label]
     const tolerance = key === 'occupancy' ? RATE : DOLLARS
     it(`matches "${label.trim()}" in every year`, () => {
       let compared = 0
@@ -134,6 +148,8 @@ export function goldenChecks(r: UnderwritingResult, fixture: string) {
 
   it('matches WALT within 0.01 years, measured from the analysis start', () => {
     expect(r.assumptions.acquisition.analysisStartDate).toBe('2026-11-01')
-    expect(Math.abs(r.metrics.walt! - Number(metricValue('WALT (years)')))).toBeLessThanOrEqual(WALT)
+    const walt = metricValue('WALT (years)')
+    if (walt === 'n/a') expect(r.metrics.walt).toBeNull()
+    else expect(Math.abs(r.metrics.walt! - Number(walt))).toBeLessThanOrEqual(WALT)
   })
 }
