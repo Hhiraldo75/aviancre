@@ -8,6 +8,7 @@ import DeveloperView from '../personas/DeveloperView'
 import InvestmentView from '../personas/InvestmentView'
 import { Chip } from '../ui/Card'
 import ImportedChip from '../ui/ImportedChip'
+import DealLocation, { DealPublicRecord } from './DealLocation'
 
 const VIEWS: Record<Persona, (props: { property: Property }) => ReturnType<typeof AnalystView>> = {
   Analyst: AnalystView,
@@ -31,18 +32,14 @@ export default function PropertyDetail({ property: p }: { property: Property }) 
         ← All properties
       </button>
       <h2 className="text-lg font-semibold leading-tight">{p.name}</h2>
-      {!p.location.isApproximate && (
+      {!p.importedFrom && (
         <p className="mt-0.5 text-xs text-slate-400">
           {p.location.address}, {p.location.city}, {p.location.state} {p.location.zip}
           {p.location.parcelId && ` · Tax map ${p.location.parcelId}`}
           {p.isSample && ' · Real parcel; building, tenant and financial figures are sample data'}
         </p>
       )}
-      {p.importedFrom && (
-        <p className="mt-0.5 text-xs text-slate-400">
-          {p.location.address} · Map location approximate · Rent roll from {p.importedFrom.fileName}
-        </p>
-      )}
+      {p.importedFrom && <DealLocation key={p.id} property={p} />}
       <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
         <Chip>{fmt.label(p.assetType)}</Chip>
         <Chip>Class {p.buildingClass}</Chip>
@@ -53,6 +50,7 @@ export default function PropertyDetail({ property: p }: { property: Property }) 
       </div>
       {!matchIds.has(p.id) && <p className="mt-1.5 text-[11px] text-amber-300">Doesn’t match current filters</p>}
       <div className="mt-4">
+        {p.importedFrom && <DealPublicRecord property={p} />}
         <View property={p} />
       </div>
       {p.importedFrom && (

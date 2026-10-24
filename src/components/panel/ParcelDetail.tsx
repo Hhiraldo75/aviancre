@@ -46,14 +46,30 @@ function Loaded({ record: r, gis, picked }: { record: TaxRecord | null; gis: Gis
   const title = picked?.address ?? r?.address?.value ?? g?.parcel.address?.value ?? `Parcel ${r?.taxMap ?? g?.parcel.pin ?? ''}`
   const taxRollAddress =
     picked && r?.matchedBy === 'plat-lot' && r.address && normalizeAddress(r.address.value) !== normalizeAddress(picked.address) ? r.address.value : null
+
+  return (
+    <>
+      <h2 className="text-lg font-semibold leading-tight">{title}</h2>
+      {taxRollAddress && <p className="mt-0.5 text-xs text-slate-400">Tax roll: {taxRollAddress}</p>}
+      <PublicRecordBody record={r} gis={gis}>
+        <Note>
+          No rents or tenants for this property yet. Market-based rent estimates and rent-roll import are later milestones;
+          persona views currently apply to the sample properties.
+        </Note>
+      </PublicRecordBody>
+    </>
+  )
+}
+
+/** Chips, tax-roll card and GIS cards for a parcel; also shown for an imported deal placed on it. */
+export function PublicRecordBody({ record: r, gis, children }: { record: TaxRecord | null; gis: GisDetails; children?: ReactNode }) {
+  const g = gis.status === 'ok' ? gis : null
   const zoning = g?.overlays.baseZoning?.value ?? g?.parcel.parcelZoning?.value
   const use = decodeLandUse(r?.landUseCode)
   const useChip = use?.recognized ? use.label : r?.landUse?.value
 
   return (
     <>
-      <h2 className="text-lg font-semibold leading-tight">{title}</h2>
-      {taxRollAddress && <p className="mt-0.5 text-xs text-slate-400">Tax roll: {taxRollAddress}</p>}
       <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
         <Chip>Public record</Chip>
         {r && <Chip>Plat {r.plat} · Lot {r.lot}</Chip>}
@@ -64,10 +80,7 @@ function Loaded({ record: r, gis, picked }: { record: TaxRecord | null; gis: Gis
       <div className="mt-4 space-y-4">
         {r ? <TaxRollCard r={r} /> : <Note>No tax-roll record near this spot; showing city GIS details only.</Note>}
         <GisSection gis={gis} record={r} />
-        <Note>
-          No rents or tenants for this property yet. Market-based rent estimates and rent-roll import are later milestones;
-          persona views currently apply to the sample properties.
-        </Note>
+        {children}
       </div>
     </>
   )
@@ -186,7 +199,7 @@ function GisSection({ gis, record }: { gis: GisDetails; record: TaxRecord | null
   )
 }
 
-function Status({ title, body, spinner, children }: { title: string; body: string; spinner?: boolean; children?: ReactNode }) {
+export function Status({ title, body, spinner, children }: { title: string; body: string; spinner?: boolean; children?: ReactNode }) {
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
       <div className="flex items-center gap-2 text-sm font-semibold">

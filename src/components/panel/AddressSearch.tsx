@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type Ref } from
 import { matchLocalProperties, parseAddressQuery, type ParcelSuggestion } from '../../lib/addressSearch'
 import { searchParcelAddresses } from '../../services/providenceGis'
 import { useAppStore } from '../../store/useAppStore'
-import type { Property } from '../../types'
+import type { PickedParcel, Property } from '../../types'
 import { Chip } from '../ui/Card'
 import ImportedChip from '../ui/ImportedChip'
 
@@ -10,6 +10,8 @@ const DEBOUNCE_MS = 250
 const SEARCH_TIMEOUT_MS = 8_000
 const MAX_SUGGESTIONS = 8
 const MAX_LOCAL = 3
+
+const NO_PROPERTIES: Property[] = []
 
 type Option = { kind: 'property'; property: Property } | { kind: 'parcel'; parcel: ParcelSuggestion }
 
@@ -22,7 +24,7 @@ interface Results {
 
 /** Our own properties first (matched in the browser), then city parcels, up to 8 in all. */
 function optionsFor(properties: Property[], text: string, parcels: ParcelSuggestion[]): Option[] {
-  const local = matchLocalProperties(properties, text, MAX_LOCAL)
+  const local = properties.length ? matchLocalProperties(properties, text, MAX_LOCAL) : []
   return [
     ...local.map((property): Option => ({ kind: 'property', property })),
     ...parcels.slice(0, MAX_SUGGESTIONS - local.length).map((parcel): Option => ({ kind: 'parcel', parcel })),
@@ -33,9 +35,17 @@ function optionsFor(properties: Property[], text: string, parcels: ParcelSuggest
  * Address search over the city's parcel layer plus the sample properties and
  * imported deals. Picking a parcel flies there and opens its public record,
  * the same as clicking it on the map; picking one of ours selects it.
+ * With `onPickParcel` (placing a deal), it lists city parcels only and hands the pick over.
  */
-export default function AddressSearch({ inputRef }: { inputRef?: Ref<HTMLInputElement> }) {
-  const properties = useAppStore((s) => s.properties)
+export default function AddressSearch({
+  inputRef,
+  onPickParcel,
+}: {
+  inputRef?: Ref<HTMLInputElement>
+  onPickParcel?: (parcel: PickedParcel) => void
+}) {
+  const allProperties = useAppStore((s) => s.properties)
+  const properties = onPickParcel ? NO_PROPERTIES : allProperties
   const select = useAppStore((s) => s.select)
   const goToParcel = useAppStore((s) => s.goToParcel)
 
@@ -80,6 +90,7 @@ export default function AddressSearch({ inputRef }: { inputRef?: Ref<HTMLInputEl
       return
     }
     setText(option.parcel.address)
+    if (onPickParcel) return onPickParcel({ pin: option.parcel.pin, address: option.parcel.address })
     setPicking(true)
     try {
       await goToParcel({ pin: option.parcel.pin, address: option.parcel.address })
@@ -120,7 +131,7 @@ export default function AddressSearch({ inputRef }: { inputRef?: Ref<HTMLInputEl
         setActive(-1)
         if (pickOnArrivalRef.current) {
           pickOnArrivalRef.current = false
-          const top = optionsFor(useAppStore.getState().properties, value, r.parcels)[0]
+          const top = optionsFor(onPickParcel ? NO_PROPERTIES : useAppStore.getState().properties, value, r.parcels)[0]
           if (top) void pick(top)
         }
       })
@@ -179,12 +190,12 @@ export default function AddressSearch({ inputRef }: { inputRef?: Ref<HTMLInputEl
         ref={inputRef}
         type="search"
         role="combobox"
-        aria-label="Search an address in Providence"
+        aria-label={onPickParcel ? 'Search the building’s address' : 'Search an address in Providence'}
         aria-expanded={showList}
         aria-controls={listId}
         aria-autocomplete="list"
         aria-activedescendant={showList && active >= 0 ? rowId(active) : undefined}
-        placeholder="Search an address in Providence"
+        placeholder={onPickParcel ? 'Search the building’s address' : 'Search an address in Providence'}
         autoComplete="off"
         spellCheck={false}
         value={text}
