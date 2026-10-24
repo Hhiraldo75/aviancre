@@ -40,7 +40,7 @@ TypeScript is strict (`tsconfig.app.json`): `verbatimModuleSyntax` (use `import 
 
 ## Private deals
 
-Real deals live in `private-deals/` (Git ignores all of it except `README.md`) or, in the app, in the browser's local storage. Never commit, copy into `docs/`, bundle (no `src/` import or glob of `private-deals/`), or send anywhere anything about an imported deal. Imported deals have ids starting with `deal-` and `importedFrom` set. The import format, validation and ACT/EST rules are in `src/lib/rentRollImport.ts` and `docs/UNDERWRITING.md`.
+Real deals live in `private-deals/` (Git ignores all of it except `README.md`) or, in the app, in the browser's local storage. Never commit, copy into `docs/`, bundle (no `src/` import or glob of `private-deals/`), or send anywhere anything about an imported deal. One exception, only when the analyst asks: placing a deal on its building sends the rent roll's address to the city parcel search ("Find … on the city map"), and a placed deal's public record is looked up by its parcel's plat/lot and point, like any parcel click; the deal's name, rents and tenants never leave the browser. The placement (`location.placement`, footprint) is saved with the deal in local storage. Imported deals have ids starting with `deal-` and `importedFrom` set. The import format, validation and ACT/EST rules are in `src/lib/rentRollImport.ts` and `docs/UNDERWRITING.md`.
 
 ## Git
 

@@ -19,6 +19,7 @@
    - [x] GIS enrichment (zoning, overlays, flood + BFE, building size, outline) from ArcGIS Online (city `Parcel_Zoning_FL` + RIGIS DFIRM), reachable from any network; replaced the city's webgis.providenceri.gov server, which drops non-US connections
    - [x] Attach each sample property to a real parcel (address, tax map, coordinates from the 2025 tax roll)
    - [x] Decode state/municipal use codes into plain-language property types
+   - [x] Imported deals on their real building: find the rent roll's address in the city parcels (on request), or search or click the building; the deal takes the OSM building on that parcel (else the parcel outline), shows the parcel's public record, and can be reset to its approximate pin
    - Footprints: keep OpenStreetMap buildings (the statewide RIGIS layer is 2018 machine-generated outlines with no heights)
 2. **Photorealistic 3D toggle**
    - Optional "Photorealistic" mode using Google Photorealistic 3D Tiles (deck.gl or CesiumJS)
