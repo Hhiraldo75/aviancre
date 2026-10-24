@@ -1,6 +1,18 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
-import type { GisDetails, ISODate, LngLat, ParcelLookup, Persona, PickedParcel, Property, TaxRecord, UnderwritingTab } from '../types'
+import type { MultiPolygon, Polygon } from 'geojson'
+import type {
+  DealPlacement,
+  GisDetails,
+  ISODate,
+  LngLat,
+  ParcelLookup,
+  Persona,
+  PickedParcel,
+  Property,
+  TaxRecord,
+  UnderwritingTab,
+} from '../types'
 import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
 import {
   DEFAULT_SORT,
@@ -15,13 +27,16 @@ import {
   type PropertyView,
   type SortKey,
 } from '../lib/filters'
-import { isImportedDeal } from '../lib/importedDeals'
+import { exactAddressMatch, type ParcelSuggestion } from '../lib/addressSearch'
+import { interiorPoint, parcelOutline, type BuildingOutline } from '../lib/geo'
+import { carryPlacement, isImportedDeal, OSM_TILES_SOURCE, withoutPlacement, withPlacement, withValidPlacement } from '../lib/importedDeals'
 import { todayISO } from '../lib/metrics'
 import { isRentRollPreset, withPreset, type RentRollPreset } from '../lib/rentRollConvert'
 import { DEFAULTS_SET, isSavedSet, type SavedAssumptionSet } from '../lib/underwriting/assumptionSets'
 import type { AssumptionEdits } from '../lib/underwriting/edits'
 import { shouldShowWelcome } from '../lib/welcome'
-import { lookupParcelAt, parcelPointByPin } from '../services/providenceGis'
+import { fromPublic } from '../lib/sourced'
+import { lookupParcelAt, parcelPointByPin, PVD_SOURCE, searchParcelAddresses } from '../services/providenceGis'
 import { isOnPin, lookupTaxRecord, lookupTaxRecordByPin } from '../services/providenceOpenData'
 
 /** The ArcGIS Online parcel/zoning/flood layers are optional enrichment; give up on them after this long. */
@@ -41,7 +56,7 @@ function loadImportedDeals(): Property[] {
   if (!hasWindow) return []
   try {
     const list: unknown = JSON.parse(window.localStorage.getItem(IMPORTED_DEALS_KEY) ?? '[]')
-    return Array.isArray(list) ? list.filter(isImportedDeal) : []
+    return Array.isArray(list) ? list.filter(isImportedDeal).map(withValidPlacement) : []
   } catch {
     return []
   }
@@ -106,6 +121,23 @@ function markWelcomeSeen() {
   }
 }
 
+/** "Place on map" for an imported deal: waiting for a pick, finding the parcel, or failed. */
+export type PlacingState =
+  | { dealId: string; status: 'choosing' }
+  | { dealId: string; status: 'locating' }
+  | { dealId: string; status: 'failed'; message: string }
+
+/** A parcel found for a deal; the map reads the OSM building on it from its tiles, then calls `completePlacement`. */
+export interface PlacementRequest {
+  dealId: string
+  pin: string
+  cityAddress: string
+  method: DealPlacement['method']
+  /** Inside the parcel: the deal's new map point. */
+  point: LngLat
+  parcel: Polygon | MultiPolygon
+}
+
 /** Filters and sort start from the URL, so a shared link opens the same view. */
 const initialView = hasWindow ? filtersFromQuery(window.location.search) : { filters: EMPTY_FILTERS, sort: DEFAULT_SORT }
 
@@ -121,6 +153,10 @@ interface AppState {
   selectedId: string | null
   /** Public-record lookup for a clicked point on the map. */
   parcel: ParcelLookup
+  /** The public record of the parcel the selected imported deal is placed on. */
+  dealRecord: { id: string; lookup: ParcelLookup } | null
+  placing: PlacingState | null
+  placementRequest: PlacementRequest | null
   /** Analysis date for occupancy and rent calculations. */
   asOf: ISODate
   /** Which professional lens the sidebar shows. */
@@ -192,6 +228,25 @@ interface AppState {
   importDeal: (property: Property) => boolean
   /** Removes an imported deal, its assumption edits and its selection. Sample properties can't be removed. */
   removeImportedDeal: (id: string) => void
+  /** Looks up the public record of the parcel a deal is placed on (by its plat and lot). */
+  loadDealRecord: (id: string) => Promise<void>
+  /** "Place on map": the next search pick or map click places the deal. */
+  startPlacing: (id: string) => void
+  cancelPlacing: () => void
+  /**
+   * Searches the city parcels for the deal's rent roll address (only the address is sent).
+   * Places the deal when exactly one parcel has that address; otherwise returns the closest parcels to pick from.
+   */
+  findDealByAddress: (id: string) => Promise<{ placed: boolean; candidates: ParcelSuggestion[] }>
+  /** Finds the city parcel for a searched PIN or a clicked point and asks the map for its building. */
+  placeDeal: (id: string, target: PickedParcel | { lng: number; lat: number }, method: DealPlacement['method']) => Promise<void>
+  /**
+   * Puts the deal on the parcel, on the OSM building found there or else the parcel outline, saves it and selects it.
+   * Returns false when it couldn't be saved in the browser; ignored when a newer request replaced this one.
+   */
+  completePlacement: (request: PlacementRequest, outline: BuildingOutline | null) => boolean
+  /** Back to the approximate pin at the submarket's center. */
+  resetDealLocation: (id: string) => boolean
 }
 
 /** In-flight parcel request; a newer click aborts the older one. */
@@ -202,10 +257,84 @@ function cancelInFlight() {
   inFlight = null
 }
 
+/** In-flight public-record request for the selected placed deal. */
+let dealRecordInFlight: AbortController | null = null
+
+function cancelDealRecord() {
+  dealRecordInFlight?.abort()
+  dealRecordInFlight = null
+}
+
+/**
+ * Two sources in parallel:
+ * 1. Providence Open Data tax roll – reachable from anywhere; passed to `early` as soon as it arrives.
+ *    By plat and lot for a searched parcel, else the record nearest the click.
+ * 2. ArcGIS Online parcel, zoning and flood layers (city + RIGIS) – zoning, flood, building size,
+ *    outline; merged in if they answer in time. Once the parcel's PIN is known, a nearest-record
+ *    match is replaced by the record on that plat and lot.
+ * Resolves to the final lookup, or null once `current()` is false (a newer request replaced it).
+ */
+async function runLookup(
+  lng: number,
+  lat: number,
+  picked: PickedParcel | undefined,
+  signal: AbortSignal,
+  current: () => boolean,
+  early: (lookup: ParcelLookup) => void,
+): Promise<ParcelLookup | null> {
+  const gisController = new AbortController()
+  signal.addEventListener('abort', () => gisController.abort())
+  const timer = setTimeout(() => gisController.abort(), GIS_TIMEOUT_MS)
+
+  const gisPromise: Promise<GisDetails> = lookupParcelAt(lng, lat, gisController.signal)
+    .then((r): GisDetails => (r.parcel ? { status: 'ok', parcel: r.parcel, overlays: r.overlays } : { status: 'none' }))
+    .catch((err): GisDetails => ({
+      status: 'unavailable',
+      reason: gisController.signal.aborted ? `no answer within ${GIS_TIMEOUT_MS / 1000} s` : err instanceof Error ? err.message : 'GIS error',
+    }))
+    .finally(() => clearTimeout(timer))
+
+  let record: TaxRecord | null = null
+  let taxError: string | null = null
+  try {
+    if (picked) record = await lookupTaxRecordByPin(picked.pin, lng, lat, signal)
+    record ??= await lookupTaxRecord(lng, lat, signal)
+  } catch (err) {
+    if (!current()) return null
+    taxError = err instanceof Error ? err.message : 'Lookup failed'
+  }
+  if (!current()) return null
+
+  // Show the tax-roll result right away; GIS fills in when (if) it answers.
+  if (record) early({ status: 'loaded', lng, lat, record, gis: { status: 'loading' }, picked })
+
+  const gis = await gisPromise
+  if (!current()) return null
+
+  const pin = gis.status === 'ok' ? gis.parcel.pin : undefined
+  if (record?.matchedBy === 'distance' && pin) {
+    if (isOnPin(record, pin)) record = { ...record, matchedBy: 'plat-lot' }
+    // A searched PIN was already tried above.
+    else if (pin !== picked?.pin) {
+      // Keep the nearest record if the roll has no such lot or doesn't answer.
+      const onLot = await lookupTaxRecordByPin(pin, lng, lat, signal).catch(() => null)
+      if (!current()) return null
+      record = onLot ?? record
+    }
+  }
+
+  if (record || gis.status === 'ok') return { status: 'loaded', lng, lat, record, gis, picked }
+  if (taxError) return { status: 'error', lng, lat, message: taxError, picked }
+  return { status: 'not-found', lng, lat, picked }
+}
+
 export const useAppStore = create<AppState>()((set, get) => ({
   properties: [...SAMPLE_PROPERTIES, ...loadImportedDeals()],
   selectedId: null,
   parcel: { status: 'idle' },
+  dealRecord: null,
+  placing: null,
+  placementRequest: null,
   asOf: todayISO(),
   activePersona: 'Analyst',
   underwritingOpen: false,
@@ -222,73 +351,39 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   select: (id) => {
     cancelInFlight()
-    set({ selectedId: id, parcel: { status: 'idle' }, underwritingOpen: false })
+    // Selecting the same deal again keeps its public record.
+    const keep = id !== null && get().dealRecord?.id === id
+    if (!keep) cancelDealRecord()
+    set((s) => ({
+      selectedId: id,
+      parcel: { status: 'idle' },
+      dealRecord: keep ? s.dealRecord : null,
+      placing: null,
+      placementRequest: null,
+      underwritingOpen: false,
+    }))
   },
 
-  /**
-   * Two sources in parallel:
-   * 1. Providence Open Data tax roll – reachable from anywhere; shown as soon as it arrives.
-   *    By plat and lot for a searched parcel, else the record nearest the click.
-   * 2. ArcGIS Online parcel, zoning and flood layers (city + RIGIS) – zoning, flood, building size,
-   *    outline; merged in if they answer in time. Once the parcel's PIN is known, a nearest-record
-   *    match is replaced by the record on that plat and lot.
-   */
+  /** See `runLookup`. */
   lookupParcel: async (lng, lat, picked) => {
     cancelInFlight()
+    cancelDealRecord()
     const controller = new AbortController()
     inFlight = controller
     const current = () => inFlight === controller
-    set({ selectedId: null, parcel: { status: 'loading', lng, lat, picked }, underwritingOpen: false })
+    set({
+      selectedId: null,
+      parcel: { status: 'loading', lng, lat, picked },
+      dealRecord: null,
+      placing: null,
+      placementRequest: null,
+      underwritingOpen: false,
+    })
 
-    const gisController = new AbortController()
-    controller.signal.addEventListener('abort', () => gisController.abort())
-    const timer = setTimeout(() => gisController.abort(), GIS_TIMEOUT_MS)
-
-    const gisPromise: Promise<GisDetails> = lookupParcelAt(lng, lat, gisController.signal)
-      .then((r): GisDetails => (r.parcel ? { status: 'ok', parcel: r.parcel, overlays: r.overlays } : { status: 'none' }))
-      .catch((err): GisDetails => ({
-        status: 'unavailable',
-        reason: gisController.signal.aborted ? `no answer within ${GIS_TIMEOUT_MS / 1000} s` : err instanceof Error ? err.message : 'GIS error',
-      }))
-      .finally(() => clearTimeout(timer))
-
-    let record: TaxRecord | null = null
-    let taxError: string | null = null
-    try {
-      if (picked) record = await lookupTaxRecordByPin(picked.pin, lng, lat, controller.signal)
-      record ??= await lookupTaxRecord(lng, lat, controller.signal)
-    } catch (err) {
-      if (!current()) return
-      taxError = err instanceof Error ? err.message : 'Lookup failed'
-    }
-    if (!current()) return
-
-    // Show the tax-roll result right away; GIS fills in when (if) it answers.
-    if (record) set({ parcel: { status: 'loaded', lng, lat, record, gis: { status: 'loading' }, picked } })
-
-    const gis = await gisPromise
-    if (!current()) return
-
-    const pin = gis.status === 'ok' ? gis.parcel.pin : undefined
-    if (record?.matchedBy === 'distance' && pin) {
-      if (isOnPin(record, pin)) record = { ...record, matchedBy: 'plat-lot' }
-      // A searched PIN was already tried above.
-      else if (pin !== picked?.pin) {
-        // Keep the nearest record if the roll has no such lot or doesn't answer.
-        const onLot = await lookupTaxRecordByPin(pin, lng, lat, controller.signal).catch(() => null)
-        if (!current()) return
-        record = onLot ?? record
-      }
-    }
+    const result = await runLookup(lng, lat, picked, controller.signal, current, (parcel) => set({ parcel }))
+    if (!result || !current()) return
     inFlight = null
-
-    if (record || gis.status === 'ok') {
-      set({ parcel: { status: 'loaded', lng, lat, record, gis, picked } })
-    } else if (taxError) {
-      set({ parcel: { status: 'error', lng, lat, message: taxError, picked } })
-    } else {
-      set({ parcel: { status: 'not-found', lng, lat, picked } })
-    }
+    set({ parcel: result })
   },
 
   goToParcel: async (picked) => {
@@ -312,7 +407,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   clearSelection: () => {
     cancelInFlight()
-    set({ selectedId: null, parcel: { status: 'idle' }, underwritingOpen: false })
+    cancelDealRecord()
+    set({ selectedId: null, parcel: { status: 'idle' }, dealRecord: null, placing: null, placementRequest: null, underwritingOpen: false })
   },
 
   setAsOf: (date) => set({ asOf: date }),
@@ -389,7 +485,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
   importDeal: (property) => {
     if (!property.importedFrom) throw new Error(`${property.id} is not an imported deal`)
     get().resetAssumptions(property.id)
-    const properties = [...get().properties.filter((p) => p.id !== property.id), property]
+    const deal = carryPlacement(get().properties.find((p) => p.id === property.id), property)
+    const properties = [...get().properties.filter((p) => p.id !== property.id), deal]
     get().select(property.id)
     set({ properties })
     return saveImportedDeals(properties)
@@ -404,8 +501,123 @@ export const useAppStore = create<AppState>()((set, get) => ({
     })
     if (get().selectedId === id) get().clearSelection()
     const properties = get().properties.filter((p) => p.id !== id)
-    set({ properties })
+    set((s) => ({ properties, ...(s.placing?.dealId === id ? { placing: null, placementRequest: null } : {}) }))
     saveImportedDeals(properties)
+  },
+
+  loadDealRecord: async (id) => {
+    cancelDealRecord()
+    const p = get().properties.find((x) => x.id === id)
+    const placement = p?.location.placement
+    if (!p || !placement) return set({ dealRecord: null })
+    const controller = new AbortController()
+    dealRecordInFlight = controller
+    const current = () => dealRecordInFlight === controller
+    const { lng, lat } = p.location
+    // Matched to the tax roll by the parcel's plat and lot, as an address-search pick is.
+    const picked = { pin: placement.pin, address: placement.cityAddress }
+    set({ dealRecord: { id, lookup: { status: 'loading', lng, lat, picked } } })
+
+    const result = await runLookup(lng, lat, picked, controller.signal, current, (lookup) => set({ dealRecord: { id, lookup } }))
+    if (!result || !current()) return
+    dealRecordInFlight = null
+    set({ dealRecord: { id, lookup: result } })
+  },
+
+  startPlacing: (id) => {
+    cancelInFlight()
+    set({ placing: { dealId: id, status: 'choosing' }, placementRequest: null, parcel: { status: 'idle' } })
+  },
+  cancelPlacing: () => {
+    cancelInFlight()
+    set({ placing: null, placementRequest: null })
+  },
+
+  findDealByAddress: async (id) => {
+    const p = get().properties.find((x) => x.id === id)
+    if (!p?.importedFrom) return { placed: false, candidates: [] }
+    // Only the rent roll's address leaves the browser: never the deal's name, rents or tenants.
+    const candidates = await searchParcelAddresses(p.location.address)
+    const match = exactAddressMatch(candidates, p.location.address)
+    if (!match) return { placed: false, candidates }
+    await get().placeDeal(id, { pin: match.pin, address: match.address }, 'address')
+    return { placed: true, candidates: [] }
+  },
+
+  placeDeal: async (id, target, method) => {
+    cancelInFlight()
+    const controller = new AbortController()
+    inFlight = controller
+    const current = () => inFlight === controller
+    set({ placing: { dealId: id, status: 'locating' }, placementRequest: null, parcel: { status: 'idle' } })
+
+    const gisController = new AbortController()
+    controller.signal.addEventListener('abort', () => gisController.abort())
+    const timer = setTimeout(() => gisController.abort(), GIS_TIMEOUT_MS)
+    try {
+      const [lng, lat] = 'pin' in target ? await parcelPointByPin(target.pin, gisController.signal) : [target.lng, target.lat]
+      const { parcel } = await lookupParcelAt(lng, lat, gisController.signal)
+      if (!current()) return
+      // Streets and other unnumbered polygons in the parcel layer have no PIN (`parseParcelFeature` gives 'unknown').
+      if (!parcel?.geometry || parcel.pin === 'unknown') throw new Error('No city parcel there. Click directly on a building or lot.')
+      inFlight = null
+      set({
+        placementRequest: {
+          dealId: id,
+          pin: parcel.pin,
+          // A searched parcel keeps the address it was found by.
+          cityAddress: 'pin' in target ? target.address : (parcel.address?.value ?? `Parcel ${parcel.pin}`),
+          method,
+          point: interiorPoint(parcel.geometry),
+          parcel: parcel.geometry,
+        },
+      })
+    } catch (err) {
+      if (!current()) return
+      inFlight = null
+      const message = gisController.signal.aborted
+        ? `The city parcel layer didn't answer within ${GIS_TIMEOUT_MS / 1000} s.`
+        : err instanceof Error
+          ? err.message
+          : 'Parcel lookup failed.'
+      set({ placing: { dealId: id, status: 'failed', message } })
+    } finally {
+      clearTimeout(timer)
+    }
+  },
+
+  completePlacement: (request, outline) => {
+    const s = get()
+    if (s.placementRequest !== request) return true
+    const p = s.properties.find((x) => x.id === request.dealId)
+    if (!p?.importedFrom) return true
+    const placedAt = todayISO()
+    const placement: DealPlacement = {
+      pin: request.pin,
+      cityAddress: request.cityAddress,
+      method: request.method,
+      placedAt,
+      outlineFrom: outline ? 'osm' : 'parcel',
+      ...(outline?.heightM !== undefined ? { heightM: outline.heightM } : {}),
+    }
+    const footprint = outline
+      ? fromPublic(outline.ring, OSM_TILES_SOURCE, placedAt)
+      : fromPublic(parcelOutline(request.parcel), PVD_SOURCE, placedAt)
+    const properties = s.properties.map((x) => (x.id === p.id ? withPlacement(p, placement, request.point, footprint) : x))
+    // The old parcel's record no longer applies; the panel loads the new one.
+    cancelDealRecord()
+    set({ properties, dealRecord: null })
+    get().select(p.id)
+    return saveImportedDeals(properties)
+  },
+
+  resetDealLocation: (id) => {
+    const p = get().properties.find((x) => x.id === id)
+    if (!p?.importedFrom || !p.location.placement) return true
+    cancelDealRecord()
+    const properties = get().properties.map((x) => (x.id === id ? withoutPlacement(x) : x))
+    set({ properties, dealRecord: null })
+    return saveImportedDeals(properties)
   },
 }))
 

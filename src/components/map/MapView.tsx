@@ -4,7 +4,7 @@ import type { Feature, FeatureCollection, Point, Polygon } from 'geojson'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { LAYER_IDS, MAP_CONFIG, SOURCE_IDS } from '../../config/map'
 import { hasActiveFilters } from '../../lib/filters'
-import { approximatePinsGeoJSON, featureBounds, isApproximatePin, propertiesToGeoJSON } from '../../lib/geo'
+import { approximatePinsGeoJSON, buildingOutlineIn, featureBounds, isApproximatePin, propertiesToGeoJSON } from '../../lib/geo'
 import { fmt } from '../../lib/format'
 import { useAppStore, usePropertyView } from '../../store/useAppStore'
 import type { ParcelLookup } from '../../types'
@@ -12,6 +12,9 @@ import MapLegend from './MapLegend'
 import { PIN_PIXEL_RATIO, PIN_TIP_OFFSET, pinIcon } from './pinIcon'
 
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
+
+/** Placing a deal: read the OSM building from whatever tiles have loaded by now if the map never settles. */
+const PLACEMENT_WAIT_MS = 6_000
 
 /** Outline of the looked-up parcel, when the city GIS server provided one. */
 function parcelGeoJSON(lookup: ParcelLookup): FeatureCollection {
@@ -55,6 +58,8 @@ export default function MapView() {
   const zoomRequest = useAppStore((s) => s.zoomRequest)
   const mapFocus = useAppStore((s) => s.mapFocus)
   const filtered = useAppStore((s) => hasActiveFilters(s.filters))
+  const placing = useAppStore((s) => s.placing)
+  const placementRequest = useAppStore((s) => s.placementRequest)
 
   const geojson = useMemo(() => propertiesToGeoJSON(properties, asOf, matchIds), [properties, asOf, matchIds])
   // Read the latest data inside map callbacks without re-creating the map.
@@ -176,8 +181,11 @@ export default function MapView() {
 
     // Matching sample building → its dashboard. Anywhere else, including a
     // filtered-out sample building → look up the real public parcel there.
+    // While placing a deal, every click places it, whatever is drawn there.
     const clickable = [LAYER_IDS.approxPins, LAYER_IDS.properties]
     map.on('click', (e) => {
+      const { placing: placingNow, placeDeal } = useAppStore.getState()
+      if (placingNow) return void placeDeal(placingNow.dealId, e.lngLat, 'click')
       const layers = clickable.filter((l) => map.getLayer(l))
       const hit = layers.length ? map.queryRenderedFeatures(e.point, { layers })[0] : undefined
       const id = hit?.properties?.matches ? hit.properties.id : undefined
@@ -187,6 +195,11 @@ export default function MapView() {
 
     const hover = (e: maplibregl.MapLayerMouseEvent) => {
       const props = e.features?.[0]?.properties
+      if (useAppStore.getState().placing) {
+        map.getCanvas().style.cursor = 'crosshair'
+        popup.remove()
+        return
+      }
       if (!props?.matches) {
         map.getCanvas().style.cursor = ''
         popup.remove()
@@ -203,7 +216,7 @@ export default function MapView() {
       popup.setLngLat(e.lngLat).setDOMContent(el).addTo(map)
     }
     const leave = () => {
-      map.getCanvas().style.cursor = ''
+      map.getCanvas().style.cursor = useAppStore.getState().placing ? 'crosshair' : ''
       popup.remove()
     }
     for (const layer of clickable) {
@@ -259,7 +272,41 @@ export default function MapView() {
     map.flyTo({ center: [mapFocus.lng, mapFocus.lat], zoom: 17, pitch: map.getPitch(), bearing: map.getBearing(), duration: 1200 })
   }, [mapFocus, loaded])
 
-  // 6. "Zoom to results": fit the matching buildings, keeping the current tilt and rotation.
+  // 6. Placing a deal: crosshair cursor, then fly to the parcel found and read the OSM building on it.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !loaded) return
+    map.getCanvas().style.cursor = placing ? 'crosshair' : ''
+  }, [placing, loaded])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !loaded || !placementRequest) return
+    const request = placementRequest
+    let done = false
+    const finish = () => {
+      if (done) return
+      done = true
+      window.clearTimeout(timer)
+      // Building features from every loaded tile; the tiles hold OSM buildings only, so nothing is fetched.
+      const buildings = map.getSource('openmaptiles') ? map.querySourceFeatures('openmaptiles', { sourceLayer: 'building' }) : []
+      const saved = useAppStore.getState().completePlacement(request, buildingOutlineIn(buildings, request.parcel))
+      if (!saved) window.alert('This browser would not save the location (storage is blocked or full). It lasts until you reload the page.')
+    }
+    const settled = () => map.once('idle', finish)
+    const timer = window.setTimeout(finish, PLACEMENT_WAIT_MS)
+    map.once('moveend', settled)
+    const [lng, lat] = request.point
+    map.flyTo({ center: [lng, lat], zoom: 17, pitch: map.getPitch(), bearing: map.getBearing(), duration: 1200 })
+    return () => {
+      done = true
+      window.clearTimeout(timer)
+      map.off('moveend', settled)
+      map.off('idle', finish)
+    }
+  }, [placementRequest, loaded])
+
+  // 7. "Zoom to results": fit the matching buildings, keeping the current tilt and rotation.
   const fitTo = (features: Feature<Polygon | Point>[]) => {
     const map = mapRef.current
     const bounds = featureBounds(features)
