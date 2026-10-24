@@ -1,4 +1,4 @@
-import type { Feature, FeatureCollection, MultiPolygon, Point, Polygon, Position } from 'geojson'
+import type { Feature, FeatureCollection, Geometry, MultiPolygon, Point, Polygon, Position } from 'geojson'
 import type { ISODate, LngLat, Property } from '../types'
 import { occupancy, occupancyColor } from './metrics'
 
@@ -144,6 +144,61 @@ export function interiorPoint(geometry: Polygon | MultiPolygon): LngLat {
   return best
 }
 
+/** The parcel's largest outer ring: a placed deal's outline when no OSM building fits. */
+export function parcelOutline(geometry: Polygon | MultiPolygon): LngLat[] {
+  const parts = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
+  const outer = parts.map((p) => p[0]).reduce((best, r) => (ringArea(r) > ringArea(best) ? r : best))
+  return closed(outer)
+}
+
+const closed = (ring: Position[]): LngLat[] => {
+  const pts = ring.map(([lng, lat]) => [lng, lat] as LngLat)
+  const [first, last] = [pts[0], pts[pts.length - 1]]
+  return first[0] === last[0] && first[1] === last[1] ? pts : [...pts, first]
+}
+
+/** A building bigger than its lot by more than this is several buildings the tiles merged. */
+export const MERGED_BUILDING_SLACK = 1.1
+
+export interface BuildingOutline {
+  ring: LngLat[]
+  /** The tiles' `render_height`, when set. */
+  heightM?: number
+}
+
+/**
+ * The OpenStreetMap building on a parcel, from the map's building tiles: the
+ * polygon that holds the parcel's interior point, else the largest one
+ * centered on the parcel. Tiles merge neighboring buildings into one feature,
+ * so each polygon is judged on its own, and one larger than the lot is
+ * rejected. Null when none fits: the caller falls back to the parcel outline.
+ */
+export function buildingOutlineIn(
+  features: { geometry: Geometry | null; properties: Record<string, unknown> | null }[],
+  parcel: Polygon | MultiPolygon,
+): BuildingOutline | null {
+  const lots = parcel.type === 'Polygon' ? [parcel.coordinates] : parcel.coordinates
+  const inParcel = (pt: LngLat) => lots.some(([outer, ...holes]) => pointInRing(pt, outer) && !holes.some((h) => pointInRing(pt, h)))
+  const lotArea = lots.reduce((s, p) => s + ringArea(p[0]), 0)
+  const center = (ring: Position[]): LngLat => {
+    const pts = closed(ring).slice(0, -1)
+    return [pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length]
+  }
+  const candidates = features
+    .flatMap(({ geometry: g, properties }) => {
+      const polygons = g?.type === 'Polygon' ? [g.coordinates] : g?.type === 'MultiPolygon' ? g.coordinates : []
+      const h = Number(properties?.render_height)
+      return polygons.map((rings) => ({ outer: rings[0], heightM: Number.isFinite(h) && h > 0 ? h : undefined }))
+    })
+    .filter(({ outer }) => outer.length >= 4 && inParcel(center(outer)) && ringArea(outer) <= lotArea * MERGED_BUILDING_SLACK)
+  if (!candidates.length) return null
+  const anchor = interiorPoint(parcel)
+  const best =
+    candidates.find(({ outer }) => pointInRing(anchor, outer)) ??
+    candidates.reduce((a, b) => (ringArea(b.outer) > ringArea(a.outer) ? b : a))
+  return { ring: closed(best.outer), heightM: best.heightM }
+}
+
 /**
  * An imported deal with no address sits at its submarket's center: drawn as a
  * pin, not a made-up building over the real ones there.
@@ -179,7 +234,8 @@ export function propertiesToGeoJSON(
           occupancy: occ,
           matches,
           color: matches ? occupancyColor(occ) : FILTERED_OUT_COLOR,
-          heightM: traced ? Math.max(heightM, OSM_DEFAULT_HEIGHT_M) + ROOF_CLEARANCE_M : heightM,
+          // A placed deal's building is at least as tall as the OSM building the gray layer draws there.
+          heightM: traced ? Math.max(heightM, p.location.placement?.heightM ?? 0, OSM_DEFAULT_HEIGHT_M) + ROOF_CLEARANCE_M : heightM,
         },
       }
     }),

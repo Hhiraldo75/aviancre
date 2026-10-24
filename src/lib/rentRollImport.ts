@@ -141,6 +141,9 @@ export const dealId = (name: string) => `deal-${slug(name) || 'rent-roll'}`
 
 export const isImportedDealId = (id: string) => id.startsWith('deal-')
 
+/** The address an imported deal gets when its rent roll has none. */
+export const approximateAddress = (submarket: SubmarketId) => `${SUBMARKETS[submarket].name} (location approximate)`
+
 function submarketFrom(s: string): SubmarketId | undefined {
   const n = s.toLowerCase().trim()
   return Object.values(SUBMARKETS).find((m) => m.id === n || m.name.toLowerCase() === n)?.id
@@ -377,7 +380,7 @@ export function parseRentRoll(grid: Cell[][], opts: ImportOptions): RentRollImpo
     assetType,
     buildingClass,
     location: {
-      address: details.address ?? `${SUBMARKETS[submarket].name} (location approximate)`,
+      address: details.address ?? approximateAddress(submarket),
       city: 'Providence',
       state: 'RI',
       lng,

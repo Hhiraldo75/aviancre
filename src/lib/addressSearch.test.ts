@@ -3,6 +3,7 @@ import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
 import type { Property } from '../types'
 import {
   addressWhereClause,
+  exactAddressMatch,
   matchLocalProperties,
   normalizeAddress,
   parseAddressQuery,
@@ -129,6 +130,23 @@ describe('rankParcelSuggestions', () => {
 
   it('stops at the limit', () => {
     expect(rankParcelSuggestions(rows, query('Westminster'), 2)).toHaveLength(2)
+  })
+})
+
+describe('exactAddressMatch', () => {
+  const parcel = (pin: string, address: string) => ({ pin, address, units: 0 })
+
+  it('finds the one parcel at the rent roll address, however it is spelled', () => {
+    const rows = [parcel('1', '245 Atwells Ave'), parcel('2', '247 Atwells Ave')]
+    expect(exactAddressMatch(rows, '245 atwells avenue, Providence, RI 02903')).toEqual(rows[0])
+    expect(exactAddressMatch(rows, '245 Atwells Ave Unit 2')).toEqual(rows[0])
+  })
+  it('does not take a range for one of its numbers', () => {
+    expect(exactAddressMatch([parcel('1', '131-135 Brown St')], '131 Brown St')).toBeNull()
+  })
+  it('gives up when no parcel or several parcels have the address', () => {
+    expect(exactAddressMatch([parcel('1', '245 Atwells Ave')], '9 Atwells Ave')).toBeNull()
+    expect(exactAddressMatch([parcel('1', '245 Atwells Ave'), parcel('2', '245 Atwells Ave')], '245 Atwells Ave')).toBeNull()
   })
 })
 

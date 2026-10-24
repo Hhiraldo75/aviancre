@@ -24,6 +24,23 @@ export interface PropertyLocation {
   parcelId?: string
   /** True when coordinates are a placeholder, not a geocoded address. */
   isApproximate: boolean
+  /** An imported deal placed on a real city parcel; absent = approximate (submarket center). */
+  placement?: DealPlacement
+}
+
+/** Where an imported deal was put on the map, and how. */
+export interface DealPlacement {
+  /** City parcel PIN (plat/lot). */
+  pin: string
+  /** The parcel's address as the city records it, shown so the analyst can confirm the match. */
+  cityAddress: string
+  /** Matched from the rent roll's address, picked in the search, or clicked on the map. */
+  method: 'address' | 'search' | 'click'
+  placedAt: ISODate
+  /** The OpenStreetMap building on the parcel, or the parcel outline when there was none. */
+  outlineFrom: 'osm' | 'parcel'
+  /** The OSM building's height from the map tiles; only raises the drawn building. */
+  heightM?: number
 }
 
 export interface PhysicalCharacteristics {

@@ -157,6 +157,17 @@ export function rankParcelSuggestions(rows: Record<string, unknown>[], q: Addres
     .map(({ pin, address, units }) => ({ pin, address, units }))
 }
 
+/**
+ * The one parcel whose address is the given one, unit, city and suffix
+ * spelling aside; null when none or several are. A range ("131-135 Brown St")
+ * is not an exact match for one of its numbers.
+ */
+export function exactAddressMatch(suggestions: ParcelSuggestion[], address: string): ParcelSuggestion | null {
+  const target = normalizeAddress(address)
+  const exact = suggestions.filter((s) => normalizeAddress(s.address) === target)
+  return exact.length === 1 ? exact[0] : null
+}
+
 const startsWord = (haystack: string, needle: string) => haystack.startsWith(needle) || haystack.includes(` ${needle}`)
 
 /**

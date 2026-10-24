@@ -1,10 +1,11 @@
-import type { Polygon } from 'geojson'
+import type { MultiPolygon, Polygon } from 'geojson'
 import { describe, expect, it } from 'vitest'
 import { SAMPLE_FOOTPRINTS } from '../data/sampleFootprints'
 import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
 import type { LngLat, Property } from '../types'
 import {
   approximatePinsGeoJSON,
+  buildingOutlineIn,
   featureBounds,
   interiorPoint,
   pointInRing,
@@ -12,6 +13,7 @@ import {
   offsetRing,
   OSM_DEFAULT_HEIGHT_M,
   OUTLINE_CLEARANCE_M,
+  parcelOutline,
   PIN_SPREAD_M,
   propertiesToGeoJSON,
   ROOF_CLEARANCE_M,
@@ -182,5 +184,58 @@ describe('interiorPoint', () => {
       coordinates: [rect.coordinates[0], [[1, 0.5], [3, 0.5], [3, 1.5], [1, 1.5], [1, 0.5]]],
     }
     expect(interiorPoint(donut)).toEqual([0.5, 1])
+  })
+})
+
+describe('buildingOutlineIn', () => {
+  // A 10 × 6 lot; buildings are squares around a center point.
+  const lot: Polygon = { type: 'Polygon', coordinates: [[[0, 0], [10, 0], [10, 6], [0, 6], [0, 0]]] }
+  const square = (x: number, y: number, r: number) => [[[x - r, y - r], [x + r, y - r], [x + r, y + r], [x - r, y + r], [x - r, y - r]]]
+  const tile = (coordinates: number[][][][], render_height?: number) => ({
+    geometry: { type: 'MultiPolygon', coordinates } as MultiPolygon,
+    properties: { render_height },
+  })
+
+  it('picks the building under the lot from a feature the tiles merged with its neighbors', () => {
+    const merged = tile([square(-5, 3, 2), square(5, 3, 2), square(15, 3, 2)], 22)
+    expect(buildingOutlineIn([merged], lot)).toEqual({ ring: square(5, 3, 2)[0], heightM: 22 })
+  })
+  it('prefers the building holding the lot center over a bigger one off to the side', () => {
+    const shed = tile([square(1.5, 1.5, 1)])
+    const main = tile([square(5, 3, 1.4)])
+    const garage = tile([square(8, 3, 1.5)])
+    expect(buildingOutlineIn([shed, garage, main], lot)?.ring).toEqual(square(5, 3, 1.4)[0])
+    expect(buildingOutlineIn([shed, garage], lot)?.ring).toEqual(square(8, 3, 1.5)[0])
+  })
+  it('rejects a building bigger than the lot, and finds none on an empty lot', () => {
+    expect(buildingOutlineIn([tile([square(5, 3, 5)])], lot)).toBeNull()
+    expect(buildingOutlineIn([tile([square(20, 3, 1)])], lot)).toBeNull()
+    expect(buildingOutlineIn([], lot)).toBeNull()
+  })
+  it('closes an open ring, and leaves the height out when the tiles have none', () => {
+    const open = { geometry: { type: 'Polygon', coordinates: [[[4, 2], [6, 2], [6, 4], [4, 4]]] } as Polygon, properties: {} }
+    expect(buildingOutlineIn([open], lot)).toEqual({ ring: [[4, 2], [6, 2], [6, 4], [4, 4], [4, 2]], heightM: undefined })
+  })
+  it('falls back to the largest part of the parcel', () => {
+    const parcel: MultiPolygon = { type: 'MultiPolygon', coordinates: [square(0, 0, 1), square(5, 5, 2)] }
+    expect(parcelOutline(parcel)).toEqual(square(5, 5, 2)[0])
+  })
+})
+
+describe('a deal placed on a real building', () => {
+  const p = SAMPLE_PROPERTIES[0]
+  const placed: Property = {
+    ...p,
+    id: 'deal-placed',
+    location: {
+      ...p.location,
+      placement: { pin: '1', cityAddress: '1 Main St', method: 'click', placedAt: AS_OF, outlineFrom: 'osm', heightM: 300 },
+    },
+  }
+
+  it('is a building, not a pin, raised to the OSM building drawn there', () => {
+    expect(approximatePinsGeoJSON([placed], AS_OF).features).toEqual([])
+    const [f] = propertiesToGeoJSON([placed], AS_OF).features
+    expect(f.properties.heightM).toBe(300 + ROOF_CLEARANCE_M)
   })
 })
