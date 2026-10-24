@@ -1,7 +1,10 @@
-import type { DealPlacement, LngLat, Property, Sourced } from '../types'
+import type { DealPlacement, LngLat, ParcelOverlays, ParcelRecord, Property, SF, Sourced, ZoningInfo } from '../types'
 import { SUBMARKETS } from '../data/submarkets'
+import { ZONING_SOURCE } from '../data/zoning'
 import { normalizeAddress } from './addressSearch'
-import { approximateAddress, isImportedDealId } from './rentRollImport'
+import { normalizeZoningCode, zoningLimitsFor } from './parcelMetrics'
+import { approximateAddress, isImportedDealId, rentRollGrossSF, rentRollZoning } from './rentRollImport'
+import { fromPublic } from './sourced'
 
 /**
  * Imported deals at rest: browser local storage in the app, private-deals/<id>.json
@@ -63,24 +66,74 @@ const isRing = (x: unknown) =>
 /** The rent roll named an address (rather than getting its submarket's placeholder). */
 export const hasFileAddress = (p: Property) => p.location.address !== approximateAddress(p.location.submarket)
 
+/** What a placed deal takes from its parcel's public record, in place of the rent roll's "unknown". */
+export interface ParcelFacts {
+  /** The zoning map's district with its ordinance limits, and the flood zone. */
+  zoning: ZoningInfo
+  landAreaSF?: Sourced<SF>
+  /** Only from the city's building records (never the rent roll's estimate). */
+  grossBuildingSF?: Sourced<SF>
+}
+
 /**
- * The deal on a real parcel: its point, PIN and building outline. Nothing the
- * underwriting reads changes (rent roll, market, rentable SF, submarket).
+ * The parcel's zoning (base zoning map first, else the zoning recorded on the
+ * parcel), its ordinance height and coverage limits, flood zone, lot area and
+ * building area, as the clicked-parcel panel reads them.
  */
-export function withPlacement(p: Property, placement: DealPlacement, [lng, lat]: LngLat, footprint: Sourced<LngLat[]>): Property {
+export function parcelFacts(parcel: ParcelRecord, overlays: ParcelOverlays): ParcelFacts {
+  const mapped = overlays.baseZoning ?? parcel.parcelZoning
+  const code = normalizeZoningCode(mapped?.value)
+  const limits = zoningLimitsFor(code)
+  const ordinance = limits && `${ZONING_SOURCE}, ${limits.section}`
+  const flood = overlays.floodZone ? { floodZone: overlays.floodZone } : {}
+  const zoning: ZoningInfo =
+    mapped && code
+      ? {
+          district: fromPublic(code, mapped.sourceName, mapped.asOf),
+          ...(limits && ordinance && limits.maxHeightFt !== null ? { maxHeightFt: fromPublic(limits.maxHeightFt, ordinance) } : {}),
+          ...(limits && ordinance && limits.maxCoverage !== undefined ? { maxCoverage: fromPublic(limits.maxCoverage, ordinance) } : {}),
+          ...flood,
+        }
+      : { ...rentRollZoning(), ...flood }
+  return { zoning, landAreaSF: parcel.landAreaSF, grossBuildingSF: parcel.grossBuildingSF }
+}
+
+/**
+ * The deal on a real parcel: its point, PIN, building outline, and the parcel's
+ * zoning, lot and building area. Nothing the underwriting reads changes (rent
+ * roll, market, rentable SF, submarket).
+ */
+export function withPlacement(
+  p: Property,
+  placement: DealPlacement,
+  [lng, lat]: LngLat,
+  footprint: Sourced<LngLat[]>,
+  facts: ParcelFacts,
+): Property {
   return {
     ...p,
     location: { ...p.location, lng, lat, parcelId: placement.pin, isApproximate: false, placement },
-    physical: { ...p.physical, footprint },
+    physical: {
+      ...p.physical,
+      footprint,
+      ...(facts.landAreaSF ? { landAreaSF: facts.landAreaSF } : {}),
+      ...(facts.grossBuildingSF ? { grossBuildingSF: facts.grossBuildingSF } : {}),
+    },
+    zoning: facts.zoning,
   }
 }
 
-/** Back to the approximate pin at the submarket's center, exactly as imported. */
+/** Back to the approximate pin at the submarket's center, with the rent roll's zoning and sizes, exactly as imported. */
 export function withoutPlacement(p: Property): Property {
   const { placement: _placement, parcelId: _parcelId, ...location } = p.location
-  const { footprint: _footprint, ...physical } = p.physical
+  const { footprint: _footprint, landAreaSF: _land, ...physical } = p.physical
   const [lng, lat] = SUBMARKETS[p.location.submarket].center
-  return { ...p, location: { ...location, lng, lat, isApproximate: true }, physical }
+  return {
+    ...p,
+    location: { ...location, lng, lat, isApproximate: true },
+    physical: { ...physical, grossBuildingSF: rentRollGrossSF(p.physical.rentableSF.value) },
+    zoning: rentRollZoning(),
+  }
 }
 
 /**
@@ -98,5 +151,10 @@ export function carryPlacement(previous: Property | undefined, next: Property): 
   const placement = previous?.location.placement
   if (!placement || !previous.physical.footprint) return next
   if (normalizeAddress(previous.location.address) !== normalizeAddress(next.location.address)) return next
-  return withPlacement(next, placement, [previous.location.lng, previous.location.lat], previous.physical.footprint)
+  const gross = previous.physical.grossBuildingSF
+  return withPlacement(next, placement, [previous.location.lng, previous.location.lat], previous.physical.footprint, {
+    zoning: previous.zoning,
+    landAreaSF: previous.physical.landAreaSF,
+    grossBuildingSF: gross.source === 'public' ? gross : undefined,
+  })
 }

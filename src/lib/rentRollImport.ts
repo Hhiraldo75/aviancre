@@ -12,6 +12,7 @@ import type {
   RentStep,
   SubmarketId,
   VacantSpace,
+  ZoningInfo,
 } from '../types'
 import { SUBMARKETS } from '../data/submarkets'
 import { slug } from './format'
@@ -140,6 +141,14 @@ const DETAIL_KEYS: Record<DetailField, keyof DealDetails> = {
 export const dealId = (name: string) => `deal-${slug(name) || 'rent-roll'}`
 
 export const isImportedDealId = (id: string) => id.startsWith('deal-')
+
+const notInRentRoll = (what: string) => `Not in rent roll – replace with ${what}`
+
+/** An imported deal's zoning until it is placed on a parcel: a rent roll doesn't state it. */
+export const rentRollZoning = (): ZoningInfo => ({ district: estimate('Unknown', notInRentRoll('the Providence zoning map')) })
+
+/** An imported deal's gross SF until it is placed on a parcel with building records: its rentable SF. */
+export const rentRollGrossSF = (rentableSF: number) => estimate(rentableSF, notInRentRoll('building records (rentable SF used)'))
 
 /** The address an imported deal gets when its rent roll has none. */
 export const approximateAddress = (submarket: SubmarketId) => `${SUBMARKETS[submarket].name} (location approximate)`
@@ -366,7 +375,6 @@ export function parseRentRoll(grid: Cell[][], opts: ImportOptions): RentRollImpo
   if (issues.some((x) => x.severity === 'error')) return { property: null, issues, fileDetails, summary }
 
   const { assetType, buildingClass, submarket } = details as Required<Pick<DealDetails, 'assetType' | 'buildingClass' | 'submarket'>>
-  const notInRentRoll = (what: string) => `Not in rent roll – replace with ${what}`
   const [lng, lat] = SUBMARKETS[submarket].center
   const market = marketViewFor(submarket, assetType, buildingClass)
   if (rentRoll.kind === 'multifamily') {
@@ -389,12 +397,12 @@ export function parseRentRoll(grid: Cell[][], opts: ImportOptions): RentRollImpo
       isApproximate: true,
     },
     physical: {
-      grossBuildingSF: estimate(rentableSF!, notInRentRoll('building records (rentable SF used)')),
+      grossBuildingSF: rentRollGrossSF(rentableSF!),
       rentableSF: fromImport(rentableSF!, sourceName, importedAt),
       floors: estimate(1, notInRentRoll('building records')),
       ...(rentRoll.kind === 'multifamily' ? { unitCount: fromImport(rentRoll.units?.length ?? 0, sourceName, importedAt) } : {}),
     },
-    zoning: { district: estimate('Unknown', notInRentRoll('the Providence zoning map')) },
+    zoning: rentRollZoning(),
     valuation: {},
     market,
     rentRoll,

@@ -29,7 +29,16 @@ import {
 } from '../lib/filters'
 import { exactAddressMatch, type ParcelSuggestion } from '../lib/addressSearch'
 import { interiorPoint, parcelOutline, type BuildingOutline } from '../lib/geo'
-import { carryPlacement, isImportedDeal, OSM_TILES_SOURCE, withoutPlacement, withPlacement, withValidPlacement } from '../lib/importedDeals'
+import {
+  carryPlacement,
+  isImportedDeal,
+  OSM_TILES_SOURCE,
+  parcelFacts,
+  withoutPlacement,
+  withPlacement,
+  withValidPlacement,
+  type ParcelFacts,
+} from '../lib/importedDeals'
 import { todayISO } from '../lib/metrics'
 import { isRentRollPreset, withPreset, type RentRollPreset } from '../lib/rentRollConvert'
 import { DEFAULTS_SET, isSavedSet, type SavedAssumptionSet } from '../lib/underwriting/assumptionSets'
@@ -136,6 +145,8 @@ export interface PlacementRequest {
   /** Inside the parcel: the deal's new map point. */
   point: LngLat
   parcel: Polygon | MultiPolygon
+  /** The parcel's zoning, lot and building area, copied into the deal. */
+  facts: ParcelFacts
 }
 
 /** Filters and sort start from the URL, so a shared link opens the same view. */
@@ -556,7 +567,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const timer = setTimeout(() => gisController.abort(), GIS_TIMEOUT_MS)
     try {
       const [lng, lat] = 'pin' in target ? await parcelPointByPin(target.pin, gisController.signal) : [target.lng, target.lat]
-      const { parcel } = await lookupParcelAt(lng, lat, gisController.signal)
+      const { parcel, overlays } = await lookupParcelAt(lng, lat, gisController.signal)
       if (!current()) return
       // Streets and other unnumbered polygons in the parcel layer have no PIN (`parseParcelFeature` gives 'unknown').
       if (!parcel?.geometry || parcel.pin === 'unknown') throw new Error('No city parcel there. Click directly on a building or lot.')
@@ -570,6 +581,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
           method,
           point: interiorPoint(parcel.geometry),
           parcel: parcel.geometry,
+          facts: parcelFacts(parcel, overlays),
         },
       })
     } catch (err) {
@@ -603,7 +615,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const footprint = outline
       ? fromPublic(outline.ring, OSM_TILES_SOURCE, placedAt)
       : fromPublic(parcelOutline(request.parcel), PVD_SOURCE, placedAt)
-    const properties = s.properties.map((x) => (x.id === p.id ? withPlacement(p, placement, request.point, footprint) : x))
+    const properties = s.properties.map((x) => (x.id === p.id ? withPlacement(p, placement, request.point, footprint, request.facts) : x))
     // The old parcel's record no longer applies; the panel loads the new one.
     cancelDealRecord()
     set({ properties, dealRecord: null })

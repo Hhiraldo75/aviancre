@@ -3,11 +3,14 @@ import atwellsDoc from '../../docs/atwells-rent-roll.csv?raw'
 import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
 import { parseCSV } from '../lib/csv'
 import type { Polygon } from 'geojson'
+import { developmentCapacity } from '../lib/development'
+import { noFarNote } from '../lib/parcelMetrics'
 import { SUBMARKETS } from '../data/submarkets'
 import {
   dealFile,
   hasFileAddress,
   isImportedDeal,
+  parcelFacts,
   propertyFromDealFile,
   withoutPlacement,
   withPlacement,
@@ -17,7 +20,7 @@ import { parseRentRoll } from '../lib/rentRollImport'
 import { fromPublic } from '../lib/sourced'
 import { analystExport } from '../lib/underwriting/analystExport'
 import { underwrite } from '../lib/underwriting/underwrite'
-import type { DealPlacement, LngLat, Property } from '../types'
+import type { DealPlacement, LngLat, ParcelOverlays, ParcelRecord, Property } from '../types'
 import { useAppStore, type PlacementRequest } from './useAppStore'
 
 const AS_OF = '2026-10-04'
@@ -108,7 +111,17 @@ describe('placing a deal on its real building', () => {
   const lot: Polygon = { type: 'Polygon', coordinates: [[[-71.43, 41.82], [-71.429, 41.82], [-71.429, 41.821], [-71.43, 41.821], [-71.43, 41.82]]] }
   const building: LngLat[] = [[-71.4297, 41.8203], [-71.4293, 41.8203], [-71.4293, 41.8207], [-71.4297, 41.8207], [-71.4297, 41.8203]]
   const placement: DealPlacement = { pin: '028-0361', cityAddress: '245 ATWELLS AVE', method: 'address', placedAt: AS_OF, outlineFrom: 'osm', heightM: 12 }
-  const placed = withPlacement(deal, placement, [-71.4295, 41.8205], fromPublic(building, 'OSM', AS_OF))
+  const GIS = 'City of Providence ArcGIS Online'
+  const record: ParcelRecord = {
+    pin: '028-0361',
+    landAreaSF: fromPublic(10_000, GIS),
+    grossBuildingSF: fromPublic(9_000, GIS),
+    parcelZoning: fromPublic('C2', GIS),
+    geometry: lot,
+  }
+  const overlays: ParcelOverlays = { baseZoning: fromPublic('R-3', `${GIS} – Base Zoning`), floodZone: fromPublic('AE', 'FEMA') }
+  const facts = parcelFacts(record, overlays)
+  const placed = withPlacement(deal, placement, [-71.4295, 41.8205], fromPublic(building, 'OSM', AS_OF), facts)
   const request = (dealId = deal.id): PlacementRequest => ({
     dealId,
     pin: '028-0361',
@@ -116,6 +129,7 @@ describe('placing a deal on its real building', () => {
     method: 'click',
     point: [-71.4295, 41.8205],
     parcel: lot,
+    facts,
   })
   /** Engine output without its timestamp. */
   const run = (p: Property) => {
@@ -132,11 +146,47 @@ describe('placing a deal on its real building', () => {
     expect(run(placed)).toEqual(run(deal))
     expect(exported(placed)).toEqual(exported(deal))
   })
-  it('only moves the deal: point, parcel, outline and how it was placed', () => {
+  it('moves the deal and takes the parcel’s zoning, lot and building area; nothing else changes', () => {
     expect(placed.location).toMatchObject({ lng: -71.4295, lat: 41.8205, parcelId: '028-0361', isApproximate: false, placement })
     expect(placed.location.address).toBe('245 Atwells Ave')
-    expect({ ...placed, location: deal.location, physical: deal.physical }).toEqual(deal)
-    expect({ ...placed.physical, footprint: undefined }).toEqual({ ...deal.physical, footprint: undefined })
+    expect({ ...placed, location: deal.location, physical: deal.physical, zoning: deal.zoning }).toEqual(deal)
+    const { footprint: _f, landAreaSF, grossBuildingSF, ...rest } = placed.physical
+    expect([landAreaSF?.value, grossBuildingSF.value]).toEqual([10_000, 9_000])
+    expect({ ...rest, grossBuildingSF: deal.physical.grossBuildingSF }).toEqual(deal.physical)
+  })
+
+  it('gives the Developer view the parcel’s real zoning, as for a clicked parcel', () => {
+    // The base zoning map wins over the zoning recorded on the parcel.
+    expect(placed.zoning).toEqual({
+      district: fromPublic('R-3', `${GIS} – Base Zoning`),
+      maxHeightFt: fromPublic(45, 'Providence Zoning Ordinance (amended through July 22, 2026), Table 4-1'),
+      maxCoverage: fromPublic(0.45, 'Providence Zoning Ordinance (amended through July 22, 2026), Table 4-1'),
+      floodZone: fromPublic('AE', 'FEMA'),
+    })
+    const d = developmentCapacity(placed)
+    expect(d.limits?.description).toBe('Medium density residential')
+    // 10,000 sf × 45% × 3 stories (45 ft ÷ 12) = 13,500 sf, against the city's 9,000 sf building.
+    expect(d.envelope?.sf.value).toBe(13_500)
+    expect(d.additionalEnvelopeSF).toBe(4_500)
+    expect(d.existingFAR).toBe(0.9)
+    expect(noFarNote(placed.zoning.district.value, d.limits)).toMatch(/sets no FAR for R-3; development is limited by height and building coverage/)
+
+    const crowded = withPlacement(deal, placement, [0, 0], fromPublic(building, 'OSM'), parcelFacts({ ...record, grossBuildingSF: fromPublic(20_000, GIS) }, overlays))
+    expect(developmentCapacity(crowded).additionalEnvelopeSF).toBe(-6_500)
+  })
+  it('falls back to the parcel’s own zoning, and to “Unknown” when the city records none', () => {
+    const c2 = parcelFacts(record, {}).zoning
+    expect(c2.district.value).toBe('C-2')
+    expect(c2.maxHeightFt?.value).toBe(50)
+    expect(c2.maxCoverage).toBeUndefined()
+    const none = parcelFacts({ ...record, parcelZoning: undefined, grossBuildingSF: undefined }, { floodZone: fromPublic('X', 'FEMA') })
+    expect(none.zoning).toEqual({ ...deal.zoning, floodZone: fromPublic('X', 'FEMA') })
+    expect(none.grossBuildingSF).toBeUndefined()
+  })
+  it('keeps “Unknown” zoning for an approximate deal', () => {
+    expect(deal.zoning.district).toMatchObject({ value: 'Unknown', source: 'estimated' })
+    expect(developmentCapacity(deal).limits).toBeUndefined()
+    expect(withoutPlacement(placed).zoning).toEqual(deal.zoning)
   })
   it('resets to the approximate pin exactly as imported', () => {
     expect(withoutPlacement(placed)).toEqual(deal)
@@ -193,7 +243,9 @@ describe('placing a deal on its real building', () => {
     useAppStore.setState({ placementRequest: request() })
     s().completePlacement(s().placementRequest!, { ring: building })
     s().importDeal({ ...deal, name: 'Atwells, re-imported' })
-    expect(s().properties.find((x) => x.id === deal.id)?.location.placement?.pin).toBe('028-0361')
+    const kept = s().properties.find((x) => x.id === deal.id)!
+    expect(kept.location.placement?.pin).toBe('028-0361')
+    expect([kept.zoning.district.value, kept.physical.landAreaSF?.value, kept.physical.grossBuildingSF.value]).toEqual(['R-3', 10_000, 9_000])
     s().importDeal({ ...deal, location: { ...deal.location, address: '9 Spruce St' } })
     expect(s().properties.find((x) => x.id === deal.id)?.location.isApproximate).toBe(true)
     s().removeImportedDeal(deal.id)
