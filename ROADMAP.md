@@ -17,7 +17,7 @@
    - [x] Live tax-roll lookup (Providence Open Data, works from any network)
    - [x] GIS enrichment (zoning, overlays, flood + BFE, building size, outline) from ArcGIS Online (city `Parcel_Zoning_FL` + RIGIS DFIRM), reachable from any network; replaced the city's webgis.providenceri.gov server, which drops non-US connections
    - [x] Attach each sample property to a real parcel (address, tax map, coordinates from the 2025 tax roll)
-   - [ ] Decode state/municipal use codes into plain-language property types
+   - [x] Decode state/municipal use codes into plain-language property types
    - Footprints: keep OpenStreetMap buildings (the statewide RIGIS layer is 2018 machine-generated outlines with no heights)
 2. **Photorealistic 3D toggle**
    - Optional "Photorealistic" mode using Google Photorealistic 3D Tiles (deck.gl or CesiumJS)

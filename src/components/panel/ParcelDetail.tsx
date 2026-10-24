@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import type { GisDetails, ParcelLookup, PickedParcel, TaxRecord } from '../../types'
 import { normalizeAddress } from '../../lib/addressSearch'
 import { fmt } from '../../lib/format'
+import { decodeLandUse } from '../../lib/landUse'
 import { normalizeZoningCode, parcelMetrics } from '../../lib/parcelMetrics'
 import { useAppStore } from '../../store/useAppStore'
 import { Card, Chip, Note, Stat, StatGrid } from '../ui/Card'
@@ -46,6 +47,8 @@ function Loaded({ record: r, gis, picked }: { record: TaxRecord | null; gis: Gis
   const taxRollAddress =
     picked && r?.matchedBy === 'plat-lot' && r.address && normalizeAddress(r.address.value) !== normalizeAddress(picked.address) ? r.address.value : null
   const zoning = g?.overlays.baseZoning?.value ?? g?.parcel.parcelZoning?.value
+  const use = decodeLandUse(r?.landUseCode)
+  const useChip = use?.recognized ? use.label : r?.landUse?.value
 
   return (
     <>
@@ -54,7 +57,7 @@ function Loaded({ record: r, gis, picked }: { record: TaxRecord | null; gis: Gis
       <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
         <Chip>Public record</Chip>
         {r && <Chip>Plat {r.plat} · Lot {r.lot}</Chip>}
-        {r?.landUse && <Chip>{r.landUse.value}</Chip>}
+        {useChip && <Chip>{useChip}</Chip>}
         {zoning && <Chip>{zoning}</Chip>}
       </div>
 
@@ -74,12 +77,15 @@ function TaxRollCard({ r }: { r: TaxRecord }) {
   const taxable = (r.assessedValue?.value ?? 0) - (r.exemptValue?.value ?? 0)
   const effectiveRate = r.annualTaxes && taxable > 0 ? r.annualTaxes.value / taxable : null
   const fullyExempt = r.assessedValue && r.exemptValue && r.exemptValue.value >= r.assessedValue.value && r.assessedValue.value > 0
+  const use = decodeLandUse(r.landUseCode)
+  // The raw class code and the city's own description sit under the plain-language label.
+  const useHint = use ? [`Class ${use.code}`, r.landUse?.value].filter(Boolean).join(' · ') : undefined
 
   return (
     <Card title="Tax roll (2025)">
       <StatGrid>
         <Stat label="Owner" value={r.owner?.value ?? '—'} src={r.owner} />
-        <Stat label="Land use" value={r.landUse?.value ?? '—'} hint={r.landUseCode ? `Class ${r.landUseCode}` : undefined} src={r.landUse} />
+        <Stat label="Land use" value={use?.label ?? r.landUse?.value ?? '—'} hint={useHint} src={r.landUse} />
         <Stat label="Assessed value" value={r.assessedValue ? fmt.usd(r.assessedValue.value) : '—'} src={r.assessedValue} />
         <Stat
           label="Annual taxes"
