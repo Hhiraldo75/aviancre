@@ -125,17 +125,22 @@ describe('parcelMetrics', () => {
     expect(normalizeZoningCode('C 2')).toBe('C-2')
     expect(normalizeZoningCode('W-3 ')).toBe('W-3')
   })
-  it('derives $/SF, FAR and capacity from the record', () => {
-    const m = parcelMetrics(parseParcelFeature(FIXTURE), 'D1')
+  it('passes height sub-district codes through, upper-cased', () => {
+    expect(normalizeZoningCode('d-1-100')).toBe('D-1-100')
+    expect(normalizeZoningCode('M-MU-75')).toBe('M-MU-75')
+  })
+  it('derives $/SF and FAR from the record, and the ordinance limits for its district', () => {
+    const m = parcelMetrics(parseParcelFeature(FIXTURE), 'D-1-100')
     expect(m.assessedPerBuildingSF).toBe(250)
     expect(m.existingFAR).toBeCloseTo(50_000 / 21_780, 6)
-    expect(m.placeholderMaxFAR).toBe(8)
-    expect(m.additionalBuildableSF).toBe(21_780 * 8 - 50_000)
+    expect(m.limits?.maxHeightFt).toBe(100)
+    expect(m.limits?.section).toBe('§602.B')
+    expect(m.limits && 'maxFAR' in m.limits).toBe(false)
   })
   it('returns nulls when inputs are missing', () => {
     const m = parcelMetrics(parseParcelFeature({ type: 'Feature', geometry: null, properties: { PIN: 'x' } }), 'Z-9')
     expect(m.existingFAR).toBe(null)
-    expect(m.placeholderMaxFAR).toBe(null)
+    expect(m.limits).toBe(undefined)
   })
 })
 

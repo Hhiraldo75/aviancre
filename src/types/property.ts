@@ -49,7 +49,8 @@ export interface PhysicalCharacteristics {
 export interface ZoningInfo {
   district: Sourced<string>
   maxHeightFt?: Sourced<number>
-  maxFAR?: Sourced<number>
+  /** Maximum building coverage, where the ordinance sets one (residential districts). */
+  maxCoverage?: Sourced<Pct>
   /** FEMA flood zone designation, e.g. "X", "AE". */
   floodZone?: Sourced<string>
   opportunityZone?: Sourced<boolean>

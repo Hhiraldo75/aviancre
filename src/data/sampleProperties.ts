@@ -36,8 +36,8 @@ import { ZONING_LIMITS, ZONING_SOURCE } from './zoning'
  *   original sample to fit that size. Fernhill Commons is the exception: its
  *   units come from the public sample rent roll in docs/samples, unchanged,
  *   so its rentable SF is the units' total.
- * - Zoning districts are plausible guesses and must be verified against the
- *   City of Providence zoning map.
+ * - Zoning districts are the city zoning map's code at each point (checked
+ *   2026-10-23); height and coverage limits come from the ordinance via zoning.ts.
  */
 
 const SAMPLE = 'Sample placeholder'
@@ -177,9 +177,9 @@ function property(p: PropertyInput): Property {
       ...p.extras,
     },
     zoning: {
-      district: estimate(p.zoning, SAMPLE, { notes: 'Verify against Providence zoning map' }),
+      district: estimate(p.zoning, SAMPLE, { notes: 'Matches the city zoning map at this point (checked 2026-10-23)' }),
       maxHeightFt: zoningLimit(p.zoning, 'maxHeightFt'),
-      maxFAR: zoningLimit(p.zoning, 'maxFAR'),
+      maxCoverage: zoningLimit(p.zoning, 'maxCoverage'),
       floodZone: p.floodZone !== undefined ? estimate(p.floodZone, SAMPLE, { notes: 'Verify against FEMA NFHL' }) : undefined,
     },
     valuation: {
@@ -193,9 +193,10 @@ function property(p: PropertyInput): Property {
   }
 }
 
-function zoningLimit(district: string, key: 'maxHeightFt' | 'maxFAR') {
+function zoningLimit(district: string, key: 'maxHeightFt' | 'maxCoverage') {
   const limits = ZONING_LIMITS[district]
-  return limits ? estimate(limits[key], ZONING_SOURCE, { notes: limits.description }) : undefined
+  const value = limits?.[key]
+  return limits && value != null ? fromPublic(value, `${ZONING_SOURCE}, ${limits.section}`) : undefined
 }
 
 /** Builds placeholder traffic + demographic context; replace with RIDOT counts and Census ACS. */
@@ -294,7 +295,7 @@ export const SAMPLE_PROPERTIES: Property[] = [
     yearBuilt: 1985,
     yearRenovated: 2016,
     floors: 28,
-    zoning: 'D-1',
+    zoning: 'D-1-300',
     landAreaSF: 21_000,
     assessedValue: 42_300_000,
     extras: { parkingSpaces: estimate(180, SAMPLE) },
@@ -333,7 +334,7 @@ export const SAMPLE_PROPERTIES: Property[] = [
     yearBuilt: 1925,
     yearRenovated: 2008,
     floors: 10,
-    zoning: 'D-1',
+    zoning: 'D-1-300',
     landAreaSF: 28_200,
     assessedValue: 22_000_000,
     tags: ['multi-tenant', 'historic', 'value-add'],
@@ -368,7 +369,7 @@ export const SAMPLE_PROPERTIES: Property[] = [
     rentableSF: 180_000,
     yearBuilt: 2004,
     floors: 13,
-    zoning: 'D-1',
+    zoning: 'D-1-200',
     landAreaSF: 45_000,
     assessedValue: 42_000_000,
     extras: { parkingSpaces: estimate(320, SAMPLE) },
@@ -410,7 +411,7 @@ export const SAMPLE_PROPERTIES: Property[] = [
     rentableSF: 52_400,
     yearBuilt: 2019,
     floors: 4,
-    zoning: 'D-1',
+    zoning: 'D-1-100',
     landAreaSF: 30_000,
     assessedValue: 20_900_000,
     tags: ['life-science', 'NNN'],
@@ -482,7 +483,7 @@ export const SAMPLE_PROPERTIES: Property[] = [
     yearBuilt: 1948,
     yearRenovated: 2011,
     floors: 2,
-    zoning: 'C-1',
+    zoning: 'C-2',
     landAreaSF: 8_000,
     assessedValue: 2_400_000,
     tags: ['street retail', 'student-driven'],
@@ -520,7 +521,7 @@ export const SAMPLE_PROPERTIES: Property[] = [
     yearBuilt: 1968,
     yearRenovated: 2005,
     floors: 1,
-    zoning: 'M-1',
+    zoning: 'M-MU-75',
     landAreaSF: 392_000,
     assessedValue: 3_800_000,
     extras: {
@@ -592,7 +593,7 @@ export const SAMPLE_PROPERTIES: Property[] = [
     yearBuilt: 1910,
     yearRenovated: 2015,
     floors: 6,
-    zoning: 'D-1',
+    zoning: 'D-1-100',
     landAreaSF: 24_000,
     assessedValue: 12_300_000,
     extras: { unitCount: estimate(48, SAMPLE), parkingSpaces: estimate(31, SAMPLE) },
@@ -626,7 +627,7 @@ export const SAMPLE_PROPERTIES: Property[] = [
     yearBuilt: 1925,
     yearRenovated: 2012,
     floors: 4,
-    zoning: 'R-3',
+    zoning: 'C-2',
     landAreaSF: 14_000,
     assessedValue: 5_900_000,
     extras: { unitCount: estimate(38, SAMPLE) },

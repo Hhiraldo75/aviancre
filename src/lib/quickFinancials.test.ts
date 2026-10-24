@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
-import { developmentCapacity } from './development'
+import type { Property } from '../types'
+import { developmentCapacity, heightExceedanceNote } from './development'
+import { estimate } from './sourced'
 import { irr, quickFinancials, yearOneNOI } from './quickFinancials'
 import { stackingPlan } from './stacking'
 
@@ -63,12 +65,47 @@ describe('stackingPlan', () => {
 })
 
 describe('developmentCapacity', () => {
-  it('computes unused FAR for an underbuilt industrial site', () => {
+  /** A sample re-zoned and re-sized, to exercise the coverage envelope (no sample sits in a residential district). */
+  const rezoned = (id: string, district: string, landSF: number, grossSF: number): Property => {
+    const p = byId(id)
+    return {
+      ...p,
+      zoning: { ...p.zoning, district: estimate(district, 'test') },
+      physical: { ...p.physical, landAreaSF: estimate(landSF, 'test'), grossBuildingSF: estimate(grossSF, 'test') },
+    }
+  }
+
+  it('gives no envelope where the ordinance sets no coverage, only the height limit', () => {
     const d = developmentCapacity(byId('sample-olneyville-distribution'))
     expect(d.existingFAR).toBeCloseTo(41_900 / 392_000, 6)
-    expect(d.additionalBuildableSF).toBeCloseTo(392_000 * 2 - 41_900, 6)
+    expect(d.maxHeightFt).toBe(75)
+    expect(d.limits?.section).toBe('Table 8-1')
+    expect(d.envelope).toBe(null)
+    expect(d.additionalEnvelopeSF).toBe(null)
   })
-  it('flags buildings that exceed current zoning as negative capacity', () => {
-    expect((developmentCapacity(byId('sample-westminster-tower')).additionalBuildableSF ?? 0) < 0).toBe(true)
+  it("uses the downtown height sub-district's limit for headroom", () => {
+    const d = developmentCapacity(byId('sample-westminster-tower'))
+    expect(d.maxHeightFt).toBe(300)
+    expect(d.heightHeadroomFt).toBe(300 - d.heightFt)
+    expect(d.envelope).toBe(null)
+  })
+  it('describes a building taller than the limit instead of showing negative headroom', () => {
+    expect(heightExceedanceNote(-110)).toBe(
+      'Exceeds current height limit by 110 ft — likely an older building that predates the ordinance (legally nonconforming)',
+    )
+    expect(heightExceedanceNote(25)).toBe(null)
+    expect(heightExceedanceNote(0)).toBe(null)
+    expect(heightExceedanceNote(null)).toBe(null)
+  })
+  it('estimates room left in a residential envelope: lot × coverage × floor(height ÷ 12)', () => {
+    const d = developmentCapacity(rezoned('sample-federal-hill-apartments', 'R-4', 10_000, 12_000))
+    expect(d.envelope?.stories).toBe(3)
+    expect(d.envelope?.coverage).toBe(0.55)
+    expect(d.envelope?.sf.value).toBe(10_000 * 0.55 * 3)
+    expect(d.envelope?.sf.source).toBe('estimated')
+    expect(d.additionalEnvelopeSF).toBe(16_500 - 12_000)
+  })
+  it('shows a negative envelope for buildings larger than it', () => {
+    expect(developmentCapacity(rezoned('sample-federal-hill-apartments', 'R-3', 10_000, 20_000)).additionalEnvelopeSF).toBe(13_500 - 20_000)
   })
 })

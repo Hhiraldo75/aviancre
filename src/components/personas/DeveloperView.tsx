@@ -1,39 +1,42 @@
 import type { Property } from '../../types'
-import { ZONING_LIMITS } from '../../data/zoning'
-import { developmentCapacity } from '../../lib/development'
+import { developmentCapacity, heightExceedanceNote } from '../../lib/development'
 import { fmt } from '../../lib/format'
+import { noFarNote } from '../../lib/parcelMetrics'
 import { Card, Note, Stat, StatGrid } from '../ui/Card'
 
 export default function DeveloperView({ property: p }: { property: Property }) {
   const d = developmentCapacity(p)
   const z = p.zoning
   const ph = p.physical
-  const capacity = d.additionalBuildableSF
+  const capacity = d.additionalEnvelopeSF
+  const overHeight = heightExceedanceNote(d.heightHeadroomFt)
 
   return (
     <div className="space-y-4">
       <Card title="Municipal zoning">
         <StatGrid>
-          <Stat label="District" value={z.district.value} src={z.district} hint={ZONING_LIMITS[z.district.value]?.description} />
+          <Stat label="District" value={z.district.value} src={z.district} hint={d.limits?.description} />
           <Stat label="Flood zone" value={z.floodZone?.value ?? 'Not mapped'} src={z.floodZone} tone="warn" hint={z.floodZone?.value.startsWith('A') ? 'Special flood hazard area' : undefined} />
-          <Stat label="Max height" value={z.maxHeightFt ? `${z.maxHeightFt.value} ft` : '—'} src={z.maxHeightFt} />
-          <Stat label="Max FAR" value={z.maxFAR ? z.maxFAR.value.toFixed(1) : '—'} src={z.maxFAR} />
+          <Stat label="Max height" value={z.maxHeightFt ? `${z.maxHeightFt.value} ft` : '—'} src={z.maxHeightFt} hint={d.limits?.section} />
+          {z.maxCoverage && <Stat label="Max coverage" value={fmt.pct(z.maxCoverage.value, 0)} src={z.maxCoverage} hint={d.limits?.section} />}
         </StatGrid>
-        <Note>Zoning limits are placeholders. Verify district, overlays and bonuses against the Providence Zoning Ordinance.</Note>
+        <Note>
+          {noFarNote(z.district.value, d.limits)}
+          {d.limits?.note && ` ${d.limits.note}.`} Limits from the Providence Zoning Ordinance (amended through July 22, 2026);
+          overlays and height bonuses not applied.
+        </Note>
       </Card>
 
       <Card title="Development capacity">
         <StatGrid>
           <Stat label="Building height" value={`${Math.round(d.heightFt)} ft`} hint={d.heightIsEstimate ? 'Estimated from floor count' : undefined} />
-          <Stat
-            label="Height headroom"
-            value={d.heightHeadroomFt !== null ? `${Math.round(d.heightHeadroomFt)} ft` : '—'}
-            tone={d.heightHeadroomFt !== null && d.heightHeadroomFt < 0 ? 'warn' : 'good'}
-            hint={d.heightHeadroomFt !== null && d.heightHeadroomFt < 0 ? 'Taller than current limit' : undefined}
-          />
+          {!overHeight && (
+            <Stat label="Height headroom" value={d.heightHeadroomFt !== null ? `${Math.round(d.heightHeadroomFt)} ft` : '—'} tone="good" />
+          )}
           <Stat label="Existing FAR" value={d.existingFAR !== null ? d.existingFAR.toFixed(2) : '—'} />
-          <Stat label="Max buildable" value={d.maxBuildableSF !== null ? fmt.sf(d.maxBuildableSF) : '—'} />
+          {d.envelope && <Stat label="Est. envelope" value={fmt.sf(Math.round(d.envelope.sf.value))} src={d.envelope.sf} hint={d.envelope.sf.notes} />}
         </StatGrid>
+        {overHeight && <div className="mt-3 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-200">{overHeight}</div>}
         {capacity !== null && (
           <div
             className={`mt-3 rounded-md px-3 py-2 text-xs ${
@@ -42,11 +45,11 @@ export default function DeveloperView({ property: p }: { property: Property }) {
           >
             {capacity > 0 ? (
               <>
-                <span className="font-semibold">{fmt.sf(capacity)}</span> of unused development rights under current zoning
+                <span className="font-semibold">{fmt.sf(capacity)}</span> of room left in the estimated zoning envelope
               </>
             ) : (
               <>
-                Exceeds current zoning by <span className="font-semibold">{fmt.sf(-capacity)}</span>, likely legal non-conforming.
+                Exceeds the estimated zoning envelope by <span className="font-semibold">{fmt.sf(-capacity)}</span>, likely legal non-conforming.
                 Redevelopment could not rebuild at today's size.
               </>
             )}

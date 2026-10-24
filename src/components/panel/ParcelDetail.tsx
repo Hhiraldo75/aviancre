@@ -3,7 +3,7 @@ import type { GisDetails, ParcelLookup, PickedParcel, TaxRecord } from '../../ty
 import { normalizeAddress } from '../../lib/addressSearch'
 import { fmt } from '../../lib/format'
 import { decodeLandUse } from '../../lib/landUse'
-import { normalizeZoningCode, parcelMetrics } from '../../lib/parcelMetrics'
+import { maxHeightLabel, noFarNote, normalizeZoningCode, parcelMetrics } from '../../lib/parcelMetrics'
 import { useAppStore } from '../../store/useAppStore'
 import { Card, Chip, Note, Stat, StatGrid } from '../ui/Card'
 
@@ -153,13 +153,17 @@ function GisSection({ gis, record }: { gis: GisDetails; record: TaxRecord | null
           <Stat label="Assessed $/SF" value={m.assessedPerBuildingSF !== null ? `${fmt.usd(m.assessedPerBuildingSF)}/SF` : '—'} hint="Assessed value ÷ building area" />
           <Stat label="Existing FAR" value={m.existingFAR !== null ? m.existingFAR.toFixed(2) : '—'} hint="Building area ÷ land area" />
           <Stat
-            label="Unused capacity"
-            value={m.additionalBuildableSF !== null ? fmt.sf(Math.round(m.additionalBuildableSF)) : '—'}
-            tone={m.additionalBuildableSF !== null && m.additionalBuildableSF < 0 ? 'warn' : 'good'}
-            hint={m.placeholderMaxFAR !== null ? `vs. placeholder max FAR ${m.placeholderMaxFAR.toFixed(1)}` : 'District not in table yet'}
+            label="Max height"
+            value={m.limits ? maxHeightLabel(m.limits) : '—'}
+            hint={m.limits ? `Zoning Ordinance ${m.limits.section}` : zoningCode ? 'District not in zoning table' : undefined}
           />
         </StatGrid>
-        <Note>Max FAR comes from AVIANCRE's placeholder zoning table, not the ordinance. Verify before relying on it.</Note>
+        {zoningCode && (
+          <Note>
+            {noFarNote(normalizeZoningCode(zoningCode) ?? zoningCode, m.limits)}
+            {m.limits?.note && ` ${m.limits.note}.`} Overlay districts and height bonuses aren't applied.
+          </Note>
+        )}
       </Card>
 
       <Card title="Zoning & environment">
