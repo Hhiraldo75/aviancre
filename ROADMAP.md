@@ -20,6 +20,7 @@
    - [x] Attach each sample property to a real parcel (address, tax map, coordinates from the 2025 tax roll)
    - [x] Decode state/municipal use codes into plain-language property types
    - [x] Imported deals on their real building: find the rent roll's address in the city parcels (on request), or search or click the building; the deal takes the OSM building on that parcel (else the parcel outline), shows the parcel's public record, and can be reset to its approximate pin
+   - [ ] Follow-up: estimate a placed deal's floor count as city gross building area ÷ building outline area (labeled EST, with the formula), so the Developer view's height and nonconforming note stop relying on the rent roll's 1 floor
    - Footprints: keep OpenStreetMap buildings (the statewide RIGIS layer is 2018 machine-generated outlines with no heights)
 2. **Photorealistic 3D toggle**
    - Optional "Photorealistic" mode using Google Photorealistic 3D Tiles (deck.gl or CesiumJS)
