@@ -11,6 +11,7 @@ import type {
   PickedParcel,
   Property,
   TaxRecord,
+  Scenario,
   UnderwritingTab,
 } from '../types'
 import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
@@ -42,7 +43,7 @@ import {
 import { todayISO } from '../lib/metrics'
 import { isRentRollPreset, withPreset, type RentRollPreset } from '../lib/rentRollConvert'
 import { DEFAULTS_SET, isSavedSet, type SavedAssumptionSet } from '../lib/underwriting/assumptionSets'
-import type { AssumptionEdits } from '../lib/underwriting/edits'
+import { SCENARIO_KEY_PREFIX, type AssumptionEdits } from '../lib/underwriting/edits'
 import { shouldShowWelcome } from '../lib/welcome'
 import { fromPublic } from '../lib/sourced'
 import { lookupParcelAt, parcelPointByPin, PVD_SOURCE, searchParcelAddresses } from '../services/providenceGis'
@@ -176,6 +177,8 @@ interface AppState {
   underwritingOpen: boolean
   /** The underwriting panel's section; set when it opens. */
   underwritingTab: UnderwritingTab
+  /** The case the underwriting panel shows; set when it opens (Base by default). */
+  underwritingScenario: Scenario
   /** The welcome screen: first visit only, and not when the link already sets filters. */
   welcomeOpen: boolean
   /** Analyst edits to the default underwriting assumptions, by property id; kept for the session. */
@@ -205,10 +208,11 @@ interface AppState {
   clearSelection: () => void
   setAsOf: (date: ISODate) => void
   setPersona: (persona: Persona) => void
-  /** Opens the panel on `tab` (Cash flow by default). */
-  openUnderwriting: (tab?: UnderwritingTab) => void
+  /** Opens the panel on `tab` (Cash flow by default) showing `scenario` (Base by default). */
+  openUnderwriting: (tab?: UnderwritingTab, scenario?: Scenario) => void
   closeUnderwriting: () => void
   setUnderwritingTab: (tab: UnderwritingTab) => void
+  setUnderwritingScenario: (scenario: Scenario) => void
   openWelcome: () => void
   /** Closes the welcome screen and remembers that it was seen. */
   closeWelcome: () => void
@@ -217,6 +221,8 @@ interface AppState {
   resetAssumption: (propertyId: string, key: string) => void
   /** Clears every edit and makes Defaults the active set. */
   resetAssumptions: (propertyId: string) => void
+  /** Clears the edited Downside/Upside presets only; Base edits stay. */
+  resetScenarioPresets: (propertyId: string) => void
   /** Saves a set (replacing one with the same name), applies its edits and makes it active. */
   saveAssumptionSet: (propertyId: string, set: SavedAssumptionSet) => void
   /** Applies a saved set's edits, or Defaults (no edits). */
@@ -350,6 +356,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   activePersona: 'Analyst',
   underwritingOpen: false,
   underwritingTab: 'Cash flow',
+  underwritingScenario: 'base',
   welcomeOpen: hasWindow && shouldShowWelcome(window.location.search, hasSeenWelcome()),
   assumptionEdits: {},
   assumptionSets: loadAssumptionSets(),
@@ -424,9 +431,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   setAsOf: (date) => set({ asOf: date }),
   setPersona: (persona) => set({ activePersona: persona }),
-  openUnderwriting: (tab = 'Cash flow') => set({ underwritingOpen: true, underwritingTab: tab }),
+  openUnderwriting: (tab = 'Cash flow', scenario = 'base') => set({ underwritingOpen: true, underwritingTab: tab, underwritingScenario: scenario }),
   closeUnderwriting: () => set({ underwritingOpen: false }),
   setUnderwritingTab: (tab) => set({ underwritingTab: tab }),
+  setUnderwritingScenario: (scenario) => set({ underwritingScenario: scenario }),
   openWelcome: () => set({ welcomeOpen: true }),
   closeWelcome: () => {
     if (hasWindow) markWelcomeSeen()
@@ -449,6 +457,13 @@ export const useAppStore = create<AppState>()((set, get) => ({
       const { [propertyId]: _removed, ...rest } = s.assumptionEdits
       const { [propertyId]: _active, ...activeSets } = s.activeSets
       return { assumptionEdits: rest, activeSets }
+    }),
+  resetScenarioPresets: (propertyId) =>
+    set((s) => {
+      const current = s.assumptionEdits[propertyId]
+      if (!current) return {}
+      const rest = Object.fromEntries(Object.entries(current).filter(([k]) => !k.startsWith(SCENARIO_KEY_PREFIX)))
+      return { assumptionEdits: { ...s.assumptionEdits, [propertyId]: rest } }
     }),
   saveAssumptionSet: (propertyId, saved) =>
     set((s) => {

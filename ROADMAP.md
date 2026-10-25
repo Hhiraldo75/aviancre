@@ -30,5 +30,6 @@
    - Lease-by-lease 10-year cash flow, rollover (renewal probability, downtime, TI/LC), debt, IRR, DSCR
    - Replaces the quick estimate in the Investment view; validated against a hand-built Excel model
 4. **Live assumptions panel**: change rent growth, exit cap or interest rate and see results update
+   - [x] Scenarios: Base, Downside and Upside side by side at the Base price (Investment view card, a switch in Full underwriting, `--scenario` on the CLI, a `scenarios` section in the analyst JSON); EST presets, editable and saved with assumption sets
 5. **Rent estimation engine** with comps and confidence ranges; **rent roll import** (CSV/Excel)
 6. **Deploy** to Vercel or Netlify for a public portfolio link

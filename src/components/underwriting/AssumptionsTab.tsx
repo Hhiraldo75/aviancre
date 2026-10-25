@@ -5,7 +5,7 @@ import type { AssumptionEdit, AssumptionGroup } from '../../lib/underwriting/ful
 import { Card } from '../ui/Card'
 import SourceBadge from '../ui/SourceBadge'
 
-interface Handlers {
+export interface Handlers {
   /** Stores a validated value in engine units. */
   onSet: (key: string, value: number) => void
   onReset: (key: string) => void
@@ -67,7 +67,8 @@ export default function AssumptionsTab({
   )
 }
 
-function AssumptionInput({
+/** One editable value with its source badge, reset and validation; also used for the scenario presets. */
+export function AssumptionInput({
   label,
   edit,
   src,
