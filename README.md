@@ -38,6 +38,8 @@ and an imported rent roll never leaves the user's machine.
   commissions), NNN / base-year / expense-stop recoveries, vacancy and credit loss,
   debt, and a sale on normalized Year-11 NOI. Apartments are modeled unit by unit, with
   loss to lease burning off at each roll, turnover costs and lease-up of vacant units.
+  An optional value-add plan renovates units as they roll and compares As-is with
+  Value-add at the same price.
   Outputs include IRR (levered and unlevered), equity multiple, cash-on-cash, DSCR, debt
   yield, WALT, NPV and plain-language warnings.
 - **Live assumptions and saved cases.** Edit any assumption and every figure updates.
@@ -57,7 +59,7 @@ and an imported rent roll never leaves the user's machine.
 
 ## How it was validated
 
-- **Three independent Excel models.** The engine's output was matched to the cent against
+- **Four independent Excel models.** The engine's output was matched to the cent against
   separately built Excel models for:
   - Atwells Retail Row (retail, NNN)
   - Westminster Office Tower (office, base-year recoveries, vacant-suite lease-up)
@@ -65,14 +67,20 @@ and an imported rent roll never leaves the user's machine.
     loss to lease burning off, lease-up). The Fernhill model was built only from the written
     inputs, rules and rent roll, and matched all 185 annual and 1,140 monthly values
     ([`docs/validation/`](docs/validation/)).
-- **Golden tests** freeze all three results and check every cash-flow line in every year
+  - Fernhill Commons with the value-add plan on (renovations at each roll within the
+    pace, downtime, re-lease at market + premium, the reserve and its draws). Built only
+    from the written rules and inputs, it matched all 228 annual values, all 60
+    renovation schedule rows and every return metric
+    ([`docs/validation/`](docs/validation/)).
+- **Golden tests** freeze all four results and check every cash-flow line in every year
   within $1, plus price, loan, equity, sale proceeds, both IRRs, minimum DSCR and WALT
-  (Fernhill also checks its loan schedule by year to the cent, and every return metric).
+  (Fernhill also checks its loan schedule by year to the cent, and every return metric;
+  the value-add test also checks every renovation schedule row).
   They run at the assumption set each Excel model used (pinned in a validation fixture),
   so the app's defaults can follow the market without breaking the match. They also run
   after an assumption edit and reset, and after importing the same rent roll from CSV and
   from Excel.
-- **783 automated tests** (Vitest) across the engine, sensitivity, max bid, rent roll
+- **927 automated tests** (Vitest) across the engine, sensitivity, max bid, rent roll
   import and conversion, assumption sets, search, filters and the public-record clients.
 
 ## Data sources

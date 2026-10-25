@@ -15,7 +15,7 @@ Step 1 is the calculation engine only, with no UI changes. Code lives in `src/li
 - Sale at end of year 10 = year-11 NOI / exit cap, less selling costs. Year-11 NOI is normalized first: rollover vacancy and free rent are replaced by the general vacancy rate.
 - Loan: LTV, fixed rate, amortization, interest-only years, loan fee.
 - Multifamily: simple unit-type model (vacancy, rent growth, turnover cost per move-out, per-unit reserves). A unit rent roll runs unit by unit, month by month (convention 18), validated against an independent Excel model (Fernhill golden test).
-- Value-add business plan (unit rent rolls only, off by default): units are renovated at their next roll, offline for the downtime, then re-lease at market + a premium. It is paid for from a reserve funded with equity at closing (convention 19).
+- Value-add business plan (unit rent rolls only, off by default): units are renovated at their next roll, offline for the downtime, then re-lease at market + a premium. It is paid for from a reserve funded with equity at closing (convention 19), validated against an independent Excel model (Fernhill value-add golden test).
 
 ### Default assumptions (`src/lib/underwriting/defaults.ts`, one set per asset type)
 Office / Retail / Industrial:
@@ -104,7 +104,7 @@ Going-in cap, raw and normalized year-11 NOI, in-place vs market rent, unlevered
   - `maxBid`
 
   Each figure is `{ value, display }`, with the display string the app shows. Spreads and differences the review needs are pre-computed: levered IRR vs target, exit vs going-in cap, Year-11 normalization, and going-in cap vs loan constant. The analyst quotes them and never calculates. The file carries a `generatedAt` timestamp and is regenerated on every run.
-- **Validation sets.** Each golden test runs at the assumption set its Excel model was matched with, not at the app's defaults: `src/lib/underwriting/__fixtures__/<atwells|westminster|fernhill>-validation.assumptions.json`, in the assumption set file format, with every Base assumption pinned (the price at full precision, the old 6.50% rate and placeholder market figures). So the defaults can follow the market while the Excel match stays true. The files load through `parseAssumptionSetFile`, so a set that stops fitting the property fails the test.
+- **Validation sets.** Each golden test runs at the assumption set its Excel model was matched with, not at the app's defaults: `src/lib/underwriting/__fixtures__/<atwells|westminster|fernhill>-validation.assumptions.json`, in the assumption set file format, with every Base assumption pinned (the price at full precision, the old 6.50% rate and placeholder market figures). So the defaults can follow the market while the Excel match stays true. The files load through `parseAssumptionSetFile`, so a set that stops fitting the property fails the test. The value-add golden test runs at the Fernhill set with the plan's inputs pinned in the test.
 - **Golden test.** `src/lib/underwriting/atwells.golden.test.ts` runs Atwells Retail Row (base scenario, as of 2026-10-04, at its validation set) and compares it against the frozen fixture `src/lib/underwriting/__fixtures__/atwells-benchmark.csv`. It checks every cash-flow line in every year, including both Year-11 columns, within $1. It also checks purchase price, loan amount, equity, net sale proceeds and loan payoff within $1, both IRRs within 0.0001, minimum DSCR within 0.01, and WALT within 0.01 years. The same checks also run after edits, Reset and re-applying the validation set from the store. The fixture was independently validated against the Excel benchmark (`AVIANCRE_Atwells_Underwriting_Benchmark_v2.xlsx`, matched to the cent on Oct 8, 2026).
   - No script writes to the fixture. `npm run underwrite` writes to `docs/`, and that file can change freely.
   - **Update the fixture only on purpose,** when an assumption or modeling method changes. Re-check the new numbers against Excel first. Then regenerate with `npm run underwrite -- sample-atwells-retail-row --as-of 2026-10-04 --assumptions src/lib/underwriting/__fixtures__/atwells-validation.assumptions.json` and copy `docs/underwriting-sample-atwells-retail-row.csv` over the fixture in the same commit as the change. Never update it just to make a failing test pass.
@@ -116,7 +116,14 @@ Going-in cap, raw and normalized year-11 NOI, in-place vs market rent, unlevered
 
   The engine was validated against an independent Excel model built only from written inputs, rules and the rent roll, without the code (`docs/validation/Fernhill-Excel-Check.xlsx`, Oct 24, 2026). It matched all 185 annual values (largest difference $0.00005, from the CSV's 4-decimal rounding), all 1,140 monthly values (under $0.000001) and every return metric. The same fixture rules apply. Regenerate the CSV with `npm run underwrite -- sample-fernhill-commons --as-of 2026-10-04 --assumptions src/lib/underwriting/__fixtures__/fernhill-validation.assumptions.json`. Rebuild the JSON from the loan schedule and from the `returns` and `debt` sections of the `--json` export.
 
-All three golden tests share the checks in `src/lib/underwriting/goldenChecks.ts`.
+- **Fernhill value-add golden test.** `src/lib/underwriting/fernhill-value-add.golden.test.ts` is the value-add case (convention 19): Fernhill at its validation set with the plan on at N = 60, S = 1, P = 4, C = $12,500, R = $175, D = 1. The inputs are pinned in the test, so the plan's defaults can move. It runs the same checks against `src/lib/underwriting/__fixtures__/fernhill-value-add-benchmark.csv`, including the plan's rows (units renovated exactly; renovation downtime, capex, reserve draw and unspent reserve within $1). It also checks:
+  - the plan's inputs as the fixture lists them, and the as-is purchase price
+  - the plan totals: units renovated, reserve, spend, unspent reserve and the month the program finishes
+  - every row of `__fixtures__/fernhill-value-add-schedule.csv`: unit, order, renovation and re-lease months and rolls passed over exactly; re-lease rent, renovation cost and move-out cost to the cent
+
+  The plan was validated to the cent against an independent Excel model built only from convention 19, the multifamily rules it relies on and the written inputs, without the code (`docs/validation/Fernhill-ValueAdd-Excel-Check.xlsx`, Oct 25, 2026). It matched all 228 annual values (largest difference $0.00005, from the CSV's 4-decimal rounding), all 60 schedule rows (units, months, order, re-lease rents, move-out costs) and every return metric. The same fixture rules apply. Regenerate both files with `npm run underwrite -- sample-fernhill-commons --as-of 2026-10-04 --assumptions src/lib/underwriting/__fixtures__/fernhill-validation.assumptions.json --value-add` and copy `docs/underwriting-sample-fernhill-commons--value-add.csv` and `…--value-add--schedule.csv` over the fixtures. That command uses the plan's defaults; if they no longer equal the pinned inputs (the test's first check fails), enter the pinned inputs in a set first.
+
+All four golden tests share the checks in `src/lib/underwriting/goldenChecks.ts`.
 - `npm run rent-roll -- <property-id> [--out path]` exports every lease and vacant-suite field the engine reads, including the renewal option rent and the base-year expense amount (default `docs/rent-roll-<property-id>.csv`; the Atwells export is `docs/atwells-rent-roll.csv`). A property block (asset type, building class, submarket, address) follows the rentable SF line: those set the market defaults. The rent roll import reads this format back.
 
 **Value-add plan** (`src/lib/underwriting/valueAdd.ts`; the rules are convention 19).
@@ -144,6 +151,8 @@ All three golden tests share the checks in `src/lib/underwriting/goldenChecks.ts
   - the schedule rules
   - Fernhill with the plan off, with inert inputs: byte-identical CSV and JSON, and the golden checks
   - Fernhill with the plan on: price, reserve, value created, presets, and set round-trip
+
+  The Fernhill value-add golden test (above) freezes the plan's full result, matched to an independent Excel model.
 
 ## Rent roll import (real deals)
 
