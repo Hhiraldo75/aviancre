@@ -14,7 +14,7 @@ export { irr }
  */
 
 /** Share of operating expenses the landlord absorbs, by lease structure. */
-const LANDLORD_OPEX_SHARE: Record<LeaseType, number> = {
+export const LANDLORD_OPEX_SHARE: Record<LeaseType, number> = {
   NNN: 0,
   'modified-gross': 0.5,
   'full-service-gross': 1,

@@ -15,6 +15,9 @@ import { fromPublic } from '../lib/sourced'
  */
 export const PVD_PARCELS_SERVICE =
   'https://services6.arcgis.com/wv9mHoqblhTsnqdG/arcgis/rest/services/Parcel_Zoning_FL/FeatureServer'
+/** The city's 25 official neighborhoods (`LNAME`); used by `npm run citywide:refresh`. */
+export const PVD_NEIGHBORHOODS_LAYER =
+  'https://services6.arcgis.com/wv9mHoqblhTsnqdG/arcgis/rest/services/Providence_Neighborhoods_(Polygon_Layer)/FeatureServer/0'
 export const RIGIS_FLOOD_LAYER =
   'https://services2.arcgis.com/S8zZg9pg23JUEexQ/arcgis/rest/services/PLAN_DFIRM_Statewide_Flood_Hazard_Areas_2022/FeatureServer/1'
 

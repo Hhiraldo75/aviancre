@@ -106,6 +106,12 @@ export function pointInRing([x, y]: LngLat, ring: Position[]): boolean {
   return inside
 }
 
+/** True when the point is inside the polygon (or any part of a multipolygon) and not in a hole. */
+export function pointInPolygon(point: LngLat, geometry: Polygon | MultiPolygon): boolean {
+  const parts = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
+  return parts.some(([outer, ...holes]) => pointInRing(point, outer) && !holes.some((h) => pointInRing(point, h)))
+}
+
 const ringArea = (ring: Position[]) =>
   Math.abs(ring.reduce((s, [x1, y1], i) => s + x1 * ring[(i + 1) % ring.length][1] - ring[(i + 1) % ring.length][0] * y1, 0)) / 2
 

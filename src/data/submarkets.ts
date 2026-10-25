@@ -271,3 +271,44 @@ export const METRO_TRENDS: Record<BenchmarkType, MarketTrendPoint[]> = {
 }
 
 export const TREND_SOURCE = `${NAR}, as of ${NAR_AS_OF}.`
+
+// ---------- metro benchmarks ----------
+
+/**
+ * One benchmark per asset type for the whole metro, for property outside the
+ * submarkets (the citywide screening estimates). Same anchors as the submarket
+ * rows; retail and industrial rents, which the submarket rows keep rather than
+ * anchor, use the NAR/CoStar Q1 2026 metro asking rent.
+ */
+function metroBenchmark(type: BenchmarkType): SubmarketBenchmark {
+  const a = ANCHORS[type]
+  const isMF = type === 'multifamily'
+  const trend = METRO_TRENDS[type]
+  const metroRent = trend[trend.length - 1].marketRent
+  const rent = isAnchor(a.rent) ? a.rent.value : metroRent
+  const band = { low: rent * (1 - a.rentBand), high: rent * (1 + a.rentBand) }
+  const metro = (anchor: Anchor) => estimate(anchor.value, `${anchor.sourceName}: metro figure`, { confidence: 'medium', asOf: anchor.asOf, notes: anchor.notes })
+  return {
+    rentBasis: isMF ? 'monthly-per-unit' : 'annual-per-sf',
+    marketRent: isAnchor(a.rent)
+      ? { ...metro(a.rent), range: band }
+      : estimate(rent, `${NAR}: metro asking rent`, {
+          confidence: a.rent.confidence,
+          asOf: NAR_AS_OF,
+          notes: `Metro average, used only outside the submarkets. ${a.rent.notes}`,
+          range: a.rent.range ?? band,
+        }),
+    classAdjustment: CLASS_ADJUSTMENT[type],
+    vacancyRate: metro(a.vacancy),
+    annualRentGrowth: estimate(a.longRunGrowth, LONG_RUN_GROWTH, {
+      notes: `12-month trailing metro rent growth was ${metroPct(a.trailingGrowth)} (${NAR}).`,
+    }),
+    trailingRentGrowth: estimate(a.trailingGrowth, `${NAR}; 12-month trailing`, { confidence: 'medium', asOf: NAR_AS_OF }),
+    marketCapRate: metro(a.capRate),
+    opexPerYear: estimate(a.opex.value, PLACEHOLDER, { notes: a.opex.notes }),
+  }
+}
+
+export const METRO_BENCHMARKS = Object.fromEntries(
+  (Object.keys(ANCHORS) as BenchmarkType[]).map((type) => [type, metroBenchmark(type)]),
+) as Record<BenchmarkType, SubmarketBenchmark>
