@@ -3,6 +3,7 @@ import { SAMPLE_PROPERTIES } from '../../data/sampleProperties'
 import { AI_LABEL_SAMPLE, analystExport } from './analystExport'
 import { assumptionsFor, editableFields } from './edits'
 import { maxBid } from './maxBid'
+import { withScenario } from './scenarios'
 import { runUnderwriting } from './summary'
 import { underwrite } from './underwrite'
 
@@ -109,5 +110,34 @@ describe('analyst JSON export (Atwells)', () => {
     expect(mf.rentRoll.kind).toBe('multifamily')
     if (mf.rentRoll.kind === 'multifamily') expect(mf.rentRoll.unitMix.length).toBeGreaterThan(0)
     expect(JSON.stringify(mf)).not.toMatch(/NaN|Infinity/)
+  })
+
+  it('compares Base, Downside and Upside at the Base price', () => {
+    const sc = x.scenarios
+    if (sc.status !== 'ok') throw new Error(sc.reason)
+    expect(sc).toMatchObject({ viewed: 'base', columns: ['Base', 'Downside', 'Upside'], purchasePrice: x.returns.purchasePrice })
+    const irr = sc.rows.find((row) => row.key === 'leveredIRR')!
+    expect(irr.base.display).toBe(x.returns.leveredIRR.display)
+    expect(irr.downside.vsBase?.display).toMatch(/^−\d+ bps$/)
+    const noi = sc.rows.find((row) => row.key === 'year1NOI')!
+    expect(noi.base.value).toBe(x.returns.year1NOI.value)
+    expect(sc.presets.downside.find((p) => p.label === 'Exit cap')).toMatchObject({
+      change: '+50 bps',
+      isEstimate: true,
+      applied: '7.25% → 7.75%',
+    })
+  })
+
+  it('exports a Downside run of a set, with the set’s changes measured on Base', () => {
+    const edits = { 'exit.exitCapRate': 0.075 }
+    const down = withScenario(assumptionsFor(ATWELLS, AS_OF, edits), 'downside', edits)
+    const e = analystExport(ATWELLS, AS_OF, underwrite(ATWELLS, AS_OF, down), { name: 'My case', edits })
+    expect(e.meta.scenario).toBe('downside')
+    expect(e.meta.assumptionSet.changes).toEqual(['Exit cap rate 7.50% (default 7.25%)'])
+    expect(e.returns.exit.exitCapRate.display).toBe('8.00%')
+    if (e.scenarios.status !== 'ok') throw new Error(e.scenarios.reason)
+    expect(e.scenarios.viewed).toBe('downside')
+    const irr = e.scenarios.rows.find((row) => row.key === 'leveredIRR')!
+    expect(irr.downside.display).toBe(e.returns.leveredIRR.display)
   })
 })

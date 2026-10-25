@@ -12,6 +12,14 @@ import { ANALYST_INPUT, defaultAssumptions, estimatedPrice } from './defaults'
 
 export type AssumptionEdits = Record<string, number>
 
+/**
+ * Edits to the Downside/Upside presets share the record, under keys like
+ * "scenarios.downside.exit.exitCapRate" (see scenarios.ts), so they travel
+ * with assumption sets. Base assumptions ignore them.
+ */
+export const SCENARIO_KEY_PREFIX = 'scenarios.'
+const isBaseKey = (key: string) => !key.startsWith(SCENARIO_KEY_PREFIX)
+
 export type AssumptionGroupTitle = 'Acquisition' | 'Leasing' | 'Operating' | 'Debt' | 'Exit'
 
 export interface AssumptionField {
@@ -215,10 +223,10 @@ export function defaultsFor(property: Property, asOf: ISODate): UnderwritingAssu
   return a
 }
 
-/** Assumptions with edits applied; the defaults object itself when there are none. */
+/** Assumptions with edits applied; the defaults object itself when there are none (preset edits don't count). */
 export function assumptionsFor(property: Property, asOf: ISODate, edits?: AssumptionEdits): UnderwritingAssumptions {
   const defaults = defaultsFor(property, asOf)
-  if (!edits || !hasEdits(edits)) return defaults
+  if (!edits || !Object.keys(edits).some(isBaseKey)) return defaults
   const hit = editedCache.get(edits)
   if (hit && hit.property === property && hit.asOf === asOf) return hit.a
   const a = applyEdits(property, asOf, defaults, edits)

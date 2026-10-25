@@ -74,6 +74,22 @@ describe('assumption set files', () => {
     ])
   })
 
+  it('carry edited scenario presets, checked like any other change', () => {
+    const withPresets: SavedAssumptionSet = {
+      ...MY_CASE,
+      edits: { ...MY_CASE.edits, 'scenarios.downside.exit.exitCapRate': 0.0075, 'scenarios.upside.leasing.marketRentGrowth': 0.005 },
+    }
+    expect(parseAssumptionSetFile(viaFile(withPresets), ATWELLS, AS_OF)).toEqual({ set: withPresets, errors: [] })
+    const bad = {
+      ...(viaFile(MY_CASE) as object),
+      changes: { 'scenarios.downside.exit.exitCapRate': 0.05, 'scenarios.downside.multifamily.turnoverRate': 0.1 },
+    }
+    expect(parseAssumptionSetFile(bad, ATWELLS, AS_OF).errors).toEqual([
+      'Downside exit cap: +500 bps is out of range (Enter −300 bps to 300 bps).',
+      'Unknown assumption "scenarios.downside.multifamily.turnoverRate" for this property.',
+    ])
+  })
+
   it('validate names', () => {
     expect(setNameError('  ')).toBe('Enter a name')
     expect(setNameError('DEFAULTS')).toBe('"Defaults" is reserved')
@@ -121,6 +137,10 @@ describe('memos record their assumption set', () => {
       'Exit cap rate 7.50% (default 7.25%)',
     ])
     expect(memoAssumptionSet(memo(set.marker))).toEqual({ name: 'My case', edits: MY_CASE.edits })
+    const presets = { ...MY_CASE.edits, 'scenarios.downside.exit.exitCapRate': 0.0075 }
+    const withPresets = analystExport(ATWELLS, AS_OF, r, { name: MY_CASE.name, edits: presets }).meta.assumptionSet
+    expect(withPresets.summary).toBe('Assumption set: My case, 4 changes from defaults')
+    expect(withPresets.changes.at(-1)).toBe('Downside exit cap +75 bps (preset +50 bps)')
     const defaults = analystExport(ATWELLS, AS_OF, underwrite(ATWELLS, AS_OF)).meta.assumptionSet
     expect(defaults).toMatchObject({ name: 'Defaults', summary: 'Assumption set: Defaults, no changes from defaults', changes: [] })
   })

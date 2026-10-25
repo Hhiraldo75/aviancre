@@ -1,6 +1,6 @@
 import type { Bps, ISODate, Pct, Sourced, USD } from './common'
 
-export type Scenario = 'base' | 'downside' | 'value-add'
+export type Scenario = 'base' | 'downside' | 'upside'
 
 /**
  * Every numeric assumption is Sourced so the UI can badge defaults ("EST")

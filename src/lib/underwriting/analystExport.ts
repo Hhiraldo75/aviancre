@@ -1,13 +1,14 @@
-import type { ISODate, Property, SensitivityGrid, UnderwritingResult } from '../../types'
+import type { ISODate, Property, Scenario, SensitivityGrid, UnderwritingAssumptions, UnderwritingResult } from '../../types'
 import { fmt } from '../format'
 import { occupancy } from '../metrics'
 import { bySF } from '../unitRentRoll'
 import { isEstimate } from './defaults'
 import { DEFAULTS_SET, memoMarker, setSummary } from './assumptionSets'
-import { defaultsFor, editableFields, fieldValue, isEdited, type AssumptionEdits, type AssumptionGroupTitle } from './edits'
+import { assumptionsFor, defaultsFor, editableFields, fieldValue, isEdited, type AssumptionEdits, type AssumptionGroupTitle } from './edits'
 import { rentRollView, type ExpirationRow, type RentRollRow } from './fullView'
 import { maxBid, MAX_BID_RANGE } from './maxBid'
 import { cashFlowRows } from './report'
+import { presetChanges, scenarioComparison, SCENARIO_LABELS, SCENARIOS, type ComparisonCell, type PresetItem } from './scenarios'
 import { METRIC_LABELS, SENSITIVITY_CAPTION, sensitivityGrids, sensitivityView } from './sensitivity'
 import { maxBidStat } from './summary'
 import { DEBT_YIELD_FLOOR, DSCR_FLOOR, MARK_TO_MARKET_THRESHOLD, ROLLOVER_CONCENTRATION } from './underwrite'
@@ -81,8 +82,9 @@ const bps = (x: number | null) => {
 const signed = (x: number | null) => fig(x, x === null ? '—' : fmt.signedPct(x))
 
 /**
- * `set` names the assumption set `r` was run at (its edits, as applied); the
- * memo quotes its summary and copies its marker so the app can compare.
+ * `set` names the assumption set `r` was run at (its edits, as applied, with
+ * any edited scenario presets); `r` may be a Downside or Upside run of it. The
+ * memo quotes the set's summary and copies its marker so the app can compare.
  */
 export function analystExport(
   property: Property,
@@ -91,7 +93,10 @@ export function analystExport(
   set: { name: string; edits: AssumptionEdits } = { name: DEFAULTS_SET, edits: {} },
 ) {
   const a = r.assumptions
-  const assumptions = assumptionsSection(property, asOf, r)
+  const assumptions = assumptionsSection(property, asOf, a)
+  // The set's changes are measured on its Base assumptions, whichever scenario `r` is.
+  const base = a.scenario === 'base' ? a : assumptionsFor(property, asOf, set.edits)
+  const setChanges = [...(base === a ? assumptions : assumptionsSection(property, asOf, base)).edited, ...presetChanges(base, set.edits)]
   const m = r.metrics
   const H = r.cashFlows.length
   const noi1 = r.cashFlows[0].netOperatingIncome
@@ -115,9 +120,9 @@ export function analystExport(
       assumptionSet: {
         name: set.name,
         /** The memo's header line, verbatim. */
-        summary: setSummary(set.name, assumptions.edited.length),
-        /** Each changed assumption with its default, for the Underwriting assumptions section. */
-        changes: assumptions.edited,
+        summary: setSummary(set.name, setChanges.length),
+        /** Each changed assumption with its default (edited scenario presets last), for the Underwriting assumptions section. */
+        changes: setChanges,
         /** Copy this line verbatim into the memo (directly under the header); the app reads it and never shows it. */
         marker: memoMarker(set.name, set.edits),
       },
@@ -216,6 +221,7 @@ export function analystExport(
           }
         : { reason: bid.reason }),
     },
+    scenarios: scenariosSection(property, asOf, set.edits, a.scenario),
   }
 }
 
@@ -285,8 +291,7 @@ function rentRollSection(property: Property, asOf: ISODate, r: UnderwritingResul
   }
 }
 
-function assumptionsSection(property: Property, asOf: ISODate, r: UnderwritingResult) {
-  const a = r.assumptions
+function assumptionsSection(property: Property, asOf: ISODate, a: UnderwritingAssumptions) {
   const defaults = defaultsFor(property, asOf)
   const items = editableFields(a).map((f): ExportAssumption => {
     const v = fieldValue(a, f.key)
@@ -356,5 +361,45 @@ function exportGrid(title: string, g: SensitivityGrid): ExportGrid {
     center: ref(center.i, center.j),
     low: low && ref(low.i, low.j),
     high: high && ref(high.i, high.j),
+  }
+}
+
+/**
+ * Base, Downside and Upside side by side at the Base price, always measured
+ * against the set's Base case, whichever scenario the rest of the export is.
+ */
+function scenariosSection(property: Property, asOf: ISODate, edits: AssumptionEdits, viewed: Scenario) {
+  const cmp = scenarioComparison(property, asOf, edits)
+  if (cmp.status === 'unavailable') return { status: 'unavailable' as const, reason: cmp.reason }
+  const preset = (p: PresetItem) => ({
+    label: p.label,
+    change: p.display,
+    isEstimate: !p.edited,
+    sourceName: p.delta.sourceName,
+    /** What the change does here, e.g. "2% → 0.5%"; absent when it changes nothing. */
+    ...(p.applied ? { applied: p.applied } : {}),
+    ...(p.note ? { note: p.note } : {}),
+  })
+  return {
+    status: 'ok' as const,
+    note:
+      'Each case is a full engine run at the Base purchase price with only the preset assumptions changed. ' +
+      'vsBase is the change from the Base column. Quote the display strings.',
+    /** The scenario the rest of this export was run at. */
+    viewed,
+    purchasePrice: usd(cmp.price.value),
+    notes: cmp.notes,
+    presets: { downside: cmp.presets.downside.map(preset), upside: cmp.presets.upside.map(preset) },
+    columns: SCENARIOS.map((s) => SCENARIO_LABELS[s]),
+    rows: cmp.rows.map((row) => {
+      const round = (x: number | null) => (x === null || row.kind !== 'usd' ? x : Math.round(x))
+      const cell = (c: ComparisonCell) => ({
+        value: round(c.value),
+        display: c.display,
+        ...(c.vsBase ? { vsBase: fig(round(c.vsBase.value), c.vsBase.display) } : {}),
+        ...(c.hint ? { hint: c.hint } : {}),
+      })
+      return { key: row.key, label: row.label, base: cell(row.cells.base), downside: cell(row.cells.downside), upside: cell(row.cells.upside) }
+    }),
   }
 }

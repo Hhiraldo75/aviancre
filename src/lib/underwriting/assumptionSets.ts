@@ -1,12 +1,14 @@
 import type { ISODate, Property } from '../../types'
 import { slug } from '../format'
 import { defaultsFor, editableFields, sameValue, validateValue, type AssumptionEdits } from './edits'
+import { scenarioFields } from './scenarios'
 
 /**
  * Named assumption sets: a property's analyst edits saved under a name
  * ("Base", "My case") so they can be re-applied, shared as a small JSON file,
  * and run by `npm run underwrite -- <id> --assumptions <file>`. A set holds only
- * the changed assumptions; "Defaults" (no changes) is always available.
+ * the changed assumptions, including edited Downside/Upside presets
+ * ("scenarios.downside.…" keys); "Defaults" (no changes) is always available.
  */
 
 export const DEFAULTS_SET = 'Defaults'
@@ -79,7 +81,8 @@ export function parseAssumptionSetFile(
   if (!isObject(json.changes)) {
     errors.push('"changes" must be an object of assumption → value.')
   } else if (json.propertyId === property.id) {
-    const fields = new Map(editableFields(defaultsFor(property, asOf)).map((f) => [f.key, f]))
+    const defaults = defaultsFor(property, asOf)
+    const fields = new Map([...editableFields(defaults), ...scenarioFields(defaults)].map((f) => [f.key, f]))
     for (const [key, value] of Object.entries(json.changes)) {
       const f = fields.get(key)
       if (!f) errors.push(`Unknown assumption "${key}" for this property.`)
