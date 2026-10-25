@@ -18,41 +18,41 @@ Tenant improvements,,108000,83200,35200,54400,0,0,0,0,83200,35200,112000,112000
 Leasing commissions,,54476.3545,37088.3099,16005.0322,25229.7508,0,0,0,0,42602.81,18384.7511,59666.874,59666.874
 Capital reserves,,3600,3600,3600,3600,3600,3600,3600,3600,3600,3600,3600,3600
 Cash flow before debt,,124220.0797,199995.4312,278765.9136,219001.9216,309151.2155,318533.752,328197.7645,335249.375,191429.0984,283873.8733,136679.4904,166135.0177
-Debt service,,161736.5848,161736.5848,188729.5818,188729.5818,188729.5818,188729.5818,188729.5818,188729.5818,188729.5818,188729.5818,,
-Cash flow after debt,,-37516.505,38258.8465,90036.3318,30272.3398,120421.6337,129804.1702,139468.1827,146519.7932,2699.5166,95144.2915,,
-Net sale proceeds,,0,0,0,0,0,0,0,0,0,4614811.7771,,
-Loan payoff,,0,0,0,0,0,0,0,0,0,2206004.3437,,
-Unlevered cash flow,-4209298.2963,124220.0797,199995.4312,278765.9136,219001.9216,309151.2155,318533.752,328197.7645,335249.375,191429.0984,4898685.6503,,
-Levered cash flow,-1745925.6973,-37516.505,38258.8465,90036.3318,30272.3398,120421.6337,129804.1702,139468.1827,146519.7932,2699.5166,2503951.7249,,
+Debt service,,156643.1766,156643.1766,181035.9264,181035.9264,181035.9264,181035.9264,181035.9264,181035.9264,181035.9264,181035.9264,,
+Cash flow after debt,,-32423.0968,43352.2547,97729.9872,37965.9951,128115.2891,137497.8255,147161.8381,154213.4486,10393.1719,102837.9468,,
+Net sale proceeds,,0,0,0,0,0,0,0,0,0,4345114.9849,,
+Loan payoff,,0,0,0,0,0,0,0,0,0,2080701.5601,,
+Unlevered cash flow,-3955045.3791,124220.0797,199995.4312,278765.9136,219001.9216,309151.2155,318533.752,328197.7645,335249.375,191429.0984,4628988.8582,,
+Levered cash flow,-1640467.0981,-32423.0968,43352.2547,97729.9872,37965.9951,128115.2891,137497.8255,147161.8381,154213.4486,10393.1719,2367251.3716,,
 
 Metric,Value
-Purchase price,"$4,147,092"
-Price per SF,$288
-"Total cost (incl. closing, capex)","$4,209,298"
-Going-in cap rate,7.00%
-Loan amount,"$2,488,255"
-Equity required,"$1,745,926"
+Purchase price,"$3,896,596"
+Price per SF,$271
+"Total cost (incl. closing, capex)","$3,955,045"
+Going-in cap rate,7.45%
+Loan amount,"$2,337,958"
+Equity required,"$1,640,467"
 Year-11 NOI (raw),"$311,946"
 "Year-11 NOI (normalized, used for sale)","$341,402"
-Exit value (gross),"$4,708,992"
-Net sale proceeds,"$4,614,812"
-Loan payoff at sale,"$2,206,004"
-Unlevered IRR,6.69%
-Levered IRR,6.78%
-Unlevered equity multiple,1.71x
-Levered equity multiple,1.81x
-NPV (unlevered),"$-391,990"
-Debt yield (year-1 NOI / loan),11.67%
-Minimum DSCR,1.60x
-DSCR by year,1.79 | 2.00 | 1.77 | 1.60 | 1.66 | 1.71 | 1.76 | 1.80 | 1.70 | 1.81
-Average cash-on-cash,4.32%
-Cash-on-cash by year,-2.1% | 2.2% | 5.2% | 1.7% | 6.9% | 7.4% | 8.0% | 8.4% | 0.2% | 5.4%
+Exit value (gross),"$4,433,791"
+Net sale proceeds,"$4,345,115"
+Loan payoff at sale,"$2,080,702"
+Unlevered IRR,7.07%
+Levered IRR,7.36%
+Unlevered equity multiple,1.75x
+Levered equity multiple,1.88x
+NPV (unlevered),"$-262,658"
+Debt yield (year-1 NOI / loan),12.42%
+Minimum DSCR,1.67x
+DSCR by year,1.85 | 2.07 | 1.84 | 1.67 | 1.73 | 1.78 | 1.83 | 1.87 | 1.77 | 1.88
+Average cash-on-cash,5.04%
+Cash-on-cash by year,-2.0% | 2.6% | 6.0% | 2.3% | 7.8% | 8.4% | 9.0% | 9.4% | 0.6% | 6.3%
 WALT (years),2.19
 In-place vs market rent,$28.94 vs $22.00/SF/yr (+31.5%)
 
 Warning
 36% of rentable SF rolls in year 2. That year's cash flow depends on renewals.
-"Negative leverage: the 7.00% going-in cap rate is below the 7.58% loan constant, so debt lowers the yearly cash yield. The levered IRR can still be higher because the sale gain goes to a smaller equity check."
+"Negative leverage: the 7.45% going-in cap rate is below the 7.74% loan constant, so debt lowers the yearly cash yield. The levered IRR can still be higher because the sale gain goes to a smaller equity check."
 In-place rents are 32% above market; income declines as leases roll.
 "Casa Lucenti Trattoria (suite 101) has a $30.00/SF renewal option, above the projected $23.35/SF market rent at its 2030-02-28 expiration. The model assumes renewal at market."
 
@@ -61,13 +61,13 @@ Note
 
 Assumption,Value,Source,Source type
 scenario,base,,
-acquisition.purchasePrice,4147091.9176,Default year-1 NOI ÷ market cap rate,estimated
-acquisition.marketCapRate,0.07,Placeholder benchmark – replace with quarterly market report,estimated
+acquisition.purchasePrice,3896596.4326,Default year-1 NOI ÷ market cap rate,estimated
+acquisition.marketCapRate,0.0745,"NAR Commercial Real Estate Report Q1 2026, Providence-Warwick metro (CoStar data): metro 7.8%",estimated
 acquisition.closingCostsPct,0.015,Industry rule of thumb – replace with market report,estimated
 acquisition.analysisStartDate,2026-11-01,,
 acquisition.holdYears,10,Placeholder – replace with investor return target,estimated
 acquisition.initialCapex,0,Placeholder – replace with capital plan,estimated
-leasing.marketRent,22,Submarket benchmark × class B (1×),estimated
+leasing.marketRent,22,"Submarket benchmark × class B (1×) – Placeholder submarket rent, urban street retail – replace with a street-retail rent survey",estimated
 leasing.marketRentGrowth,0.02,Industry rule of thumb – replace with market report,estimated
 leasing.renewalProbability,0.7,Industry rule of thumb – replace with market report,estimated
 leasing.downtimeMonths,9,Industry rule of thumb – replace with market report,estimated
@@ -89,13 +89,13 @@ operating.expenseGrowth,0.03,Industry rule of thumb – replace with market repo
 operating.managementFeePct,0.03,Industry rule of thumb – replace with market report,estimated
 operating.capitalReservesPerYear,0.25,Industry rule of thumb – replace with market report,estimated
 debt.enabled,true,,
-debt.ltv,0.6,Placeholder – replace with lender term sheet,estimated
+debt.ltv,0.6,"Consistent with Northmarq quotes, Oct 2026 – replace with lender term sheet",estimated
 debt.rate.type,fixed,,
-debt.rate.rate,0.065,Placeholder – replace with lender term sheet,estimated
-debt.amortizationYears,30,Placeholder – replace with lender term sheet,estimated
-debt.interestOnlyYears,2,Placeholder – replace with lender term sheet,estimated
-debt.loanFeesPct,0.01,Placeholder – replace with lender term sheet,estimated
-exit.exitCapRate,0.0725,"Market cap rate + 25 bps – rule of thumb, replace with broker opinion of value",estimated
+debt.rate.rate,0.067,"10-yr Treasury 4.96% (FRED DGS10 (10-year Treasury), Oct 22, 2026) + 176 bps retail spread (CRED iQ loan spreads via Commercial Observer, Mar 31, 2026)",estimated
+debt.amortizationYears,30,"Consistent with Northmarq quotes, Oct 2026 – replace with lender term sheet",estimated
+debt.interestOnlyYears,2,"Consistent with Northmarq quotes, Oct 2026 – replace with lender term sheet",estimated
+debt.loanFeesPct,0.01,"Consistent with Northmarq quotes, Oct 2026 – replace with lender term sheet",estimated
+exit.exitCapRate,0.077,"Market cap rate + 25 bps – rule of thumb, replace with broker opinion of value",estimated
 exit.sellingCostsPct,0.02,Industry rule of thumb – replace with market report,estimated
 exit.capForwardNOI,true,,
 discountRate,0.08,Placeholder – replace with investor return target,estimated
