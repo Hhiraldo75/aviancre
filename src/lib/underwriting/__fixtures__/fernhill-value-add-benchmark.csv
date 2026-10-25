@@ -1,0 +1,122 @@
+AVIANCRE underwriting: Fernhill Commons (Sample)
+Analysis start 2026-11-01; losses and costs are positive amounts
+
+Line,Year 0,Year 1,Year 2,Year 3,Year 4,Year 5,Year 6,Year 7,Year 8,Year 9,Year 10,"Year 11 (forward, raw)",Year 11 (normalized for sale)
+Physical occupancy (before general vacancy),,0.9653,0.9917,1,1,1,1,1,1,1,1,1,
+Units renovated (started),,48,12,0,0,0,0,0,0,0,0,,
+Gross potential rent (at market),,2387760,2530771.8,2608922.844,2687190.5293,2767806.2452,2850840.4326,2936365.6455,3024456.6149,3115190.3133,3208646.0227,3304905.4034,3304905.4034
+Less: loss to lease,,36526.25,33885.9906,31697.1448,31930.3813,32771.8115,33754.9659,34767.6149,35810.6433,36884.9626,37991.5115,39131.2568,39131.2568
+Less: absorption & turnover vacancy,,86340,23283.15,0,0,0,0,0,0,0,0,0,0
+  of which renovation downtime,,82965,23283.15,0,0,0,0,0,0,0,0,0,0
+Less: free rent,,0,0,0,0,0,0,0,0,0,0,0,0
+Expense recoveries,,0,0,0,0,0,0,0,0,0,0,0,0
+Other income,,39144,40318.32,41527.8696,42773.7057,44056.9169,45378.6244,46739.9831,48142.1826,49586.4481,51074.0415,52606.2628,52606.2628
+Less: general vacancy,,116143.8875,126860.2065,130937.6784,134901.6927,138954.5675,143123.2046,147416.9007,151839.4077,156394.5899,161086.4276,165919.0205,165919.0205
+Less: credit loss,,21878.9386,23870.6077,24878.1589,25631.3216,26401.3678,27193.4089,28009.2111,28849.4875,29714.9721,30606.4213,31524.6139,31524.6139
+Effective gross income,,2166014.9239,2363190.1652,2462937.7315,2537500.8394,2613735.4152,2692147.4776,2772911.9019,2856099.259,2941782.2368,3030035.7039,3120936.775,3120936.775
+Operating expenses (incl. mgmt),,880980.4477,911375.705,939582.5319,967790.2572,996827.2514,1026732.069,1057534.031,1089260.052,1121937.8535,1155595.9891,1190263.8688,1190263.8688
+  of which management fee,,64980.4477,70895.705,73888.1319,76125.0252,78412.0625,80764.4243,83187.3571,85682.9778,88253.4671,90901.0711,93628.1032,93628.1032
+Net operating income,,1285034.4762,1451814.4602,1523355.1995,1569710.5822,1616908.1637,1665415.4087,1715377.8709,1766839.207,1819844.3833,1874439.7147,1930672.9062,1930672.9062
+Turnover costs,,79000,65920,63654,65563.62,67530.5286,69556.4445,71643.1378,73792.4319,76006.2049,78286.391,80634.9828,80634.9828
+Leasing commissions,,0,0,0,0,0,0,0,0,0,0,0,0
+Capital reserves,,36000,36000,36000,36000,36000,36000,36000,36000,36000,36000,36000,36000
+Renovation capex,,600000,150000,0,0,0,0,0,0,0,0,0,0
+Funded from renovation reserve,,600000,150000,0,0,0,0,0,0,0,0,0,0
+Cash flow before debt,,1170034.4762,1349894.4602,1423701.1995,1468146.9622,1513377.6351,1559858.9642,1607734.7331,1657046.7751,1707838.1784,1760153.3237,1814037.9234,1814037.9234
+Debt service,,818471.1698,818471.1698,955069.7623,955069.7623,955069.7623,955069.7623,955069.7623,955069.7623,955069.7623,955069.7623,,
+Cash flow after debt,,351563.3064,531423.2904,468631.4372,513077.1999,558307.8728,604789.2019,652664.9708,701977.0128,752768.4161,805083.5614,,
+Net sale proceeds,,0,0,0,0,0,0,0,0,0,29108606.8933,,
+Loan payoff,,0,0,0,0,0,0,0,0,0,11163528.3886,,
+Unspent reserve returned,,0,0,0,0,0,0,0,0,0,0,,
+Unlevered cash flow,-22051236.8549,1170034.4762,1349894.4602,1423701.1995,1468146.9622,1513377.6351,1559858.9642,1607734.7331,1657046.7751,1707838.1784,30868760.2171,,
+Levered cash flow,-9585291.3457,351563.3064,531423.2904,468631.4372,513077.1999,558307.8728,604789.2019,652664.9708,701977.0128,752768.4161,18750162.0661,,
+
+Metric,Value
+Purchase price,"$20,986,440"
+Price per SF,$221
+"Total cost (incl. closing, capex)","$22,051,237"
+Going-in cap rate,6.12%
+Loan amount,"$12,591,864"
+Equity required,"$9,585,291"
+Year-11 NOI (raw),"$1,930,673"
+"Year-11 NOI (normalized, used for sale)","$1,930,673"
+Exit value (gross),"$29,702,660"
+Net sale proceeds,"$29,108,607"
+Loan payoff at sale,"$11,163,528"
+Unlevered IRR,8.84%
+Levered IRR,11.02%
+Unlevered equity multiple,2.01x
+Levered equity multiple,2.49x
+NPV (unlevered),"$1,397,614"
+Debt yield (year-1 NOI / loan),10.21%
+Minimum DSCR,1.57x
+DSCR by year,1.57 | 1.77 | 1.60 | 1.64 | 1.69 | 1.74 | 1.80 | 1.85 | 1.91 | 1.96
+Average cash-on-cash,6.20%
+Cash-on-cash by year,3.7% | 5.5% | 4.9% | 5.4% | 5.8% | 6.3% | 6.8% | 7.3% | 7.9% | 8.4%
+WALT (years),n/a
+In-place vs market rent,"$1,566.45 vs $1,620.25/unit/mo (−3.3%)"
+Units renovated,60 of 60
+Renovation reserve (in total cost),"$750,000"
+Renovation spend (drawn),"$750,000"
+Unspent reserve returned at sale,$0
+Program finishes (last re-lease),month 16
+
+Warning
+"Negative leverage: the 6.12% going-in cap rate is below the 7.58% loan constant, so debt lowers the yearly cash yield. The levered IRR can still be higher because the sale gain goes to a smaller equity check."
+
+Note
+"Value-add plan on: 60 units at $12,500 each. The $750,000 renovation reserve is funded with equity at closing (in total cost), each renovation draws its cost, and what is left is returned at sale. The loan is LTV × price and funds none of the plan."
+
+Assumption,Value,Source,Source type
+scenario,base,,
+acquisition.purchasePrice,20986440.2512,Analyst input,imported
+acquisition.marketCapRate,0.0625,Analyst input,imported
+acquisition.closingCostsPct,0.015,Analyst input,imported
+acquisition.analysisStartDate,2026-11-01,,
+acquisition.holdYears,10,Analyst input,imported
+acquisition.initialCapex,0,Analyst input,imported
+leasing.marketRent,1620.25,Analyst input,imported
+leasing.marketRentGrowth,0.03,Analyst input,imported
+leasing.renewalProbability,0,Not used for multifamily,estimated
+leasing.downtimeMonths,0,Not used for multifamily,estimated
+leasing.newLease.termMonths,0,Not used for multifamily,estimated
+leasing.newLease.freeRentMonths,0,Not used for multifamily,estimated
+leasing.newLease.tiPerSF,0,Not used for multifamily,estimated
+leasing.newLease.leasingCommissionPct,0,Not used for multifamily,estimated
+leasing.renewal.termMonths,0,Not used for multifamily,estimated
+leasing.renewal.freeRentMonths,0,Not used for multifamily,estimated
+leasing.renewal.tiPerSF,0,Not used for multifamily,estimated
+leasing.renewal.leasingCommissionPct,0,Not used for multifamily,estimated
+leasing.newLeaseEscalationPct,0,Not used for multifamily,estimated
+leasing.vacantSpaceRecovery,none,,
+operating.generalVacancyPct,0.05,Analyst input,imported
+operating.creditLossPct,0.01,Analyst input,imported
+operating.expenses[Operating expenses].annualAmount,816000,Analyst input,imported
+operating.expenses[Operating expenses].recoverable,false,,
+operating.expenseGrowth,0.03,Analyst input,imported
+operating.managementFeePct,0.03,Analyst input,imported
+operating.capitalReservesPerYear,300,Analyst input,imported
+multifamily.turnoverRate,0.5,Analyst input,imported
+multifamily.turnoverCostPerUnit,1000,Analyst input,imported
+multifamily.leaseUpUnitsPerMonth,8,Analyst input,imported
+multifamily.maxRenewalIncreasePct,0.05,Analyst input,imported
+valueAdd.enabled,true,,
+valueAdd.units,120,,
+valueAdd.unitCount,60,Placeholder – replace with the renovation business plan,estimated
+valueAdd.startMonth,1,Placeholder – replace with the renovation business plan,estimated
+valueAdd.maxPerMonth,4,Placeholder – replace with the renovation business plan,estimated
+valueAdd.costPerUnit,12500,Placeholder – replace with contractor bids,estimated
+valueAdd.premiumMonthly,175,Placeholder – replace with renovated rent comps,estimated
+valueAdd.downtimeMonths,1,Industry rule of thumb – replace with market report,estimated
+debt.enabled,true,,
+debt.ltv,0.6,Analyst input,imported
+debt.rate.type,fixed,,
+debt.rate.rate,0.065,Analyst input,imported
+debt.amortizationYears,30,Analyst input,imported
+debt.interestOnlyYears,2,Analyst input,imported
+debt.loanFeesPct,0.01,Analyst input,imported
+exit.exitCapRate,0.065,Analyst input,imported
+exit.sellingCostsPct,0.02,Analyst input,imported
+exit.capForwardNOI,true,,
+discountRate,0.08,Analyst input,imported
+targetLeveredIRR,0.1,Analyst input,imported

@@ -64,6 +64,17 @@ const MULTIFAMILY_LINES: Record<string, LineField> = Object.fromEntries(
   }),
 )
 
+/** With the value-add plan on (convention 19): its rows, where the report puts them. */
+const VALUE_ADD_LINES: Record<string, LineField> = Object.fromEntries(
+  Object.entries(MULTIFAMILY_LINES).flatMap(([label, key]): [string, LineField][] => {
+    if (key === 'occupancy') return [[label, key], ['Units renovated (started)', 'unitsRenovated']]
+    if (key === 'absorptionTurnoverVacancy') return [[label, key], ['  of which renovation downtime', 'renovationDowntime']]
+    if (key === 'capitalReserves') return [[label, key], ['Renovation capex', 'renovationCapex'], ['Funded from renovation reserve', 'renovationReserveDraw']]
+    if (key === 'loanPayoff') return [[label, key], ['Unspent reserve returned', 'unspentReserveReturned']]
+    return [[label, key]]
+  }),
+)
+
 /** Engine value for a fixture column: Year 0, Years 1–10, then both Year-11 columns. */
 function engineValue(r: UnderwritingResult, key: LineField, column: number): number | null {
   if (column === 0) {
@@ -79,10 +90,11 @@ function engineValue(r: UnderwritingResult, key: LineField, column: number): num
  * Every fixture check, against one engine result: each cash-flow line in every
  * year (both Year-11 columns included) within $1, price, loan, equity, sale and
  * payoff within $1, IRRs within 0.0001, minimum DSCR within 0.01, WALT within 0.01 years
- * (multifamily has no WALT: the fixture's "n/a" must stay n/a).
+ * (multifamily has no WALT: the fixture's "n/a" must stay n/a). With the
+ * value-add plan on, its rows are checked too, the units renovated exactly.
  */
 export function goldenChecks(r: UnderwritingResult, fixture: string) {
-  const lines = r.assumptions.multifamily ? MULTIFAMILY_LINES : LINES
+  const lines = r.assumptions.multifamily ? (r.valueAdd ? VALUE_ADD_LINES : MULTIFAMILY_LINES) : LINES
   const rows = parseCSV(fixture)
   const headerAt = rows.findIndex((row) => row[0] === 'Line')
   const header = rows[headerAt]
@@ -122,7 +134,7 @@ export function goldenChecks(r: UnderwritingResult, fixture: string) {
   for (const row of cashFlowRows) {
     const [label, ...cells] = row
     const key = lines[label]
-    const tolerance = key === 'occupancy' ? RATE : DOLLARS
+    const tolerance = key === 'occupancy' ? RATE : key === 'unitsRenovated' ? 0 : DOLLARS
     it(`matches "${label.trim()}" in every year`, () => {
       let compared = 0
       cells.forEach((cell, column) => {
