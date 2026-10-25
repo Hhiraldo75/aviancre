@@ -12,12 +12,13 @@ export default function SourceBadge({
   data,
   asUser = false,
 }: {
-  data: Pick<Sourced<unknown>, 'source' | 'sourceName' | 'confidence' | 'range' | 'notes'>
+  data: Pick<Sourced<unknown>, 'source' | 'sourceName' | 'confidence' | 'range' | 'notes' | 'asOf'>
   asUser?: boolean
 }) {
   const style = STYLES[asUser ? 'user' : data.source]
   const detail = [
     data.sourceName,
+    data.asOf && `As of ${data.asOf}`,
     data.confidence && `Confidence: ${data.confidence}`,
     data.range && `Range: ${data.range.low.toFixed(2)} – ${data.range.high.toFixed(2)}`,
     data.notes,

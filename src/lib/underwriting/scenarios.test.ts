@@ -57,7 +57,7 @@ describe('scenario assumptions', () => {
     expect(value(d, 'exit.exitCapRate')).toBeCloseTo(value(base, 'exit.exitCapRate') + 0.005, 12)
     const ec = fieldValue(d, 'exit.exitCapRate')
     expect(ec.source).toBe('estimated')
-    expect(ec.sourceName).toBe('Downside scenario: Base 7.25% +50 bps (preset)')
+    expect(ec.sourceName).toBe('Downside scenario: Base 7.70% +50 bps (preset)')
     // Price and market cap are never moved; the input object is untouched.
     expect(d.acquisition.purchasePrice).toEqual(base.acquisition.purchasePrice)
     expect(d.acquisition.marketCapRate).toEqual(base.acquisition.marketCapRate)
@@ -79,7 +79,7 @@ describe('scenario assumptions', () => {
     expect(scenarioOverrides(base, 'upside').map((o) => o.key)).toEqual(['leasing.marketRentGrowth', 'operating.generalVacancyPct', 'exit.exitCapRate'])
     expect(value(u, 'leasing.marketRentGrowth')).toBeCloseTo(0.03, 12)
     expect(value(u, 'operating.generalVacancyPct')).toBeCloseTo(0.04, 12)
-    expect(value(u, 'exit.exitCapRate')).toBeCloseTo(0.07, 12)
+    expect(value(u, 'exit.exitCapRate')).toBeCloseTo(0.0745, 12)
   })
 
   it('floors Upside vacancy at 3% and never raises a lower Base', () => {
@@ -105,14 +105,14 @@ describe('scenario assumptions', () => {
   it('uses edited presets, labeled as the analyst’s', () => {
     const edits = { [presetKey('downside', 'exit.exitCapRate')]: 0.01, [presetKey('upside', 'operating.expenseGrowth')]: -0.005 }
     const d = withScenario(base, 'downside', edits)
-    expect(value(d, 'exit.exitCapRate')).toBeCloseTo(0.0825, 12)
-    expect(fieldValue(d, 'exit.exitCapRate').sourceName).toBe('Downside scenario: Base 7.25% +100 bps (your preset)')
+    expect(value(d, 'exit.exitCapRate')).toBeCloseTo(0.087, 12)
+    expect(fieldValue(d, 'exit.exitCapRate').sourceName).toBe('Downside scenario: Base 7.70% +100 bps (your preset)')
     expect(value(withScenario(base, 'upside', edits), 'operating.expenseGrowth')).toBeCloseTo(0.025, 12)
     expect(presetChanges(base, edits)).toEqual([
       'Downside exit cap +100 bps (preset +50 bps)',
       'Upside expense growth −0.5 pts (preset 0 pts)',
     ])
-    expect(scenarioChanges(base, 'downside', edits)).toContain('Exit cap rate 7.25% → 8.25% (+100 bps)')
+    expect(scenarioChanges(base, 'downside', edits)).toContain('Exit cap rate 7.70% → 8.70% (+100 bps)')
   })
 
   it('offers preset inputs that parse in display units', () => {

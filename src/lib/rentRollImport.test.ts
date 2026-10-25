@@ -4,10 +4,13 @@ import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
 import type { Property } from '../types'
 import atwellsDoc from '../../docs/atwells-rent-roll.csv?raw'
 import atwellsFixture from './underwriting/__fixtures__/atwells-benchmark.csv?raw'
+import atwellsValidation from './underwriting/__fixtures__/atwells-validation.assumptions.json'
 import westminsterFixture from './underwriting/__fixtures__/westminster-benchmark.csv?raw'
+import westminsterValidation from './underwriting/__fixtures__/westminster-validation.assumptions.json'
 import { parseCSV } from './csv'
 import { readRentRollFile } from './rentRollFile'
 import { parseRentRoll, parseDate, parseNumber, type Cell, type ImportIssue } from './rentRollImport'
+import { assumptionsFor } from './underwriting/edits'
 import { goldenChecks } from './underwriting/goldenChecks'
 import { underwrite } from './underwriting/underwrite'
 import { rentRollCSV } from './underwriting/report'
@@ -52,15 +55,18 @@ const exported = importCSV(rentRollCSV(ATWELLS))
 const fromDoc = importCSV(atwellsDoc)
 const fromXlsx = parseRentRoll(await readRentRollFile('atwells.xlsx', xlsxFrom(atwellsDoc)), { fileName: 'atwells.xlsx', asOf: AS_OF })
 
+/** An imported deal run at the validation set its golden fixture was matched with (the set's id is the sample's). */
+const atValidation = (p: Property, set: { changes: Record<string, number> }) => underwrite(p, AS_OF, assumptionsFor(p, AS_OF, set.changes))
+
 describe('Atwells golden benchmark, from an imported rent roll', () => {
   it('imports the export with no issues', () => {
     expect(exported.issues).toEqual([])
     expect(fromDoc.issues).toEqual([])
     expect(fromXlsx.issues).toEqual([])
   })
-  describe('exported in memory', () => goldenChecks(underwrite(loaded(exported), AS_OF), atwellsFixture))
-  describe('from docs/atwells-rent-roll.csv', () => goldenChecks(underwrite(loaded(fromDoc), AS_OF), atwellsFixture))
-  describe('from an Excel .xlsx', () => goldenChecks(underwrite(loaded(fromXlsx), AS_OF), atwellsFixture))
+  describe('exported in memory', () => goldenChecks(atValidation(loaded(exported), atwellsValidation), atwellsFixture))
+  describe('from docs/atwells-rent-roll.csv', () => goldenChecks(atValidation(loaded(fromDoc), atwellsValidation), atwellsFixture))
+  describe('from an Excel .xlsx', () => goldenChecks(atValidation(loaded(fromXlsx), atwellsValidation), atwellsFixture))
 
   it('reproduces the sample run exactly', () => {
     const { generatedAt: _a, propertyId: _p, ...sample } = underwrite(ATWELLS, AS_OF)
@@ -72,7 +78,7 @@ describe('Atwells golden benchmark, from an imported rent roll', () => {
 describe('Westminster golden benchmark, from an imported rent roll', () => {
   const r = importCSV(rentRollCSV(WESTMINSTER))
   it('imports with no issues', () => expect(r.issues).toEqual([]))
-  goldenChecks(underwrite(loaded(r), AS_OF), westminsterFixture)
+  goldenChecks(atValidation(loaded(r), westminsterValidation), westminsterFixture)
 })
 
 describe('an imported deal', () => {

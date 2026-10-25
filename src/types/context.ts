@@ -43,9 +43,10 @@ export interface SaleComp {
   source: Sourced<string>
 }
 
-/** One year of submarket history for trend charts. */
-export interface SubmarketTrendPoint {
-  year: number
+/** One reported period of metro market history. */
+export interface MarketTrendPoint {
+  /** e.g. "Q1 2026" */
+  period: string
   /** Same basis as the submarket benchmark (per SF/yr or per unit/mo). */
   marketRent: number
   vacancyRate: Pct

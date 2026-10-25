@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { AnnualCashFlow } from '../../types'
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties'
 import { activeLeases, occupancy, yearsBetween } from '../metrics'
-import { RULE_OF_THUMB } from './defaults'
+import atwellsValidation from './__fixtures__/atwells-validation.assumptions.json'
+import { LENDER_TERMS, RULE_OF_THUMB } from './defaults'
 import { fullUnderwriting, type FullUnderwriting } from './fullView'
 import { maxBid } from './maxBid'
 import { maxBidStat } from './summary'
@@ -24,6 +25,8 @@ function ok(v: FullUnderwriting) {
 
 const v = ok(fullUnderwriting(ATWELLS, AS_OF))
 const r = underwrite(ATWELLS, AS_OF)
+/** At the assumptions the Excel benchmark was matched at, so its figures are Excel's. */
+const validation = ok(fullUnderwriting(ATWELLS, AS_OF, atwellsValidation.changes))
 
 describe('full underwriting: cash flow tab (Atwells)', () => {
   const t = v.cashFlow
@@ -33,8 +36,9 @@ describe('full underwriting: cash flow tab (Atwells)', () => {
     return found
   }
 
-  it('shows the check values for NOI', () => {
-    const noi = row('Net operating income')
+  it('shows the Excel check values for NOI at the validation set', () => {
+    const t = validation.cashFlow
+    const noi = t.rows.find((x) => x.label === 'Net operating income')!
     expect(noi.cells[t.columns.indexOf('Year 1')]).toBe('290,296')
     expect(noi.cells[t.columns.indexOf('Year 4')]).toBe('302,232')
     expect(noi.cells[t.columns.indexOf('Year 11 normalized')]).toBe('341,402')
@@ -168,7 +172,6 @@ describe('full underwriting: returns tab', () => {
     expect(m.loanAmount + m.equityRequired).toBeCloseTo(m.totalCost + m.loanFee, 6)
   })
   it('maps engine metrics', () => {
-    expect(value(ret.sale, 'Year-11 NOI (normalized')).toBe('$341,402')
     expect(value(ret.sale, 'Less: selling costs')).toBe(`($${Math.round(m.sellingCosts).toLocaleString('en-US')})`)
     expect(value(ret.sale, 'Net sale proceeds')).toBe(`$${Math.round(m.netSaleProceeds).toLocaleString('en-US')}`)
     expect(ret.sale.at(-1)).toEqual({
@@ -176,11 +179,15 @@ describe('full underwriting: returns tab', () => {
       value: `$${Math.round(m.netSaleProceeds - m.loanPayoff).toLocaleString('en-US')}`,
       kind: 'total',
     })
-    expect(value(ret.returns, 'Unlevered IRR')).toBe('6.69%')
-    expect(value(ret.returns, 'Levered IRR')).toBe('6.78%')
-    expect(value(ret.returns, 'NPV @ 8.00%')).toBe('-$391,990')
-    expect(value(ret.debt, 'Loan constant')).toBe('7.58%')
-    expect(ret.debtByYear.rows.find((x) => x.label === 'DSCR')?.cells[3]).toBe('1.60x')
+  })
+  it('shows the Excel check values at the validation set', () => {
+    const vr = validation.returns
+    expect(value(vr.sale, 'Year-11 NOI (normalized')).toBe('$341,402')
+    expect(value(vr.returns, 'Unlevered IRR')).toBe('6.69%')
+    expect(value(vr.returns, 'Levered IRR')).toBe('6.78%')
+    expect(value(vr.returns, 'NPV @ 8.00%')).toBe('-$391,990')
+    expect(value(vr.debt, 'Loan constant')).toBe('7.58%')
+    expect(vr.debtByYear.rows.find((x) => x.label === 'DSCR')?.cells[3]).toBe('1.60x')
   })
   it('shows the IRR streams for Year 0 through Year 10', () => {
     expect(ret.cashFlows.columns).toEqual(Array.from({ length: 11 }, (_, i) => `Year ${i}`))
@@ -203,8 +210,8 @@ describe('full underwriting: returns tab', () => {
     expect(dscr.floor).toBe(1.25)
     expect(dscr.points.map((x) => x.dscr)).toEqual(m.dscrByYear)
     for (const x of dscr.points) expect(x.belowFloor).toBe(x.dscr < 1.25)
-    expect(dscr.points[3].tooltip).toBe('Year 4: DSCR 1.60x')
-    const tight = ok(fullUnderwriting(ATWELLS, AS_OF, { 'debt.ltv': 0.8 })).returns.dscrChart!
+    expect(dscr.points[3].tooltip).toBe('Year 4: DSCR 1.67x')
+    const tight = ok(fullUnderwriting(ATWELLS, AS_OF, { 'debt.ltv': 0.9 })).returns.dscrChart!
     const low = tight.points.find((x) => x.belowFloor)!
     expect(low.tooltip).toBe(`Year ${low.year}: DSCR ${low.dscr.toFixed(2)}x · below 1.25x`)
   })
@@ -234,8 +241,11 @@ describe('full underwriting: assumptions tab', () => {
     const items = v.assumptions.flatMap((g) => g.items)
     expect(items.some((x) => x.note === RULE_OF_THUMB)).toBe(false)
     const debt = v.assumptions.find((g) => g.title === 'Debt')!
-    expect(debt.note).toBe('Placeholder – replace with lender term sheet')
-    expect(debt.items.filter((x) => x.src).every((x) => x.note === '')).toBe(true)
+    expect(debt.note).toBe(LENDER_TERMS)
+    expect(LENDER_TERMS).toBe('Consistent with Northmarq quotes, Oct 2026 – replace with lender term sheet')
+    const rate = debt.items.find((x) => x.label === 'Interest rate (fixed)')!
+    expect(rate.note).toMatch(/^10-yr Treasury 4\.96% \(FRED DGS10.*\) \+ 176 bps retail spread \(CRED iQ/)
+    expect(debt.items.filter((x) => x.src && x !== rate).every((x) => x.note === '')).toBe(true)
     for (const g of v.assumptions) {
       const notes = g.items.map((x) => x.note).filter(Boolean)
       expect(new Set(notes).size, g.title).toBe(notes.length)
@@ -244,12 +254,12 @@ describe('full underwriting: assumptions tab', () => {
   it('makes every sourced number editable, with its default', () => {
     for (const g of v.assumptions) for (const x of g.items) expect(!!x.edit, x.label).toBe(!!x.src)
     const exitCap = v.assumptions.flatMap((g) => g.items).find((x) => x.label === 'Exit cap rate')!.edit!
-    expect(exitCap).toMatchObject({ input: '7.25', defaultText: 'default 7.25%', edited: false })
+    expect(exitCap).toMatchObject({ input: '7.7', defaultText: 'default 7.70%', edited: false })
     const edited = ok(fullUnderwriting(ATWELLS, AS_OF, { 'exit.exitCapRate': 0.075 }))
     const item = edited.assumptions.flatMap((g) => g.items).find((x) => x.label === 'Exit cap rate')!
-    expect(item.edit).toMatchObject({ input: '7.5', defaultText: 'default 7.25%', edited: true })
+    expect(item.edit).toMatchObject({ input: '7.5', defaultText: 'default 7.70%', edited: true })
     expect(item.src?.sourceName).toBe('Analyst input')
-    expect(edited.header.changes).toEqual(['Exit cap rate 7.50% (default 7.25%)'])
+    expect(edited.header.changes).toEqual(['Exit cap rate 7.50% (default 7.70%)'])
     expect(v.header.changes).toEqual([])
   })
   it('lists multifamily turnover instead of commercial leasing terms', () => {
@@ -265,7 +275,7 @@ describe('full underwriting: header', () => {
     expect(v.header.warnings.some((w) => w.full.startsWith('Purchase price'))).toBe(false)
     expect(v.header.notes).toEqual([expect.stringMatching(/^Purchase price is a model estimate/)])
     expect(v.header.warnings.find((w) => w.full.startsWith('Negative leverage'))?.full).toBe(
-      'Negative leverage: the 7.00% going-in cap rate is below the 7.58% loan constant, so debt lowers the yearly cash yield. ' +
+      'Negative leverage: the 7.45% going-in cap rate is below the 7.74% loan constant, so debt lowers the yearly cash yield. ' +
         'The levered IRR can still be higher because the sale gain goes to a smaller equity check.',
     )
   })

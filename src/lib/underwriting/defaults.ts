@@ -1,4 +1,5 @@
-import type { ISODate, LeasingTerms, MarketLeasingAssumptions, Property, Sourced, UnderwritingAssumptions } from '../../types'
+import type { BenchmarkType, ISODate, LeasingTerms, MarketLeasingAssumptions, Property, Sourced, UnderwritingAssumptions } from '../../types'
+import { DEBT_AS_OF, DEBT_QUOTES, DEBT_RATE, LOAN_SPREAD_BPS, LOAN_TERMS, SPREAD_SOURCE, TREASURY_10Y, TREASURY_SOURCE } from '../../data/debtMarket'
 import { estimate, fromImport } from '../sourced'
 import { analysisStartFor } from './timeline'
 import { operatingCashFlows } from './waterfall'
@@ -9,7 +10,7 @@ import { operatingCashFlows } from './waterfall'
  */
 
 export const RULE_OF_THUMB = 'Industry rule of thumb – replace with market report'
-export const LENDER_PLACEHOLDER = 'Placeholder – replace with lender term sheet'
+export const LENDER_TERMS = `${DEBT_QUOTES} – replace with lender term sheet`
 export const INVESTOR_TARGET = 'Placeholder – replace with investor return target'
 export const ANALYST_INPUT = 'Analyst input'
 
@@ -74,11 +75,6 @@ export const SHARED_DEFAULTS = {
   expenseGrowth: 0.03,
   managementFeePct: 0.03,
   closingCostsPct: 0.015,
-  ltv: 0.6,
-  interestRate: 0.065,
-  amortizationYears: 30,
-  interestOnlyYears: 2,
-  loanFeesPct: 0.01,
   holdYears: 10,
   exitCapSpread: 0.0025,
   sellingCostsPct: 0.02,
@@ -98,7 +94,17 @@ export const MULTIFAMILY_DEFAULTS = {
 } as const
 
 const rot = (value: number) => estimate(value, RULE_OF_THUMB)
-const lender = (value: number) => estimate(value, LENDER_PLACEHOLDER)
+const lender = (value: number) => estimate(value, LENDER_TERMS, { confidence: 'medium', asOf: DEBT_AS_OF })
+
+/** Fixed rate for the asset type: 10-year Treasury + loan spread (mixed-use borrows office). */
+function debtRate(type: BenchmarkType): Sourced<number> {
+  const bps = LOAN_SPREAD_BPS[type]
+  return estimate(DEBT_RATE[type], `10-yr Treasury ${(TREASURY_10Y * 100).toFixed(2)}% (${TREASURY_SOURCE}) + ${bps} bps ${type} spread (${SPREAD_SOURCE})`, {
+    confidence: 'medium',
+    asOf: DEBT_AS_OF,
+    notes: `${DEBT_QUOTES}. Rounded to 0.05%.`,
+  })
+}
 const NOT_USED = 'Not used for multifamily'
 
 function terms(termMonths: number, freeRentMonths: number, tiPerSF: number, lcPct: number): LeasingTerms {
@@ -190,11 +196,11 @@ export function defaultAssumptions(property: Property, asOf: ISODate): Underwrit
       : undefined,
     debt: {
       enabled: true,
-      ltv: lender(s.ltv),
-      rate: { type: 'fixed', rate: lender(s.interestRate) },
-      amortizationYears: lender(s.amortizationYears),
-      interestOnlyYears: lender(s.interestOnlyYears),
-      loanFeesPct: lender(s.loanFeesPct),
+      ltv: lender(LOAN_TERMS.ltv),
+      rate: { type: 'fixed', rate: debtRate(isMF ? 'multifamily' : commercialType) },
+      amortizationYears: lender(LOAN_TERMS.amortizationYears),
+      interestOnlyYears: lender(LOAN_TERMS.interestOnlyYears),
+      loanFeesPct: lender(LOAN_TERMS.loanFeesPct),
     },
     exit: {
       exitCapRate: estimate(

@@ -4,14 +4,27 @@
  * Test-only; nothing in the app imports this.
  */
 import { expect, it } from 'vitest'
-import type { AnnualCashFlow, UnderwritingResult } from '../../types'
+import type { AnnualCashFlow, ISODate, Property, UnderwritingResult } from '../../types'
 import { parseCSV } from '../csv'
+import { parseAssumptionSetFile, type SavedAssumptionSet } from './assumptionSets'
 
 const DOLLARS = 1
 const RATE = 0.0001
 const DSCR = 0.01
 /** Years. WALT runs from the analysis start (Nov 1, 2026), not the Oct 4 analysis date. */
 const WALT = 0.01
+
+/**
+ * A golden fixture's validation assumption set (__fixtures__/*-validation.assumptions.json):
+ * every Base assumption pinned at the value the Excel match used, so the
+ * benchmark stays true when the app's market-based defaults move. Throws if
+ * the file no longer loads for the property.
+ */
+export function validationSet(json: unknown, property: Property, asOf: ISODate): SavedAssumptionSet {
+  const { set, errors } = parseAssumptionSetFile(json, property, asOf)
+  if (!set) throw new Error(`${property.id} validation set: ${errors.join(' ')}`)
+  return set
+}
 
 type LineField = keyof Omit<AnnualCashFlow, 'year'>
 

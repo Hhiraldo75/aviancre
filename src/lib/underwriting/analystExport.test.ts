@@ -18,6 +18,8 @@ const FEDERAL_HILL = byId('sample-federal-hill-apartments')
 
 const r = underwrite(ATWELLS, AS_OF)
 const x = analystExport(ATWELLS, AS_OF, r)
+/** "6.78%" → 6.78, "(0.95%)" → −0.95 */
+const pctValue = (display: string) => (display.startsWith('(') ? -1 : 1) * Number.parseFloat(display.replace(/[()]/g, ''))
 
 describe('analyst JSON export (Atwells)', () => {
   it('carries the AI label and run dates', () => {
@@ -55,13 +57,13 @@ describe('analyst JSON export (Atwells)', () => {
 
   it('pre-computes the figures the review checklist needs', () => {
     const m = r.metrics
-    expect(x.returns.leveredIRR.display).toBe('6.78%')
-    expect(x.returns.leveredIRRVsTarget).toEqual({ value: -322, display: '−322 bps' })
+    expect(x.returns.leveredIRR.display).toBe('7.36%')
+    expect(x.returns.leveredIRRVsTarget).toEqual({ value: -264, display: '−264 bps' })
     expect(x.returns.exit.goingInVsExitCapSpread).toEqual({ value: 25, display: '+25 bps' })
     expect(x.returns.exit.normalizationDifference.value).toBe(Math.round(m.exitNOI - m.exitNOIRaw))
     expect(x.debt.negativeLeverage).toBe(true)
     expect(x.debt.debtYieldFloor.display).toBe('9%')
-    expect(x.debt.minimumDSCR.display).toBe('1.60x')
+    expect(x.debt.minimumDSCR.display).toBe('1.67x')
     expect(x.debt.minimumDSCRYear).toBe(4)
     const rr = x.rentRoll
     if (rr.kind !== 'commercial') throw new Error('expected commercial')
@@ -79,10 +81,10 @@ describe('analyst JSON export (Atwells)', () => {
       expect(g.metric).toBe('Levered IRR')
       expect(g.center.display).toBe(x.returns.leveredIRR.display)
       expect(g.cells).toHaveLength(g.rows.length)
-      expect(Number.parseFloat(g.low!.display)).toBeLessThanOrEqual(Number.parseFloat(g.center.display))
-      expect(Number.parseFloat(g.high!.display)).toBeGreaterThanOrEqual(Number.parseFloat(g.center.display))
+      expect(pctValue(g.low!.display)).toBeLessThanOrEqual(pctValue(g.center.display))
+      expect(pctValue(g.high!.display)).toBeGreaterThanOrEqual(pctValue(g.center.display))
     }
-    expect(x.sensitivity.grids[0].center).toMatchObject({ row: 'Exit cap 7.25% (Current)', column: 'Rent growth 2.0% (Current)' })
+    expect(x.sensitivity.grids[0].center).toMatchObject({ row: 'Exit cap 7.70% (Current)', column: 'Rent growth 2.0% (Current)' })
   })
 
   it('includes the max bid from the solver', () => {
@@ -124,7 +126,7 @@ describe('analyst JSON export (Atwells)', () => {
     expect(sc.presets.downside.find((p) => p.label === 'Exit cap')).toMatchObject({
       change: '+50 bps',
       isEstimate: true,
-      applied: '7.25% → 7.75%',
+      applied: '7.70% → 8.20%',
     })
   })
 
@@ -133,7 +135,7 @@ describe('analyst JSON export (Atwells)', () => {
     const down = withScenario(assumptionsFor(ATWELLS, AS_OF, edits), 'downside', edits)
     const e = analystExport(ATWELLS, AS_OF, underwrite(ATWELLS, AS_OF, down), { name: 'My case', edits })
     expect(e.meta.scenario).toBe('downside')
-    expect(e.meta.assumptionSet.changes).toEqual(['Exit cap rate 7.50% (default 7.25%)'])
+    expect(e.meta.assumptionSet.changes).toEqual(['Exit cap rate 7.50% (default 7.70%)'])
     expect(e.returns.exit.exitCapRate.display).toBe('8.00%')
     if (e.scenarios.status !== 'ok') throw new Error(e.scenarios.reason)
     expect(e.scenarios.viewed).toBe('downside')

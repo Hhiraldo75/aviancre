@@ -4,17 +4,21 @@
  * These values were independently validated against an Excel model built only
  * from the written inputs, rules and rent roll (docs/validation/Fernhill-Excel-Check.xlsx,
  * matched on Oct 24, 2026: all 185 annual values, all 1,140 monthly values and
- * every return metric). Only update __fixtures__/fernhill-benchmark.csv and
- * fernhill-benchmark.json on purpose when an assumption or method changes, and
- * re-check against Excel when you do. No script writes to the fixtures.
+ * every return metric). The run uses the assumptions Excel was matched at
+ * (__fixtures__/fernhill-validation.assumptions.json), not the app's current
+ * market-based defaults. Only update __fixtures__/fernhill-benchmark.csv,
+ * fernhill-benchmark.json or the validation set on purpose when an assumption or
+ * method changes, and re-check against Excel when you do. No script writes to the fixtures.
  */
 import { describe, expect, it } from 'vitest'
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties'
 import type { UnderwritingMetrics } from '../../types'
 import fixture from './__fixtures__/fernhill-benchmark.csv?raw'
 import frozen from './__fixtures__/fernhill-benchmark.json'
+import validation from './__fixtures__/fernhill-validation.assumptions.json'
+import { assumptionsFor } from './edits'
 import { loanSchedule } from './finance'
-import { goldenChecks } from './goldenChecks'
+import { goldenChecks, validationSet } from './goldenChecks'
 import { underwrite } from './underwrite'
 
 const AS_OF = '2026-10-04'
@@ -27,7 +31,8 @@ const RATIO = 1e-6
 
 const FERNHILL = SAMPLE_PROPERTIES.find((p) => p.id === 'sample-fernhill-commons')
 if (!FERNHILL) throw new Error('missing sample-fernhill-commons')
-const r = underwrite(FERNHILL, AS_OF)
+const VALIDATION = validationSet(validation, FERNHILL, AS_OF)
+const r = underwrite(FERNHILL, AS_OF, assumptionsFor(FERNHILL, AS_OF, VALIDATION.edits))
 
 describe('Fernhill golden benchmark', () => {
   goldenChecks(r, fixture)

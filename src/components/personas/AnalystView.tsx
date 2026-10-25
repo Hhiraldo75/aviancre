@@ -1,7 +1,8 @@
 import type { Property } from '../../types'
 import { SALE_COMPS } from '../../data/saleComps'
-import { SUBMARKETS, TREND_SOURCE } from '../../data/submarkets'
+import { METRO_TRENDS, SUBMARKETS, TREND_SOURCE } from '../../data/submarkets'
 import { fmt } from '../../lib/format'
+import { benchmarkFor } from '../../lib/marketView'
 import { markToMarket } from '../../lib/metrics'
 import { quickFinancials } from '../../lib/quickFinancials'
 import { useAppStore } from '../../store/useAppStore'
@@ -10,9 +11,9 @@ import SourceBadge from '../ui/SourceBadge'
 
 export default function AnalystView({ property: p }: { property: Property }) {
   const asOf = useAppStore((s) => s.asOf)
-  const submarket = SUBMARKETS[p.location.submarket]
-  const lookupType = p.assetType === 'mixed-use' ? 'office' : p.assetType
-  const trend = submarket.trends?.[lookupType] ?? []
+  const found = benchmarkFor(p.location.submarket, p.assetType)
+  const trend = found ? METRO_TRENDS[found.type] : []
+  const trailing = found?.benchmark.trailingRentGrowth
   const isMF = p.assetType === 'multifamily'
   const rent = (n: number) => (isMF ? fmt.rentPerUnit(n) : fmt.rentPerSF(n))
 
@@ -30,18 +31,21 @@ export default function AnalystView({ property: p }: { property: Property }) {
 
   return (
     <div className="space-y-4">
-      <Card title={`Submarket trends · ${submarket.name}`} aside={<SourceBadge data={{ source: 'estimated', sourceName: TREND_SOURCE }} />}>
-        {first && last && (
+      <Card
+        title={`Metro trends · Providence-Warwick ${found ? fmt.label(found.type) : ''}`}
+        aside={<SourceBadge data={{ source: 'estimated', sourceName: TREND_SOURCE, confidence: 'medium' }} />}
+      >
+        {trailing && first && last && (
           <div className="mb-3 grid grid-cols-3 gap-2">
-            <Stat label="Rent since 2022" value={fmt.signedPct(last.marketRent / first.marketRent - 1)} />
-            <Stat label="Vacancy chg" value={`${((last.vacancyRate - first.vacancyRate) * 100).toFixed(1)} pts`} />
-            <Stat label="Cap rate chg" value={`${((last.capRate - first.capRate) * 10000).toFixed(0)} bps`} />
+            <Stat label="Rent growth, 12 mo" value={fmt.signedPct(trailing.value)} src={trailing} />
+            <Stat label="Vacancy chg" value={`${((last.vacancyRate - first.vacancyRate) * 100).toFixed(1)} pts`} hint={`Since ${first.period}`} />
+            <Stat label="Cap rate chg" value={`${((last.capRate - first.capRate) * 10000).toFixed(0)} bps`} hint={`Since ${first.period}`} />
           </div>
         )}
         <table className="w-full text-xs">
           <thead className="text-left text-[10px] uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="pb-1 font-medium">Year</th>
+              <th className="pb-1 font-medium">Period</th>
               <th className="pb-1 text-right font-medium">Mkt rent</th>
               <th className="pb-1 font-medium pl-3">Vacancy</th>
               <th className="pb-1 text-right font-medium">Cap</th>
@@ -49,8 +53,8 @@ export default function AnalystView({ property: p }: { property: Property }) {
           </thead>
           <tbody>
             {trend.map((t) => (
-              <tr key={t.year} className="border-t border-slate-700/70">
-                <td className="py-1 tabular-nums">{t.year}</td>
+              <tr key={t.period} className="border-t border-slate-700/70">
+                <td className="py-1 tabular-nums">{t.period}</td>
                 <td className="py-1 text-right tabular-nums">{isMF ? fmt.usd(t.marketRent) : `$${t.marketRent.toFixed(2)}`}</td>
                 <td className="py-1 pl-3">
                   <div className="flex items-center gap-2">

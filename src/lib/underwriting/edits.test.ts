@@ -108,7 +108,7 @@ describe('applying edits', () => {
     const a = assumptionsFor(ATWELLS, AS_OF, { 'debt.rate.rate': 0.07, 'operating.expenses.0.annualAmount': 100_000 })
     expect(fieldValue(a, 'debt.rate.rate')).toMatchObject({ value: 0.07, source: 'imported', sourceName: 'Analyst input' })
     expect(a.operating.expenses[0].annualAmount.value).toBe(100_000)
-    expect(fieldValue(defaults, 'debt.rate.rate').value).toBe(0.065)
+    expect(fieldValue(defaults, 'debt.rate.rate').value).toBe(0.067)
     expect(defaults.operating.expenses[0].annualAmount.source).toBe('estimated')
   })
   it('anchors the estimated price to defaults: other edits move the going-in cap, not the price', () => {
@@ -123,8 +123,9 @@ describe('applying edits', () => {
   it('re-prices the estimate when the market cap rate is edited', () => {
     const a = assumptionsFor(ATWELLS, AS_OF, { 'acquisition.marketCapRate': 0.075, 'operating.creditLossPct': 0.03 })
     expect(a.acquisition.purchasePrice.source).toBe('estimated')
-    // Still the default year-1 NOI, now ÷ 7.5% instead of 7%.
-    expect(a.acquisition.purchasePrice.value).toBeCloseTo((defaults.acquisition.purchasePrice.value * 0.07) / 0.075, 4)
+    // Still the default year-1 NOI, now ÷ 7.5% instead of the 7.45% benchmark.
+    expect(defaults.acquisition.marketCapRate.value).toBe(0.0745)
+    expect(a.acquisition.purchasePrice.value).toBeCloseTo((defaults.acquisition.purchasePrice.value * 0.0745) / 0.075, 4)
     expect(a.acquisition.purchasePrice.notes).toBe('Market cap rate 7.50% (analyst input)')
     expect(underwrite(ATWELLS, AS_OF, assumptionsFor(ATWELLS, AS_OF, { 'acquisition.marketCapRate': 0.075 })).metrics.goingInCapRate).toBeCloseTo(0.075, 10)
   })
@@ -139,7 +140,7 @@ describe('applying edits', () => {
   it('flows into the summary card, with the change listed for the chip', () => {
     const s = underwritingSummary(ATWELLS, AS_OF, { 'exit.exitCapRate': 0.075 })
     if (s.status !== 'ok') throw new Error(s.reason)
-    expect(s.changes).toEqual(['Exit cap rate 7.50% (default 7.25%)'])
+    expect(s.changes).toEqual(['Exit cap rate 7.50% (default 7.70%)'])
     const exitCap = s.sections.flatMap((x) => x.stats).find((x) => x.label === 'Exit cap')!
     expect(exitCap.value).toBe('7.50%')
     expect(exitCap.src).toBeUndefined() // no longer an estimate

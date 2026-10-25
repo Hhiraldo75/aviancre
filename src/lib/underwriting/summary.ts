@@ -1,6 +1,7 @@
 import { SUBMARKETS } from '../../data/submarkets'
 import type { ISODate, Property, Sourced, UnderwritingAssumptions, UnderwritingResult } from '../../types'
 import { fmt } from '../format'
+import { benchmarkFor } from '../marketView'
 import { estimate } from '../sourced'
 import { isEstimate } from './defaults'
 import { assumptionChanges, assumptionsFor, defaultsFor, type AssumptionEdits } from './edits'
@@ -84,9 +85,9 @@ function missingData(p: Property): string | null {
   return null
 }
 
-/** The submarket benchmark a property's market cap rate comes from, e.g. "Olneyville multifamily" (mixed-use uses office). */
+/** The submarket benchmark a property's market cap rate comes from, e.g. "Olneyville multifamily" (mixed-use uses office, else retail). */
 function benchmarkName(p: Property): string {
-  return `${SUBMARKETS[p.location.submarket].name} ${p.assetType === 'mixed-use' ? 'office' : p.assetType}`
+  return `${SUBMARKETS[p.location.submarket].name} ${benchmarkFor(p.location.submarket, p.assetType)?.type ?? p.assetType}`
 }
 
 /** Where the going-in and exit cap rates came from: the submarket benchmark, or the analyst's input. */

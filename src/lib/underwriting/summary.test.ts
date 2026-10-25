@@ -4,7 +4,9 @@ import type { Property } from '../../types'
 import { SAMPLE_PROPERTIES } from '../../data/sampleProperties'
 import { parseCSV } from '../csv'
 import { parseRentRoll } from '../rentRollImport'
+import atwellsValidation from './__fixtures__/atwells-validation.assumptions.json'
 import { defaultAssumptions, withPurchasePrice } from './defaults'
+import { assumptionsFor } from './edits'
 import { PRICE_ESTIMATE_HINT, underwritingSummary, type SummaryStat, type UnderwritingSummary } from './summary'
 import { underwrite } from './underwrite'
 
@@ -30,11 +32,14 @@ const reason = (s: UnderwritingSummary) => (s.status === 'unavailable' ? s.reaso
 
 describe('underwriting summary (Atwells, base scenario)', () => {
   const s = underwritingSummary(ATWELLS, AS_OF)
+  /** At the assumptions the Excel benchmark was matched at, so these figures are Excel's. */
+  const validation = assumptionsFor(ATWELLS, AS_OF, atwellsValidation.changes)
+  const v = underwritingSummary(ATWELLS, AS_OF, validation)
 
-  it('shows the check values', () => {
-    expect(stat(s, 'Unlevered IRR').value).toBe('6.69%')
-    expect(stat(s, 'Levered IRR').value).toBe('6.78%')
-    expect(stat(s, 'Minimum DSCR').value).toBe('1.60x')
+  it('shows the Excel check values at the validation set', () => {
+    expect(stat(v, 'Unlevered IRR').value).toBe('6.69%')
+    expect(stat(v, 'Levered IRR').value).toBe('6.78%')
+    expect(stat(v, 'Minimum DSCR').value).toBe('1.60x')
   })
   it('maps engine metrics without recalculating them', () => {
     const m = underwrite(ATWELLS, AS_OF).metrics
@@ -44,11 +49,11 @@ describe('underwriting summary (Atwells, base scenario)', () => {
     expect(m.exitNOI).toBeGreaterThan(0)
   })
   it('shows $X.XXM from $1M up and full dollars below', () => {
-    expect(stat(s, 'Purchase price').value).toBe('$4.15M')
-    expect(stat(s, 'Net sale proceeds').value).toBe('$4.61M')
-    expect(stat(s, 'Year-1 NOI').value).toBe('$290,296')
-    expect(stat(s, 'Normalized Year-11 NOI').value).toBe('$341,402')
-    expect(stat(s, 'Price / SF').value).toBe('$288/SF')
+    expect(stat(v, 'Purchase price').value).toBe('$4.15M')
+    expect(stat(v, 'Net sale proceeds').value).toBe('$4.61M')
+    expect(stat(v, 'Year-1 NOI').value).toBe('$290,296')
+    expect(stat(v, 'Normalized Year-11 NOI').value).toBe('$341,402')
+    expect(stat(v, 'Price / SF').value).toBe('$288/SF')
   })
   it('shows the max bid at the target levered IRR next to the price', () => {
     const pricing = ok(s).sections[0].stats.map((x) => x.label)
@@ -71,9 +76,9 @@ describe('underwriting summary (Atwells, base scenario)', () => {
     for (const x of stats(s)) expect(x.tone, x.label).toBeUndefined()
   })
   it('shortens engine warnings to their first sentence, keeping the full text', () => {
-    const engine = underwrite(ATWELLS, AS_OF).warnings
-    expect(ok(s).warnings.map((w) => w.full)).toEqual(engine)
-    expect(ok(s).warnings.map((w) => w.short)).toEqual([
+    expect(ok(s).warnings.map((w) => w.full)).toEqual(underwrite(ATWELLS, AS_OF).warnings)
+    expect(ok(v).warnings.map((w) => w.full)).toEqual(underwrite(ATWELLS, AS_OF, validation).warnings)
+    expect(ok(v).warnings.map((w) => w.short)).toEqual([
       '36% of rentable SF rolls in year 2.',
       'Negative leverage: the 7.00% going-in cap rate is below the 7.58% loan constant, so debt lowers the yearly cash yield.',
       'In-place rents are 32% above market; income declines as leases roll.',
@@ -91,8 +96,8 @@ describe('underwriting summary (Atwells, base scenario)', () => {
     expect(ok(s).noiByYear.map((y) => y.lostToRollover)).toEqual(
       r.cashFlows.map((c) => c.absorptionTurnoverVacancy + c.freeRent),
     )
-    expect(ok(s).noiByYear[3].tooltip).toBe('Year 4: NOI $302,232 · lost to rollover $28,444')
-    expect(ok(s).noiByYear[4].tooltip).toBe('Year 5: NOI $312,751') // nothing rolls
+    expect(ok(v).noiByYear[3].tooltip).toBe('Year 4: NOI $302,232 · lost to rollover $28,444')
+    expect(ok(v).noiByYear[4].tooltip).toBe('Year 5: NOI $312,751') // nothing rolls
   })
   it('drops the EST badge on price once an analyst enters it', () => {
     const a = withPurchasePrice(defaultAssumptions(ATWELLS, AS_OF), 4_000_000)
@@ -117,12 +122,12 @@ describe('where the cap rates come from', () => {
     const fernhill = (details = {}) =>
       parseRentRoll(parseCSV(fernhillDoc), { fileName: 'fernhill.csv', asOf: AS_OF, details }).property!
     const s = underwritingSummary(fernhill(), AS_OF)
-    expect([stat(s, 'Going-in cap').value, stat(s, 'Going-in cap').from]).toEqual(['6.25%', 'Olneyville multifamily'])
-    expect([stat(s, 'Exit cap').value, stat(s, 'Exit cap').from]).toEqual(['6.50%', 'Olneyville multifamily + 25 bps'])
-    expect(stat(s, 'Purchase price').value).toBe('$20.99M')
+    expect([stat(s, 'Going-in cap').value, stat(s, 'Going-in cap').from]).toEqual(['7.95%', 'Olneyville multifamily'])
+    expect([stat(s, 'Exit cap').value, stat(s, 'Exit cap').from]).toEqual(['8.20%', 'Olneyville multifamily + 25 bps'])
+    expect(stat(s, 'Purchase price').value).toBe('$16.50M')
     const downtown = underwritingSummary(fernhill({ submarket: 'downtown' }), AS_OF)
-    expect([stat(downtown, 'Going-in cap').value, stat(downtown, 'Going-in cap').from]).toEqual(['5.75%', 'Downtown / Downcity multifamily'])
-    expect(stat(downtown, 'Purchase price').value).toBe('$22.81M')
+    expect([stat(downtown, 'Going-in cap').value, stat(downtown, 'Going-in cap').from]).toEqual(['7.45%', 'Downtown / Downcity multifamily'])
+    expect(stat(downtown, 'Purchase price').value).toBe('$17.61M')
   })
 
   it('says when the analyst set them', () => {
@@ -136,8 +141,8 @@ describe('where the cap rates come from', () => {
 
   it('shows the benchmark cap the price was set at when other edits move the going-in cap', () => {
     const s = underwritingSummary(ATWELLS, AS_OF, { 'operating.generalVacancyPct': 0.25 })
-    expect(stat(s, 'Going-in cap').value).not.toBe('7.00%')
-    expect(stat(s, 'Going-in cap').from).toBe('price at Federal Hill retail 7.00%')
+    expect(stat(s, 'Going-in cap').value).not.toBe('7.45%')
+    expect(stat(s, 'Going-in cap').from).toBe('price at Federal Hill retail 7.45%')
   })
 })
 

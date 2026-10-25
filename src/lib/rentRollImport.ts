@@ -16,7 +16,7 @@ import type {
 } from '../types'
 import { SUBMARKETS } from '../data/submarkets'
 import { slug } from './format'
-import { marketViewFor } from './marketView'
+import { benchmarkFor, benchmarkTypesText, marketViewFor } from './marketView'
 import {
   isBlank,
   norm,
@@ -263,10 +263,9 @@ export function parseRentRoll(grid: Cell[][], opts: ImportOptions): RentRollImpo
   if (!details.buildingClass && !issues.some((x) => x.column === 'Building class')) missing('Building class', 'building class')
   if (!details.submarket && !issues.some((x) => x.column === 'Submarket')) missing('Submarket', 'submarket')
   if (details.assetType && details.submarket) {
-    const lookup = details.assetType === 'mixed-use' ? 'office' : details.assetType
-    if (!SUBMARKETS[details.submarket].benchmarks[lookup]) {
+    if (!benchmarkFor(details.submarket, details.assetType)) {
       error(
-        `${SUBMARKETS[details.submarket].name} has no ${lookup} market benchmark yet. Choose another submarket or asset type.`,
+        `${SUBMARKETS[details.submarket].name} has no ${benchmarkTypesText(details.assetType)} market benchmark yet. Choose another submarket or asset type.`,
         fieldRows.submarket,
         'Submarket',
       )

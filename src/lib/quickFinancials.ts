@@ -1,5 +1,5 @@
 import type { ISODate, LeaseType, Property } from '../types'
-import { SUBMARKETS } from '../data/submarkets'
+import { benchmarkFor } from './marketView'
 import { activeLeases, inPlaceAnnualRent } from './metrics'
 import { irr } from './underwriting/finance'
 
@@ -85,8 +85,7 @@ export function quickFinancials(p: Property, asOf: ISODate, basis: PurchaseBasis
   const assessedValue = p.valuation.assessedValue?.value ?? null
   const purchasePrice = basis === 'assessed-value' && assessedValue ? assessedValue : impliedValue
 
-  const lookupType = p.assetType === 'mixed-use' ? 'office' : p.assetType
-  const noiGrowth = SUBMARKETS[p.location.submarket].benchmarks[lookupType]?.annualRentGrowth.value ?? 0.02
+  const noiGrowth = benchmarkFor(p.location.submarket, p.assetType)?.benchmark.annualRentGrowth.value ?? 0.02
   const { holdYears, exitCapSpread, sellingCostsPct } = QUICK_ASSUMPTIONS
   const exitCapRate = marketCapRate + exitCapSpread
 

@@ -68,9 +68,11 @@ and an imported rent roll never leaves the user's machine.
 - **Golden tests** freeze all three results and check every cash-flow line in every year
   within $1, plus price, loan, equity, sale proceeds, both IRRs, minimum DSCR and WALT
   (Fernhill also checks its loan schedule by year to the cent, and every return metric).
-  They also run after an assumption edit and reset, and after importing the same rent
-  roll from CSV and from Excel.
-- **744 automated tests** (Vitest) across the engine, sensitivity, max bid, rent roll
+  They run at the assumption set each Excel model used (pinned in a validation fixture),
+  so the app's defaults can follow the market without breaking the match. They also run
+  after an assumption edit and reset, and after importing the same rent roll from CSV and
+  from Excel.
+- **783 automated tests** (Vitest) across the engine, sensitivity, max bid, rent roll
   import and conversion, assumption sets, search, filters and the public-record clients.
 
 ## Data sources
@@ -85,9 +87,11 @@ and an imported rent roll never leaves the user's machine.
 All sources are called straight from the browser.
 
 > **Sample data.** The 11 sample properties sit on real Providence buildings, but their
-> names, tenants, rents and leases are fictional. Market figures and underwriting
-> assumptions are placeholders, labeled **EST** in the app with a note on what should
-> replace each one. Public-record data is real.
+> names, tenants, rents and leases are fictional. Market cap rates, vacancy and office and
+> apartment rents are anchored to the NAR/CoStar Q1 2026 Providence-Warwick report and Cushman & Wakefield
+> MarketBeats, and loan rates to the 10-year Treasury plus CRED iQ spreads (Oct 2026); they
+> stay **EST** in the app with their source and date. Operating expenses and other
+> underwriting assumptions are rules of thumb, also EST. Public-record data is real.
 
 ## Tech stack
 

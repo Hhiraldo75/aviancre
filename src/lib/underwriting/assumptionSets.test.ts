@@ -132,9 +132,9 @@ describe('memos record their assumption set', () => {
     expect(set.summary).toBe(setSummary('My case', 3))
     expect(set.summary).toBe('Assumption set: My case, 3 changes from defaults')
     expect(set.changes).toEqual([
-      'Purchase price $3,900,000 (default $4,147,092)',
+      'Purchase price $3,900,000 (default $3,896,596)',
       'Market rent growth 2.5% (default 2%)',
-      'Exit cap rate 7.50% (default 7.25%)',
+      'Exit cap rate 7.50% (default 7.70%)',
     ])
     expect(memoAssumptionSet(memo(set.marker))).toEqual({ name: 'My case', edits: MY_CASE.edits })
     const presets = { ...MY_CASE.edits, 'scenarios.downside.exit.exitCapRate': 0.0075 }
