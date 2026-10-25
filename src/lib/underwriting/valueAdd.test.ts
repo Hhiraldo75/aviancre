@@ -294,12 +294,16 @@ describe('value-add plan on Fernhill', () => {
         'valueAdd.downtimeMonths',
       ])
     })
-    it('adds the value-add lines to the CSV', () => {
+    it('adds the value-add lines to the CSV and a valueAdd section to the export', () => {
       const csv = toCSV(r, FERNHILL.name)
       for (const line of ['Units renovated (started)', '  of which renovation downtime', 'Renovation capex', 'Funded from renovation reserve', 'Unspent reserve returned']) {
         expect(csv).toContain(`\n${line},`)
       }
       expect(toCSV(asIs, FERNHILL.name)).not.toMatch(/Renovation|valueAdd/)
+      const x = analystExport(FERNHILL, AS_OF, r, { name: 'Validation + value-add', edits: ON })
+      expect(x.valueAdd).toMatchObject({ status: 'ok', returnOnCost: { display: '16.80%' }, renovations: { target: 60, renovated: 60 } })
+      expect(x.meta.assumptionSet.changes).toContain(VALUE_ADD_ON)
+      expect('valueAdd' in analystExport(FERNHILL, AS_OF, asIs, { name: 'Validation', edits: SET })).toBe(false)
     })
     it('stresses the premium and cost in Downside only', () => {
       const down = withScenario(a, 'downside', ON)

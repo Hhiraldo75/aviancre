@@ -4,15 +4,25 @@ import { occupancy } from '../metrics'
 import { bySF } from '../unitRentRoll'
 import { isEstimate } from './defaults'
 import { DEFAULTS_SET, memoMarker, setSummary } from './assumptionSets'
-import { assumptionsFor, defaultsFor, editableFields, fieldValue, isEdited, type AssumptionEdits, type AssumptionGroupTitle } from './edits'
+import {
+  assumptionsFor,
+  defaultsFor,
+  editableFields,
+  fieldValue,
+  isEdited,
+  VALUE_ADD_ON,
+  type AssumptionEdits,
+  type AssumptionGroupTitle,
+} from './edits'
 import { rentRollView, type ExpirationRow, type RentRollRow } from './fullView'
 import { maxBid, MAX_BID_RANGE } from './maxBid'
 import { cashFlowRows } from './report'
-import { presetChanges, scenarioComparison, SCENARIO_LABELS, SCENARIOS, type ComparisonCell, type PresetItem } from './scenarios'
+import { presetChanges, scenarioComparison, SCENARIO_LABELS, SCENARIOS, withScenario, type ComparisonCell, type PresetItem } from './scenarios'
 import { METRIC_LABELS, SENSITIVITY_CAPTION, sensitivityGrids, sensitivityView } from './sensitivity'
 import { maxBidStat } from './summary'
 import { t12Check, T12_BENCHMARK_GAP, T12_NOI_GAP, T12_TAX_GAP } from './t12Check'
 import { DEBT_YIELD_FLOOR, DSCR_FLOOR, MARK_TO_MARKET_THRESHOLD, ROLLOVER_CONCENTRATION } from './underwrite'
+import { valueAddComparison, type ValueAddCell } from './valueAdd'
 import { operatingCashFlows } from './waterfall'
 
 /**
@@ -224,6 +234,76 @@ export function analystExport(
     },
     scenarios: scenariosSection(property, asOf, set.edits, a.scenario),
     t12: t12Section(property, asOf, set.edits),
+    // Left out entirely while the plan is off, so the export is unchanged.
+    ...(a.valueAdd?.enabled ? { valueAdd: valueAddSection(property, asOf, a, base, set.edits, assumptions.items) } : {}),
+  }
+}
+
+/**
+ * The value-add plan against the as-is case for the scenario `a` is, plus value
+ * created in every scenario. Present only when the plan is on.
+ */
+function valueAddSection(
+  property: Property,
+  asOf: ISODate,
+  a: UnderwritingAssumptions,
+  base: UnderwritingAssumptions,
+  edits: AssumptionEdits,
+  items: ExportAssumption[],
+) {
+  const cmp = valueAddComparison(property, asOf, a)
+  if (!cmp || cmp.status === 'unavailable') return { status: 'unavailable' as const, reason: cmp?.reason ?? 'The value-add plan is off.' }
+  const plan = cmp.plan
+  const cell = (kind: string, c: ValueAddCell) => (kind === 'usd' && c.value !== null ? usd(c.value) : fig(c.value, c.display))
+  const rs = plan.renovations
+  return {
+    status: 'ok' as const,
+    note:
+      'As-is is the same assumptions with the plan off, at the same purchase price. change is Value-add − As-is. ' +
+      `This comparison is at the ${SCENARIO_LABELS[a.scenario]} case. Quote the display strings.`,
+    funding:
+      'Renovation reserve (units to renovate × cost per unit) funded with equity at closing: it is in total cost and equity required. ' +
+      'Each renovation draws its cost from the reserve in its month, and the unspent balance is returned to equity at sale. ' +
+      'The loan is LTV × price and funds none of the plan.',
+    inputs: items.filter((x) => x.group === 'Value-add'),
+    comparison: {
+      columns: ['As-is', 'Value-add', 'Change'],
+      rows: cmp.rows.map((row) => ({
+        key: row.key,
+        label: row.label,
+        asIs: cell(row.kind, row.asIs),
+        valueAdd: cell(row.kind, row.valueAdd),
+        ...(row.change ? { change: fig(row.change.value === null ? null : row.kind === 'usd' ? Math.round(row.change.value) : row.change.value, row.change.display) } : {}),
+      })),
+    },
+    returnOnCost: pct(cmp.returnOnCost),
+    valueCreated: usd(cmp.valueCreated),
+    programFinishes: cmp.finish,
+    renovations: {
+      target: plan.target,
+      renovated: plan.renovated,
+      atMoveOut: rs.filter((x) => x.status === 'occupied').length,
+      atLeaseUp: rs.filter((x) => x.status === 'lease-up').length,
+      firstMonth: rs.length ? rs[0].month : null,
+      lastMonth: rs.length ? rs[rs.length - 1].month : null,
+      /** Eligible rolls passed over because the month's pace was full (those units renewed and waited a year). */
+      rollsPassedOver: rs.reduce((n, x) => n + x.passedOver, 0),
+    },
+    paceByYear: cmp.pace.map((y) => ({
+      year: y.year,
+      unitsRenovated: y.units,
+      spend: usd(y.spend),
+      cumulativeUnits: y.cumulativeUnits,
+      cumulativeShare: pct(y.cumulativeShare, 0),
+    })),
+    /** Value created and return on cost in each scenario, at the Base price. */
+    byScenario: SCENARIOS.map((s) => {
+      const c = valueAddComparison(property, asOf, withScenario(base, s, edits))
+      if (!c || c.status === 'unavailable') return { scenario: SCENARIO_LABELS[s], status: 'unavailable' as const }
+      return { scenario: SCENARIO_LABELS[s], valueCreated: usd(c.valueCreated), returnOnCost: pct(c.returnOnCost) }
+    }),
+    warnings: cmp.warnings,
+    notes: cmp.notes,
   }
 }
 
@@ -326,14 +406,20 @@ function assumptionsSection(property: Property, asOf: ISODate, a: UnderwritingAs
       default: f.format(fieldValue(defaults, f.key).value),
     }
   })
+  // The plan's switch heads its inputs, as in the app's "Assumptions changed" list.
+  const edited = items.flatMap((x) => [
+    ...(x.key === 'valueAdd.unitCount' ? [VALUE_ADD_ON] : []),
+    ...(x.edited ? [`${x.label} ${x.display} (default ${x.default})`] : []),
+  ])
   return {
     items,
     /** Labels of every assumption still at an estimated default. */
     estimated: items.filter((x) => x.isEstimate).map((x) => x.label),
-    edited: items.filter((x) => x.edited).map((x) => `${x.label} ${x.display} (default ${x.default})`),
+    edited,
     settings: [
       { label: 'Analysis start', display: fmt.monthYear(a.acquisition.analysisStartDate) },
       ...(a.multifamily ? [] : [{ label: 'Vacant space recovery', display: fmt.label(a.leasing.vacantSpaceRecovery) }]),
+      ...(a.valueAdd?.enabled ? [{ label: 'Value-add plan', display: 'On' }] : []),
       { label: 'Debt', display: a.debt.enabled ? 'On' : 'Off' },
       { label: 'Exit NOI', display: a.exit.capForwardNOI ? 'Forward year (hold + 1)' : 'Final hold year' },
     ],

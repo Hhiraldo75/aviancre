@@ -5,7 +5,7 @@
  * deal's output goes to private-deals/<id>/ instead of docs/.
  *
  *   npm run underwrite -- <property-id> [--as-of YYYY-MM-DD] [--assumptions set.json] [--price 4500000]
- *                         [--scenario base|downside|upside] [--t12 file] [--json]
+ *                         [--scenario base|downside|upside] [--t12 file] [--value-add] [--json]
  *
  * --assumptions runs a set exported from Full underwriting > Assumptions;
  * --price is applied on top of it as one more change. --scenario runs the
@@ -19,9 +19,16 @@
  * from the T-12, the run prints the T-12 check, and its files get a "--t12"
  * suffix. A T-12 from anywhere but docs/samples/ is treated as real: the
  * output goes to private-deals/<id>/, even for a sample property.
+ *
+ * --value-add turns the value-add plan on (unit rent rolls only), with the
+ * set's value-add inputs if it has any; a set may also turn it on itself. A run
+ * with the plan on prints As-is vs Value-add and the pace by year, its files get
+ * a "--value-add" suffix (after any scenario's), and the CSV run also writes the
+ * renovation schedule, one row per renovated unit, next to the CSV.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
+import { fmt } from '../src/lib/format'
 import { todayISO } from '../src/lib/metrics'
 import { readRentRollFile } from '../src/lib/rentRollFile'
 import { parseT12File, periodLabel, withT12 } from '../src/lib/t12'
@@ -29,19 +36,21 @@ import { readT12, statementFrom } from '../src/lib/t12Read'
 import { toCSV, toTable, underwrite } from '../src/lib/underwriting'
 import { analystExport } from '../src/lib/underwriting/analystExport'
 import { DEFAULTS_SET, parseAssumptionSetFile, setSummary } from '../src/lib/underwriting/assumptionSets'
-import { assumptionsFor, type AssumptionEdits } from '../src/lib/underwriting/edits'
+import { activeEdits, assumptionsFor, VALUE_ADD_KEY, type AssumptionEdits } from '../src/lib/underwriting/edits'
 import { SCENARIO_LABELS, SCENARIOS, scenarioChanges, scenarioComparison, withScenario } from '../src/lib/underwriting/scenarios'
-import { metricRows } from '../src/lib/underwriting/report'
+import { csvCell, metricRows } from '../src/lib/underwriting/report'
 import { sensitivityGrids } from '../src/lib/underwriting/sensitivity'
 import { t12Check } from '../src/lib/underwriting/t12Check'
+import { valueAddComparison } from '../src/lib/underwriting/valueAdd'
 import type { Property, Scenario, T12Statement } from '../src/types'
 import { findProperty, outputDir, propertyList } from './deals'
 import { PRIVATE_DIR } from './privateDeals'
 
 const USAGE =
-  'Usage: npm run underwrite -- <property-id> [--as-of YYYY-MM-DD] [--assumptions set.json] [--price N] [--scenario base|downside|upside] [--t12 file] [--json]'
-/** Flags that take a value; --json takes none. */
+  'Usage: npm run underwrite -- <property-id> [--as-of YYYY-MM-DD] [--assumptions set.json] [--price N] [--scenario base|downside|upside] [--t12 file] [--value-add] [--json]'
+/** Flags that take a value; --json and --value-add take none. */
 const VALUE_FLAGS = ['as-of', 'price', 'assumptions', 'scenario', 't12']
+const SWITCHES = ['--json', '--value-add']
 
 function fail(message: string): never {
   console.error(message)
@@ -55,7 +64,7 @@ const flag = (name: string) => {
   return i >= 0 ? args[i + 1] : undefined
 }
 const isFlagValue = (i: number) => VALUE_FLAGS.some((f) => args[i - 1] === `--${f}`)
-const unknown = args.find((a) => a.startsWith('--') && !VALUE_FLAGS.includes(a.slice(2)) && a !== '--json')
+const unknown = args.find((a) => a.startsWith('--') && !VALUE_FLAGS.includes(a.slice(2)) && !SWITCHES.includes(a))
 if (unknown) fail(`Unknown option "${unknown}". ${USAGE}`)
 const json = args.includes('--json')
 const id = args.find((a, i) => !a.startsWith('--') && !isFlagValue(i))
@@ -107,6 +116,13 @@ if (price !== undefined) {
   edits = { ...edits, 'acquisition.purchasePrice': n }
   setName = `${setName} + --price`
 }
+if (args.includes('--value-add')) {
+  if (!assumptionsFor(property, asOf).valueAdd) fail(`--value-add needs a unit rent roll (apartments listed unit by unit); ${property.id} doesn't have one.`)
+  if (edits[VALUE_ADD_KEY] !== 1) {
+    edits = { ...edits, [VALUE_ADD_KEY]: 1 }
+    setName = `${setName} + --value-add`
+  }
+}
 for (const n of setNotices) console.log(`Note: ${n}`)
 const base = assumptionsFor(property, asOf, edits)
 const result = underwrite(property, asOf, withScenario(base, scenario, edits))
@@ -115,7 +131,7 @@ const sensitivityWarnings = sensitivityGrids(property, asOf, result.assumptions)
 console.log(`\n${property.name} (${property.assetType}, ${property.physical.rentableSF.value.toLocaleString('en-US')} RSF)`)
 console.log(`As of ${asOf}; analysis starts ${result.assumptions.acquisition.analysisStartDate}`)
 if (t12) console.log(`T-12: ${t12Path} (${periodLabel(t12)}), ${t12.isSample ? 'fictional sample data' : 'actuals'}; Year-1 expenses and other income come from it`)
-console.log(`${setSummary(setName, Object.keys(edits).length)}${scenario === 'base' ? '\n' : ''}`)
+console.log(`${setSummary(setName, Object.keys(activeEdits(edits)).length)}${scenario === 'base' ? '\n' : ''}`)
 if (scenario !== 'base') {
   console.log(`Scenario: ${SCENARIO_LABELS[scenario]}, price held at Base`)
   for (const c of scenarioChanges(base, scenario, edits)) console.log(`  - ${c}`)
@@ -151,6 +167,22 @@ if (cmp.status === 'ok') {
   console.log(`\nScenarios: ${cmp.reason}`)
 }
 
+const va = valueAddComparison(property, asOf, result.assumptions)
+if (va?.status === 'ok') {
+  console.log(`\nValue-add plan (${SCENARIO_LABELS[scenario]} case, same price)`)
+  const table = [['', 'As-is', 'Value-add', 'Change'], ...va.rows.map((r) => [r.label, r.asIs.display, r.valueAdd.display, r.change?.display ?? ''])]
+  const widths = table[0].map((_, j) => Math.max(...table.map((r) => r[j].length)) + 2)
+  for (const r of table) console.log(`  ${r.map((x, j) => (j === 0 ? x.padEnd(widths[j]) : x.padStart(widths[j]))).join('')}`)
+  console.log('  Pace by year (renovations started · spend · cumulative):')
+  for (const y of va.pace.filter((y) => y.cumulativeUnits > 0 && (y.units > 0 || y.year === 1))) {
+    console.log(`    Year ${String(y.year).padEnd(3)}${String(y.units).padStart(4)} units  ${fmt.usd(y.spend).padStart(11)}  ${String(y.cumulativeUnits).padStart(4)} (${y.cumulativeShare === null ? '—' : fmt.pctShort(y.cumulativeShare)})`)
+  }
+  for (const w of va.warnings) console.log(`  WARNING: ${w}`)
+  for (const n of va.notes) console.log(`  ${n}`)
+} else if (va) {
+  console.log(`\nValue-add plan: ${va.reason}`)
+}
+
 const check = t12Check(property, asOf, edits, { reason: 'not looked up on the command line (the app compares it for placed deals)' })
 if (check) {
   console.log(`\nT-12 check (${check.period}, Base case)`)
@@ -176,13 +208,23 @@ if (check) {
 // A sample with a real T-12 writes to private-deals/<id>/ like a deal.
 const isDeal = property.importedFrom !== undefined || t12IsReal
 const dir = isDeal ? resolve(PRIVATE_DIR, property.id) : outputDir(property)
-const suffix = `${scenario === 'base' ? '' : `--${scenario}`}${t12 ? '--t12' : ''}`
+const valueAddOn = result.assumptions.valueAdd?.enabled === true
+const suffix = `${scenario === 'base' ? '' : `--${scenario}`}${valueAddOn ? '--value-add' : ''}${t12 ? '--t12' : ''}`
 const out = json
   ? resolve(dir, isDeal ? `underwriting${suffix}.json` : `underwriting/${property.id}${suffix}.json`)
   : resolve(dir, isDeal ? `underwriting${suffix}.csv` : `underwriting-${property.id}${suffix}.csv`)
 mkdirSync(dirname(out), { recursive: true })
 writeFileSync(out, json ? JSON.stringify(analystExport(property, asOf, result, { name: setName, edits }), null, 2) + '\n' : toCSV(result, property.name))
 console.log(`\nWrote ${out}`)
+if (!json && result.valueAdd) {
+  const schedule = out.replace(/\.csv$/, '--schedule.csv')
+  const rows = [
+    ['Unit', 'Floor plan', 'Status', 'Renovation month', 'Re-lease month', 'Re-lease rent ($/mo)', 'Renovation cost', 'Move-out cost', 'Rolls passed over (pace)'],
+    ...result.valueAdd.renovations.map((x) => [x.unit, x.floorPlan, x.status, x.month, x.releaseMonth, x.releaseRent, x.cost, x.moveOutCost, x.passedOver]),
+  ]
+  writeFileSync(schedule, rows.map((r) => r.map(csvCell).join(',')).join('\n') + '\n')
+  console.log(`Wrote ${schedule}`)
+}
 
 /** A T-12 for the property: a mapped .json from the app, or a CSV/.xlsx statement mapped automatically. */
 async function loadT12(path: string, p: Property): Promise<T12Statement> {
