@@ -164,7 +164,7 @@ export default function FullUnderwritingPanel({ property: p }: { property: Prope
                 table={view.cashFlow}
                 onDownload={() =>
                   downloadFile(
-                    `${p.id}-underwriting${scenario === 'base' ? '' : `--${scenario}`}.csv`,
+                    `${p.id}-underwriting${scenario === 'base' ? '' : `--${scenario}`}${view.result.valueAdd ? '--value-add' : ''}.csv`,
                     toCSV(view.result, p.name),
                     'text/csv;charset=utf-8',
                   )

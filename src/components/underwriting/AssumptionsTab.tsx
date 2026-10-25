@@ -50,7 +50,9 @@ export default function AssumptionsTab({
                     {x.label}
                   </th>
                   <td className="py-1.5 pr-3">
-                    {x.edit ? (
+                    {x.toggle ? (
+                      <Toggle label={x.label} on={x.toggle.on} onChange={(on) => (on ? handlers.onSet(x.toggle!.key, 1) : handlers.onReset(x.toggle!.key))} />
+                    ) : x.edit ? (
                       <AssumptionInput key={x.edit.field.key} label={x.label} edit={x.edit} src={x.src!} {...handlers} />
                     ) : (
                       <div className="py-0.5 font-semibold tabular-nums">{x.value}</div>
@@ -64,6 +66,25 @@ export default function AssumptionsTab({
         </Card>
       ))}
     </div>
+  )
+}
+
+/** An on/off switch; on is an analyst change, off is the default. */
+function Toggle({ label, on, onChange }: { label: string; on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={() => onChange(!on)}
+      className="inline-flex items-center gap-2 py-0.5 text-xs font-semibold"
+    >
+      <span className={`relative h-4 w-7 rounded-full transition-colors ${on ? 'bg-violet-500/80' : 'bg-slate-600'}`}>
+        <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-slate-100 transition-all ${on ? 'left-3.5' : 'left-0.5'}`} />
+      </span>
+      <span className={on ? 'text-slate-100' : 'text-slate-400'}>{on ? 'On' : 'Off'}</span>
+    </button>
   )
 }
 

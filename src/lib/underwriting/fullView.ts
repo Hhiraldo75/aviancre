@@ -13,7 +13,16 @@ import { fmt } from '../format'
 import { bySF } from '../unitRentRoll'
 import { activeLeases, currentRentPerSF, occupancy, yearsBetween } from '../metrics'
 import { RULE_OF_THUMB } from './defaults'
-import { defaultsFor, editableFields, fieldValue, formatInput, isEdited, type AssumptionField, type AssumptionGroupTitle } from './edits'
+import {
+  defaultsFor,
+  editableFields,
+  fieldValue,
+  formatInput,
+  isEdited,
+  VALUE_ADD_KEY,
+  type AssumptionField,
+  type AssumptionGroupTitle,
+} from './edits'
 import { cashFlowRows, type LineKey } from './report'
 import { maxBid, type MaxBid } from './maxBid'
 import { marketRentInYear } from './rollover'
@@ -202,6 +211,8 @@ export interface AssumptionItem {
   note: string
   /** Present for editable numeric assumptions. */
   edit?: AssumptionEdit
+  /** Present for an on/off switch (the value-add plan): on stores 1 at `key`, off removes it. */
+  toggle?: { key: string; on: boolean }
 }
 
 export interface AssumptionGroup {
@@ -241,6 +252,7 @@ const SUBTOTALS: LineKey[] = ['effectiveGrossIncome', 'netOperatingIncome', 'cas
 const DEDUCTIONS: LineKey[] = [
   'lossToLease',
   'absorptionTurnoverVacancy',
+  'renovationDowntime',
   'freeRent',
   'generalVacancy',
   'creditLoss',
@@ -249,6 +261,7 @@ const DEDUCTIONS: LineKey[] = [
   'tenantImprovements',
   'leasingCommissions',
   'capitalReserves',
+  'renovationCapex',
   'debtService',
   'loanPayoff',
 ]
@@ -315,7 +328,7 @@ export function cashFlowTable(r: UnderwritingResult): CashFlowTable {
       {
         label: row.label.trim(),
         key,
-        kind: SUBTOTALS.includes(key) ? 'subtotal' : key === 'managementFee' ? 'detail' : 'line',
+        kind: SUBTOTALS.includes(key) ? 'subtotal' : key === 'managementFee' || key === 'renovationDowntime' ? 'detail' : 'line',
         values,
         cells: values.map((v) => cell(key, v)),
       },
@@ -588,6 +601,7 @@ export function returnsView(r: UnderwritingResult, bid: MaxBid): ReturnsView {
       { label: 'Purchase price', value: usd(m.purchasePrice) },
       { label: `Closing costs (${pctShort(a.acquisition.closingCostsPct.value)})`, value: usd(m.closingCosts) },
       { label: 'Initial capex', value: usd(a.acquisition.initialCapex.value) },
+      ...(r.valueAdd ? [{ label: 'Renovation reserve', value: usd(r.valueAdd.reserve) }] : []),
       { label: `Loan fee (${pctShort(hasDebt ? a.debt.loanFeesPct.value : 0)})`, value: usd(m.loanFee) },
       { label: 'Total uses', value: usd(m.totalCost + m.loanFee), kind: 'total' },
     ],
@@ -658,6 +672,10 @@ export function returnsView(r: UnderwritingResult, bid: MaxBid): ReturnsView {
   }
 }
 
+export const VALUE_ADD_NOTE =
+  'Renovates units at their next roll and re-leases them at market + a premium. ' +
+  'A reserve of units × cost is funded with equity at closing; what isn’t spent returns at sale. The price stays as-is.'
+
 const note = (s: Sourced<unknown>) => [s.sourceName, s.notes].filter(Boolean).join(' · ')
 const setting = (label: string, value: string): AssumptionItem => ({ label, value, note: 'Model setting' })
 
@@ -668,10 +686,8 @@ const setting = (label: string, value: string): AssumptionItem => ({ label, valu
  * note several items in a group share moves to the group.
  */
 export function assumptionGroups(a: UnderwritingAssumptions, defaults: UnderwritingAssumptions = a): AssumptionGroup[] {
-  const groups: AssumptionGroup[] = (['Acquisition', 'Leasing', 'Operating', 'Debt', 'Exit'] as const).map((title) => ({
-    title,
-    items: [],
-  }))
+  const titles: AssumptionGroupTitle[] = ['Acquisition', 'Leasing', 'Operating', ...(a.valueAdd ? (['Value-add'] as const) : []), 'Debt', 'Exit']
+  const groups: AssumptionGroup[] = titles.map((title) => ({ title, items: [] }))
   const group = (title: AssumptionGroupTitle) => groups.find((g) => g.title === title)!
 
   for (const f of editableFields(a)) {
@@ -699,6 +715,15 @@ export function assumptionGroups(a: UnderwritingAssumptions, defaults: Underwrit
 
   group('Acquisition').items.push(setting('Analysis start', fmt.monthYear(a.acquisition.analysisStartDate)))
   if (!a.multifamily) group('Leasing').items.push(setting('Vacant space recovery', fmt.label(a.leasing.vacantSpaceRecovery)))
+  if (a.valueAdd) {
+    const on = a.valueAdd.enabled
+    group('Value-add').items.unshift({
+      label: 'Value-add plan',
+      value: on ? 'On' : 'Off',
+      note: on ? VALUE_ADD_NOTE : `${VALUE_ADD_NOTE} Off by default; your inputs are kept while it is off.`,
+      toggle: { key: VALUE_ADD_KEY, on },
+    })
+  }
   group('Debt').items.unshift(setting('Debt', a.debt.enabled ? 'On' : 'Off'))
   const exit = group('Exit').items
   exit.splice(2, 0, setting('Exit NOI', a.exit.capForwardNOI ? 'Forward year (hold + 1)' : 'Final hold year'))

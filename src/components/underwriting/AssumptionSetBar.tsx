@@ -13,7 +13,7 @@ import {
   setNameError,
   type SavedAssumptionSet,
 } from '../../lib/underwriting/assumptionSets'
-import type { AssumptionEdits } from '../../lib/underwriting/edits'
+import { activeEdits, type AssumptionEdits } from '../../lib/underwriting/edits'
 import { useActiveSetName, useAppStore, useAssumptionSets } from '../../store/useAppStore'
 import { downloadFile } from '../ui/download'
 import AssumptionNotice from './AssumptionNotice'
@@ -38,7 +38,8 @@ export default function AssumptionSetBar({ property: p, asOf, edits }: { propert
 
   const modified = isModified(active, sets, edits)
   const saved = sets.find((x) => x.name === active)
-  const changeCount = Object.keys(edits).length
+  // Value-add inputs kept while the plan is off change nothing, so they aren't counted.
+  const changeCount = Object.keys(activeEdits(edits)).length
   /** Asks before throwing away edits that aren't in any set. */
   const okToLeave = () => !modified || window.confirm(`Discard ${appliedSetLabel(active, sets, edits)}?`)
 

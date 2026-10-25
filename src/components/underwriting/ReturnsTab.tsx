@@ -2,13 +2,15 @@ import { useMemo } from 'react'
 import type { ISODate, Property, UnderwritingAssumptions } from '../../types'
 import type { LineItem, ReturnsView } from '../../lib/underwriting/fullView'
 import { sensitivityGrids } from '../../lib/underwriting/sensitivity'
+import { valueAddComparison } from '../../lib/underwriting/valueAdd'
 import { Card, Stat } from '../ui/Card'
 import CashFlowChart from './CashFlowChart'
 import DSCRChart from './DSCRChart'
 import SensitivityGrid from './SensitivityGrid'
+import ValueAddCard from './ValueAddCard'
 
 /**
- * Sensitivity, charts, sources & uses, debt, sale and returns. The grids run
+ * The value-add plan (when on), sensitivity, charts, sources & uses, debt, sale and returns. The grids run
  * the engine on the current assumptions; they're built only while this tab is
  * open and cached per assumptions object.
  */
@@ -24,9 +26,12 @@ export default function ReturnsTab({
   assumptions: UnderwritingAssumptions
 }) {
   const grids = useMemo(() => sensitivityGrids(property, asOf, assumptions), [property, asOf, assumptions])
+  const valueAdd = useMemo(() => valueAddComparison(property, asOf, assumptions), [property, asOf, assumptions])
 
   return (
     <div className="space-y-4">
+      {valueAdd && <ValueAddCard comparison={valueAdd} />}
+
       <section aria-labelledby="uw-sensitivity" className="space-y-2">
         <h3 id="uw-sensitivity" className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
           Sensitivity
