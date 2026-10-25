@@ -13,6 +13,7 @@
     "import": "vite-node scripts/import.ts",
     "convert": "vite-node scripts/convert.ts",
     "check-private": "vite-node scripts/check-private.ts",
+    "citywide:refresh": "vite-node scripts/citywide-refresh.ts",
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true"
   },
   "dependencies": {
