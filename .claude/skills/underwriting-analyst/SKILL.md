@@ -1,13 +1,13 @@
 ---
 name: underwriting-analyst
 description: Act as the AI underwriting analyst for one AVIANCRE property. Runs the test suite and the engine, reviews the engine's JSON output against a fixed checklist, and writes an investment committee memo to docs/memos/<id>.md (private-deals/<id>/memo.md for an imported deal). The engine does all of the math; the analyst only interprets it.
-argument-hint: <property-id> [--assumptions <set file>] [--scenario downside|upside] [--t12 <file>]
+argument-hint: <property-id> [--assumptions <set file>] [--scenario downside|upside] [--t12 <file>] [--value-add]
 disable-model-invocation: true
 ---
 
 # Underwriting analyst
 
-The arguments are `$ARGUMENTS`: the property id first (`<id>` below), then optionally `--assumptions <file>`, an assumption set exported from Full underwriting > Assumptions, and `--scenario downside|upside`, which runs the whole review on that case instead of Base. Without `--scenario` the memo is at Base, the normal case. `--t12 <file>` applies a T-12 operating statement (a CSV/.xlsx, or the mapped `.json` downloaded from the app); for a property with `private-deals/<id>/t12.json` the engine applies that one without the flag. With a T-12, Year-1 operating expenses and other income are T-12 actuals and the JSON has a `t12` section. You are the underwriting analyst for that property. The AVIANCRE engine has already done every calculation. Your job is to read its output, judge it, and write it up for an investment committee. **You never calculate anything.**
+The arguments are `$ARGUMENTS`: the property id first (`<id>` below), then optionally `--assumptions <file>`, an assumption set exported from Full underwriting > Assumptions, and `--scenario downside|upside`, which runs the whole review on that case instead of Base. Without `--scenario` the memo is at Base, the normal case. `--t12 <file>` applies a T-12 operating statement (a CSV/.xlsx, or the mapped `.json` downloaded from the app); for a property with `private-deals/<id>/t12.json` the engine applies that one without the flag. With a T-12, Year-1 operating expenses and other income are T-12 actuals and the JSON has a `t12` section. `--value-add` turns on the value-add business plan (unit rent rolls only): units are renovated at their next roll and re-lease at market + a premium, paid for from a reserve funded with equity at closing. An assumption set can also turn it on. With the plan on, the JSON has a `valueAdd` section comparing As-is with Value-add. You are the underwriting analyst for that property. The AVIANCRE engine has already done every calculation. Your job is to read its output, judge it, and write it up for an investment committee. **You never calculate anything.**
 
 If no property id was given, list the ids from `src/data/sampleProperties.ts` and the `deal-*.json` files in `private-deals/`, and stop.
 
@@ -18,7 +18,8 @@ If no property id was given, list the ids from `src/data/sampleProperties.ts` an
 | Engine JSON | `docs/underwriting/<id>.json` | `private-deals/<id>/underwriting.json` |
 | Memo | `docs/memos/<id>.md` | `private-deals/<id>/memo.md` |
 | Memo with `--scenario` | `docs/memos/<id>--<scenario>.md` | `private-deals/<id>/memo--<scenario>.md` |
-| Memo with a T-12 | `docs/memos/<id>--t12.md` (after any scenario suffix) | `private-deals/<id>/memo--t12.md` |
+| Memo with the value-add plan on | `docs/memos/<id>--value-add.md` (after any scenario suffix) | `private-deals/<id>/memo--value-add.md` |
+| Memo with a T-12 | `docs/memos/<id>--t12.md` (after any scenario and value-add suffix) | `private-deals/<id>/memo--t12.md` |
 | Assumption set files | anywhere | `private-deals/<id>/` (the engine notes it if one is elsewhere) |
 
 `npm run underwrite` prints the JSON path it wrote (`Wrote …`); use that path. A T-12 that isn't one of the fictional samples in `docs/samples/` is real: the engine then writes the JSON under `private-deals/<id>/` even for a sample property, and the memo goes in that folder too (`memo--t12.md`), never in `docs/`.
@@ -26,7 +27,7 @@ If no property id was given, list the ids from `src/data/sampleProperties.ts` an
 ## Procedure
 
 1. **Run `npm test`.** If any test fails, stop. Report the failing tests and that no memo was written. Never write a memo on a broken engine.
-2. **Run `npm run underwrite -- $ARGUMENTS --json`** (this passes `--assumptions`, `--scenario` and `--t12` through; without them the engine runs at Defaults, Base case). A `--scenario` run writes the JSON with a `--downside`/`--upside` suffix, a T-12 run with `--t12`. If it fails (unknown id, an assumption set that doesn't fit the property, engine error), stop and report the error.
+2. **Run `npm run underwrite -- $ARGUMENTS --json`** (this passes `--assumptions`, `--scenario`, `--t12` and `--value-add` through; without them the engine runs at Defaults, Base case). A `--scenario` run writes the JSON with a `--downside`/`--upside` suffix, a run with the value-add plan on with `--value-add`, a T-12 run with `--t12`. If it fails (unknown id, an assumption set that doesn't fit the property, engine error), stop and report the error.
 3. **Read** the engine JSON (table above) in full, and `docs/UNDERWRITING.md` for how the engine models things (rollover blending, Year-11 normalization, max bid, sensitivity).
 4. **Review checklist.** Report each item to the user as `OK` or `FLAG` with one line citing the figures (table below).
 5. **Write the memo** to the memo path in the table above (overwrite any earlier memo), in the structure below.
@@ -50,8 +51,9 @@ If no property id was given, list the ids from `src/data/sampleProperties.ts` an
 | 12 | EST placeholders | `assumptions.estimated`, `assumptions.items[].sourceName` | Always list which *key* assumptions are still estimates: market rent, rent growth, renewal probability, operating expenses, exit cap, interest rate and LTV, purchase price |
 | 13 | Downside case | `scenarios.rows` (`minimumDSCR`, `equityMultiple`, `leveredIRR`: `.downside.display`, `.downside.vsBase.display`), `debt.dscrFloor`, `scenarios.presets.downside` | The Downside minimum DSCR is below the floor, or the Downside levered multiple is below 1.00x (equity is lost) |
 | 14 | T-12 vs underwriting (only when `t12` is not null) | `t12.noi` (`t12`, `underwritten`, `difference`, `differencePct`), `t12.rows[]` (`label`, `noiEffect.display`, `why`), `t12.reportedNOI.note`, `t12.tax`, `t12.perBasis`, `t12.expenseRatio`, `t12.managementFee`, `t12.flags`, `t12.thresholds` | `t12.flags` is not empty (NOI more than `thresholds.noiGap` off the T-12, taxes off the tax roll, opex off the benchmark, a T-12 management fee above the model's) |
+| 15 | Value-add plan (only when `valueAdd` is present) | `valueAdd.comparison.rows` (`key`, `label`, `asIs`, `valueAdd`, `change`), `valueAdd.valueCreated`, `valueAdd.returnOnCost`, `valueAdd.programFinishes`, `valueAdd.renovations`, `valueAdd.byScenario`, `valueAdd.warnings`, `valueAdd.inputs[]` (`isEstimate`, `sourceName`), `scenarios.rows` (`equityMultiple.downside`) | Value created is zero or negative, the program doesn't finish within the hold (`valueAdd.warnings`), the Downside levered multiple is below 1.00x, or the rent premium or renovation cost is still EST |
 
-For multifamily (`rentRoll.kind === 'multifamily'`), report checks 2–4 as `N/A (multifamily)`. Without a T-12 (`t12` is null), report check 14 as `N/A (no T-12)`. In check 12, operating expenses loaded from a T-12 are ACT, not EST.
+For multifamily (`rentRoll.kind === 'multifamily'`), report checks 2–4 as `N/A (multifamily)`. Without a T-12 (`t12` is null), report check 14 as `N/A (no T-12)`. Without the value-add plan (no `valueAdd` key), report check 15 as `N/A (value-add plan off)`. In check 12, operating expenses loaded from a T-12 are ACT, not EST.
 
 ## Memo
 
@@ -75,6 +77,13 @@ Then a title (`# <property.name>: Investment memo`) and a line with `meta.asOf`,
    - Quote `scenarios.notes` after the first one, if there are any.
    
    One or two sentences on what the Downside means for the recommendation, citing its levered IRR, multiple and minimum DSCR. If `meta.scenario` is not `base`, say at the top of this section that the rest of the memo is at that case, and that the table compares it with Base.
+
+   **6a. Value-add plan**, only when `valueAdd` is present, as its own section (heading "Value-add plan") right after Returns and sensitivity:
+   - Say what the plan is from `valueAdd.inputs` (units to renovate, start month, pace, cost, premium, downtime; name each EST input and quote its `sourceName`) and how it is funded (`valueAdd.funding`).
+   - Then a table of `valueAdd.comparison.rows` with columns As-is, Value-add and Change (their `display` strings; a blank Change where there is none).
+   - Then one or two sentences on value created (`valueAdd.valueCreated`), return on cost against the exit cap (both from the JSON, side by side), when the program finishes (`valueAdd.programFinishes`) and the pace (`valueAdd.paceByYear`), and what Downside's premium and cost presets do to value created (`valueAdd.byScenario`).
+   - Quote `valueAdd.warnings` and `valueAdd.notes`.
+   - The recommendation and the deal snapshot use the run as given (plan on). Say once that the price is the as-is price and the plan never raises it.
 7. **Debt.** Loan, LTV, rate, DSCR path and minimum, debt yield, negative leverage.
 8. **Key risks and mitigants.** A short list; each risk tied to a figure, each mitigant concrete.
 9. **What would change my view.** The specific findings (from diligence) that would move the recommendation up or down.

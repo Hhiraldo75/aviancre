@@ -10,11 +10,12 @@ Step 1 is the calculation engine only, with no UI changes. Code lives in `src/li
 - Lease rollover at expiration: blend renewal vs new tenant by renewal probability (Argus-style weighted average of downtime, free rent, TI, LC and rent). New rent = market rent grown to that year. A fixed renewal option is priced at the lower of the option rent and market rent at renewal (a tenant won't exercise an above-market option), with a warning when the option is above market. Vacant suites lease up after their expected lease-up months on new-tenant terms.
 - Expense recoveries by lease type: NNN (pro-rata, admin fee if set), base year, expense stop, full-service gross (none).
 - Waterfall: gross potential rent, absorption/turnover vacancy, free rent, recoveries, general vacancy, credit loss, EGI, operating expenses (incl. management fee), NOI, TI, leasing commissions, capital reserves, cash flow before debt, debt service, levered cash flow.
-- General vacancy is a floor: only add the amount above the vacancy already modeled from rollover and lease-up.
+- General vacancy is a floor: only add the amount above the vacancy already modeled from rollover and lease-up. Value-add renovation downtime comes on top of the floor (convention 19).
 - Purchase price default = year-1 NOI at the default assumptions / market cap rate (overridable), plus closing costs. The estimate is anchored to defaults: it changes only when the analyst edits the market cap rate or enters a price. Edits to anything else move the going-in cap and returns, not the price. The summary card names where each cap rate came from, after its value: the submarket benchmark behind the price (e.g. "7.45% EST · Downtown / Downcity multifamily"; "price at <benchmark> X%" once other edits move the going-in cap off it), "price at your X% market cap", or "from your price"; and for the exit cap, the benchmark plus the spread (e.g. "+ 25 bps"), or "your input".
 - Sale at end of year 10 = year-11 NOI / exit cap, less selling costs. Year-11 NOI is normalized first: rollover vacancy and free rent are replaced by the general vacancy rate.
 - Loan: LTV, fixed rate, amortization, interest-only years, loan fee.
 - Multifamily: simple unit-type model (vacancy, rent growth, turnover cost per move-out, per-unit reserves). A unit rent roll runs unit by unit, month by month (convention 18), validated against an independent Excel model (Fernhill golden test).
+- Value-add business plan (unit rent rolls only, off by default): units are renovated at their next roll, offline for the downtime, then re-lease at market + a premium. It is paid for from a reserve funded with equity at closing (convention 19).
 
 ### Default assumptions (`src/lib/underwriting/defaults.ts`, one set per asset type)
 Office / Retail / Industrial:
@@ -33,6 +34,17 @@ Loan: 60% LTV, 30-year amortization, 2 years interest-only, 1% fee ("consistent 
 Exit: 10-year hold, exit cap = market cap + 0.25%, 2% selling costs, 8% discount rate, 10% target levered IRR (for the max bid).
 
 Defaults added during implementation (not in the original spec): closing costs 1.5%; new-lease escalation 3%/yr; multifamily turnover 50%/yr at $1,000 per move-out; initial capex $0.
+
+Value-add plan (unit rent rolls only; `VALUE_ADD_DEFAULTS`): off. Its inputs are all EST:
+
+- Units to renovate: 50% of units, rounded down (60 at Fernhill).
+- Start: month 1.
+- Max pace: 4 units/month.
+- Cost: $12,500 per unit, a fixed budget ("Placeholder – replace with contractor bids").
+- Rent premium: $175/unit/month in Year-1 dollars ("Placeholder – replace with renovated rent comps").
+- Downtime: 1 month.
+
+The count, start month and pace are "Placeholder – replace with the renovation business plan".
 
 **Market benchmarks** (`src/data/submarkets.ts`): each asset type's submarket rows are anchored to a Providence-Warwick metro figure while keeping the earlier submarket differences: cap rates shifted by a constant, rents and vacancy scaled by a ratio, so the simple average across submarkets is the metro figure before rounding (caps to 0.05%, rents to $0.25/SF or $5/unit, vacancy to 0.1%; `src/lib/benchmarkAnchor.ts`). Rounding leaves the averaged caps up to 2.5 bps off (office 10.08%, retail 7.83%, industrial 7.78%, multifamily 7.48%).
 
@@ -66,6 +78,8 @@ Going-in cap, raw and normalized year-11 NOI, in-place vs market rent, unlevered
 | General vacancy | +2 pts | −1 pt, not below 3% | all |
 | Expense growth | 0 | 0 | all (a lever you can set) |
 | Exit cap rate | +50 bps | −25 bps | all |
+| Rent premium (value-add) | −25% of the value | 0 | value-add plan on |
+| Renovation cost (value-add) | +15% of the value | 0 | value-add plan on |
 
 - **Rules.** Upside vacancy stops at 3%, and a Base already below 3% is left alone, never raised. Every result is held within the assumption's allowed range (renewal ≥ 0%, downtime ≤ 36 months, turnover ≤ 100%), and the override's note says when a limit applied. Rent growth is not floored at 0% (unlike the sensitivity grid), so an edited 0.5% becomes −0.5% in Downside. Debt terms don't move, so DSCR changes only through NOI. General vacancy is a floor on total vacancy, so +2 pts doesn't double-count the renewal and downtime levers: it adds vacancy in stable years and at the normalized exit. Downside is a typical committee downside (not a stress test) and has more levers than Upside.
 - **Sources.** Each preset is EST ("Scenario preset – rule of thumb, replace with your own downside/upside view") until edited. Each moved assumption is EST with a note such as "Downside scenario: Base 7.70% +50 bps (preset)".
@@ -104,6 +118,32 @@ Going-in cap, raw and normalized year-11 NOI, in-place vs market rent, unlevered
 
 All three golden tests share the checks in `src/lib/underwriting/goldenChecks.ts`.
 - `npm run rent-roll -- <property-id> [--out path]` exports every lease and vacant-suite field the engine reads, including the renewal option rent and the base-year expense amount (default `docs/rent-roll-<property-id>.csv`; the Atwells export is `docs/atwells-rent-roll.csv`). A property block (asset type, building class, submarket, address) follows the rentable SF line: those set the market defaults. The rent roll import reads this format back.
+
+**Value-add plan** (`src/lib/underwriting/valueAdd.ts`; the rules are convention 19).
+
+- **Turning it on.** Full underwriting > Assumptions > *Value-add* has the on/off switch, which only unit rent rolls get. The plan's inputs appear while it is on.
+- **Storage.** The switch is stored as `valueAdd.enabled: 1` and the inputs as `valueAdd.*`, so they are saved in assumption sets and recorded in the memo marker. Turning the plan off keeps its inputs. While it is off they change nothing: they aren't counted or listed as changes, and every output is byte-identical to a run without them.
+- **Units input.** The "Units to renovate" box also takes a percent ("50%" of the units, rounded down).
+- **Comparison.** With the plan on, the Returns tab's *Value-add plan* card compares As-is (the same assumptions with the plan off, at the same price) with Value-add:
+  - Year-1 NOI
+  - stabilized NOI (normalized Year 11)
+  - when the program finishes
+  - units renovated
+  - reserve, total spend and unspent reserve
+  - return on cost
+  - exit value
+  - value created
+  - equity required
+  - unlevered and levered IRR, levered multiple and minimum DSCR
+
+  Next to it is the renovation pace by year.
+- **Cash flow and sources & uses.** The cash flow gains the renovation lines, and sources & uses shows the reserve.
+- **Command line.** `npm run underwrite -- <id> --value-add` turns the plan on, on top of any set. It prints the comparison and the pace, and adds `--value-add` to the file names (after any `--downside`/`--upside`, before `--t12`). The CSV run also writes `…--value-add--schedule.csv`, one row per renovation (unit, floor plan, status, renovation month, re-lease month, re-lease rent, cost, move-out cost, rolls passed over), so the schedule can be checked in Excel. The analyst JSON gains a `valueAdd` section only when the plan is on.
+- **Tests.** `valueAdd.test.ts`:
+  - a six-unit rent roll worked by hand (the example in convention 19)
+  - the schedule rules
+  - Fernhill with the plan off, with inert inputs: byte-identical CSV and JSON, and the golden checks
+  - Fernhill with the plan on: price, reserve, value created, presets, and set round-trip
 
 ## Rent roll import (real deals)
 
@@ -160,10 +200,10 @@ Full underwriting > Assumptions saves the current edits as a named set per prope
 
 ## AI underwriting analyst
 
-`/underwriting-analyst <property-id> [--assumptions <file>] [--scenario downside|upside] [--t12 <file>]` (`.claude/skills/underwriting-analyst/SKILL.md`) has Claude Code act as the analyst, at Defaults or at an exported assumption set (Base unless a scenario is given). The engine does all of the math; the AI only interprets it.
+`/underwriting-analyst <property-id> [--assumptions <file>] [--scenario downside|upside] [--t12 <file>] [--value-add]` (`.claude/skills/underwriting-analyst/SKILL.md`) has Claude Code act as the analyst, at Defaults or at an exported assumption set (Base unless a scenario is given). The engine does all of the math; the AI only interprets it.
 1. Run `npm test`, and stop if anything fails: no memo on a broken engine.
 2. Run `npm run underwrite -- <id> [--assumptions <file>] --json`, then read the JSON and this document.
-3. Report a 13-item review checklist as OK or FLAG: in-place vs market, above-market options, rollover concentration, WALT, Year-11 normalization, going-in vs exit cap, negative leverage, DSCR vs 1.25x, debt yield vs 9%, IRR vs target, sensitivity range, EST placeholders, and the Downside case (from the JSON's `scenarios` comparison, which the memo also quotes). With a T-12 loaded (`--t12`, or `private-deals/<id>/t12.json`), a 14th item checks the JSON's `t12` section and the memo adds an *Operating history (T-12)* section.
+3. Report a 13-item review checklist as OK or FLAG: in-place vs market, above-market options, rollover concentration, WALT, Year-11 normalization, going-in vs exit cap, negative leverage, DSCR vs 1.25x, debt yield vs 9%, IRR vs target, sensitivity range, EST placeholders, and the Downside case (from the JSON's `scenarios` comparison, which the memo also quotes). With a T-12 loaded (`--t12`, or `private-deals/<id>/t12.json`), a 14th item checks the JSON's `t12` section and the memo adds an *Operating history (T-12)* section. With the value-add plan on (`--value-add`, or a set that turns it on), a 15th item checks the JSON's `valueAdd` section and the memo adds a *Value-add plan* section.
 4. Write an investment committee memo to `docs/memos/<id>.md` (for an imported `deal-*` id, `private-deals/<id>/memo.md`, which the app never bundles). Under the "As of" line the memo states its set ("Assumption set: My case, 3 changes from defaults") and carries the JSON's marker line, `<!-- aviancre-assumption-set: {...} -->`, which records the exact changes. The Underwriting assumptions section lists each change with its default.
 
 Every number in the memo is quoted from the JSON's display strings, and the memo is labeled "AI-generated analysis of sample data. All figures from the AVIANCRE engine." (an imported deal not marked as sample data drops "of sample data"). The skill only runs when invoked by name.
@@ -201,12 +241,133 @@ These are decisions made where the spec is silent. Match them when you rebuild t
 9. **Vacant suites** stay vacant for `expectedLeaseUpMonths` (or the asset's downtime if that's missing). They then lease on 100% new-tenant terms, at the asking rent if one is set, otherwise market. Recoveries for these suites: office uses base-year (start year); retail and industrial use net.
 10. **GPR** includes vacant and downtime months at what they would rent for, and the lost rent appears as absorption/turnover vacancy. Free rent abates base rent only. Recoveries are earned only on occupied SF.
 11. **Waterfall signs.** Losses (vacancy, free rent, credit loss) and costs are reported as positive amounts and subtracted.
-12. **General vacancy floor** (per year): target = rate × (GPR − loss to lease + recoveries + other income). General vacancy = max(0, target − absorption/turnover vacancy). Credit loss = rate × (GPR − loss to lease − absorption vacancy − free rent + recoveries + other income − general vacancy). Loss to lease is multifamily only (0 for commercial).
+12. **General vacancy floor** (per year): target = rate × (GPR − loss to lease + recoveries + other income). General vacancy = max(0, target − (absorption/turnover vacancy − value-add renovation downtime)); renovation downtime is 0 without the plan (convention 19). Credit loss = rate × (GPR − loss to lease − absorption vacancy − free rent + recoveries + other income − general vacancy). Loss to lease is multifamily only (0 for commercial).
 13. **Expenses.** There is one recoverable line, `market.opexPerYear` × RSF (× units for multifamily), grown each analysis year. With a T-12 loaded, the line is replaced by one line per T-12 operating category (each recoverable or not, as mapped), and the engine treats them exactly like the single line: summed, grown each year, the recoverable ones feeding recoveries. The management fee = rate × EGI and is not recoverable, which avoids a circular reference. Capital reserves stay flat in $/SF (or $/unit).
-14. **Pricing.** Price defaults to year-1 NOI / market cap rate. Total cost = price × (1 + closing costs) + initial capex. Going-in cap = year-1 NOI / price.
+14. **Pricing.** Price defaults to year-1 NOI / market cap rate. Total cost = price × (1 + closing costs) + initial capex (+ the value-add reserve when the plan is on, convention 19). Going-in cap = year-1 NOI / price.
 15. **Sale.** The exit year (year 11) is normalized before capping: absorption/turnover vacancy and free rent are removed and the full general vacancy rate applies instead (credit loss and management fee recalculate on the new EGI). Recoveries lost to downtime are not added back. Gross sale = normalized year-11 NOI / exit cap. Net sale = gross × (1 − selling costs). The CSV shows both the raw and normalized year-11 columns. The levered cash flow also pays off the loan balance after month 120.
 16. **Debt.** Loan = LTV × price. Months 1–24 are interest-only, then a level payment amortizes the loan over 30 years. Loan fee = fee % × loan, paid from equity at t0. Equity = total cost − loan + fee.
-17. **Returns.** Unlevered cash flows: t0 = −total cost; years 1–10 = CFBD (+ net sale in year 10). Levered cash flows: t0 = −equity; years 1–10 = CFBD − debt service (+ net sale − payoff in year 10). NPV is unlevered, at the discount rate. The equity multiple is levered (total distributions / equity); there is also an unlevered multiple. Cash-on-cash = levered CF / equity. DSCR = NOI / debt service. Debt yield = year-1 NOI / loan. WALT is measured from the analysis start date (the first of the month after `asOf`), over leases active on `asOf`; the rent roll's remaining term uses the same start.
+17. **Returns.** Unlevered cash flows: t0 = −total cost; years 1–10 = CFBD (+ net sale in year 10). Levered cash flows: t0 = −equity; years 1–10 = CFBD − debt service (+ net sale − payoff in year 10). With the value-add plan on, year 10 of both also adds the unspent reserve (convention 19). NPV is unlevered, at the discount rate. The equity multiple is levered (total distributions / equity); there is also an unlevered multiple. Cash-on-cash = levered CF / equity. DSCR = NOI / debt service. Debt yield = year-1 NOI / loan. WALT is measured from the analysis start date (the first of the month after `asOf`), over leases active on `asOf`; the rent roll's remaining term uses the same start.
 18. **Multifamily.** The cash flow shows Gross potential rent (at market), then Less: loss to lease, and the occupancy row is labeled Physical occupancy (before general vacancy): it counts leased units, and the general vacancy line still applies after it. For each unit type, market rentₜ = market₁ × (1+g)^(t−1). In-place rent closes the loss-to-lease gap as units turn: in-placeₜ = marketₜ − (market₁ − in-place₁) × (1+g)^(t−1) × (1−turnover)^(t−1). GPR = all units × market rent × 12, less loss to lease = occupied units × (market − in-place) × 12, shown as its own line. Other income = $/unit/month × all units × 12, grown with rent; with a T-12 loaded, its other income (grown to Year 1) replaces this figure, grown with rent the same way. There is no absorption vacancy, so general vacancy applies in full. Turnover cost = units × turnover rate × cost per move-out, grown with expenses, and is shown on the TI line. Reserves = $/unit × units.
 
     **Unit rent rolls** (imported apartments) run month by month instead. An occupied unit pays its in-place rent (flat) through its lease end; it rolls in the month after the month that contains its lease end date (the day is ignored). A lease ending before the analysis start, or with no end, is month-to-month and rolls in month 1. At the roll, the turnover share re-leases at that unit's market rent × (1+g)^(analysis year − 1) and the renewal share (1 − turnover rate) renews at the lower of that market rent and the current rent × (1 + max renewal increase, EST 5%); the new rent is the blend, as with a commercial renewal probability. It is one expected rent per unit, and the next roll starts from it, so a unit paying above market drops to market at its first roll. It then re-rolls every 12 months, so loss to lease burns off over several rolls rather than at the first lease end. A vacant unit's first lease is at market, or at the file's future lease rent on a pre-leased unit that has one, and has no turnover cost. Each roll costs turnover rate × cost per move-out, grown with expenses by the analysis year of the roll month. A unit on notice with a future resident (occupied and pre-leased) skips the renewal-or-turnover blend at its lease end: it goes straight to the signed lease, at the future lease rent if the file gives one, else at that year's market rent, with the full cost per move-out and no downtime; later rolls blend as usual. There is no downtime: the general vacancy floor (12) covers make-ready. Vacant units lease at the lease-up pace (EST 8 units/month), pre-leased units first, each group in file order: unit k (0-based) leases in month ⌊k / pace⌋ + 1 at that year's market rent. Until then its market rent is in GPR and shown as absorption vacancy. Other income = the file's monthly other income (all units) × 12, grown with rent, whatever the occupancy. Other income, operating expenses and reserves are annual figures; the other lines are summed from the months. GPR is every unit at market each month; loss to lease is market minus current rent on leased units, and is negative where current rent is above market. Occupancy = occupied unit-months ÷ (units × 12). The Rent roll tab shows loss to lease per floor plan: (market − in-place) on occupied units, per unit per month, as a % of their market rent, and per year. Its Pre-leased column counts every pre-leased unit, split into vacant and on notice (e.g. `4 (3 vacant, 1 on notice)`), the same count as the import's totals check.
+
+19. **Value-add plan** (unit rent rolls only; off by default). While it is off, nothing below applies and the model is exactly conventions 1–18. Months are numbered 1, 2, … from the analysis start (month 1 = year 1's first month), and "year(m)" is the analysis year that month m falls in (months 1–12 are year 1).
+
+    **Inputs.** Each input has its own letter:
+
+    - N, units to renovate: a whole number from 0 to the unit count. Typed as a percent, it is ⌊percent × units⌋.
+    - S, start month: 1–240.
+    - P, max pace: renovations started per month, a whole number of at least 1.
+    - C, cost per unit: fixed nominal dollars, not grown.
+    - R, rent premium: $/unit/month in Year-1 dollars.
+    - D, downtime: whole months, 0–12.
+
+    The other inputs come from convention 18: g (market rent growth), e (expense growth), t (turnover rate), cost per move-out, and max renewal increase.
+
+    **a. Rolls before renovation.** Each unit's roll months are where convention 18 puts them:
+
+    - Its first roll F is:
+      - for an occupied unit, the month after the month containing its lease end (month 1 when the lease has ended or has no end)
+      - for a vacant unit, its lease-up month ⌊k / pace⌋ + 1
+    - Its later rolls are F + 12, F + 24, …
+    - A pre-leased unit's first roll is a signed lease and can't be renovated. That covers both a vacant unit with a signed applicant and an occupied unit on notice with the next resident signed. Such a unit is eligible from F + 12 on.
+
+    **b. The schedule** is fixed before any cash flow is computed:
+
+    1. Walk months m = S, S + 1, … through 12 × hold years (month 120). Stop once N renovations have started.
+    2. In each month, take the units in rent-roll (file) order. For each unit not yet renovated whose eligible roll falls in m:
+       - Renovate it in month m if fewer than P renovations have started in m and fewer than N in total.
+       - Otherwise (the month is full), it is passed over. It rolls normally at m (the convention 18 blend) and is eligible again at its next roll, m + 12.
+    3. Nothing starts in year 11.
+
+    Lease-up order (pre-leased vacant units first) only sets F. Within a month, the order is always the file order.
+
+    **c. The renovation month m** replaces the unit's roll at m:
+
+    - The resident moves out. That costs the full cost per move-out × (1+e)^(year(m)−1), on the Turnover costs line, instead of the roll's t × cost.
+    - A renovation at a vacant unit's first lease (F, not signed) has no move-out cost.
+    - The renovation cost C is spent in month m.
+    - From month m on, the unit's market rent is the renovated market rent: (market₁ + R) × (1+g)^(year−1), where market₁ is the unit's Year-1 market rent. So the premium grows with market rent.
+    - The unit is offline in months m … m+D−1. It pays no rent, its GPR is the renovated market rent, and the same amount is absorption & turnover vacancy (shown again as *of which renovation downtime*). It isn't occupied.
+    - In month m+D it leases at that month's renovated market rent, with no renewal blend and no extra cost.
+    - Rent is flat until the next roll, at m + D + 12.
+    - With D = 0, it re-leases in month m itself.
+
+    **d. Later rolls** fall at m + D + 12, then every 12 months, and use convention 18's blend on the renovated market rent RM: new rent = t × RM + (1 − t) × min(RM, current × (1 + max renewal increase)), at t × cost per move-out × (1+e)^(year−1). Loss to lease = RM − current rent.
+
+    **e. Annual lines** appear only with the plan on:
+
+    - Units renovated (started): renovations starting in the year.
+    - Of which renovation downtime: the downtime months' renovated market rent, already inside absorption & turnover vacancy.
+    - Renovation capex: C × that count, below NOI.
+    - Funded from renovation reserve: the same amount, added back.
+
+    So cash flow before debt = NOI − turnover costs − leasing commissions − capital reserves − renovation capex + reserve draw. That equals the formula without the plan.
+
+    **Renovation downtime comes on top of the general vacancy floor.** Convention 12's target is unchanged (rate × (GPR − loss to lease + recoveries + other income), with GPR including the downtime months at the renovated rent). What offsets it is now absorption & turnover vacancy minus renovation downtime: general vacancy = max(0, target − (absorption & turnover vacancy − renovation downtime)). Lease-up vacancy still offsets the floor as before. Credit loss is unchanged: rate × (GPR − loss to lease − absorption & turnover vacancy (all of it) − free rent + recoveries + other income − general vacancy).
+
+    **f. Funding.**
+
+    - Reserve = N × C, funded with equity at closing.
+    - Total cost = price × (1 + closing costs) + initial capex + reserve.
+    - The loan is LTV × price, unchanged: it funds none of the plan.
+    - Equity = total cost − loan + loan fee.
+    - Spent = C × renovations started in the hold. Unspent = reserve − spent, returned in year 10 (the final hold year). It is added to both the unlevered and the levered cash flow on the *Unspent reserve returned* line.
+    - The reserve earns no interest.
+
+    **g. Price and sale.**
+
+    - The estimated price is worked out from the default assumptions with the plan off (convention 14), so the plan never raises it.
+    - The sale is convention 15 on year 11, which now carries the renovated rents. Normalization sets absorption & turnover vacancy, and the renovation downtime within it, to 0, so any downtime that runs into year 11 is removed and the full general vacancy rate applies.
+
+    **h. Outputs.**
+
+    - **As-is** is the same assumptions with the plan off, at the same price.
+    - **Stabilized NOI** = normalized year-11 NOI (the exit NOI).
+    - **Program finishes** = the re-lease month (m + D) of the last renovation, once all N have started within the hold; otherwise "Not finished in the hold".
+    - **Return on cost** = R × 12 ÷ C. It is simple and in Year-1 dollars: no downtime, no move-out cost.
+    - **Value created** = value-add gross exit value − as-is gross exit value − spent.
+    - **Pace by year**: renovations started, spend, and cumulative count and share of N.
+
+    **i. Scenarios.** With the plan on, Downside also moves the rent premium by −25% and the cost per unit by +15%; the reserve is resized from the new cost. Upside leaves the plan alone. The presets are editable like the others.
+
+    **Worked example** (`valueAdd.test.ts`). Analysis start Nov 2026. All six units have market $1,000 and in-place $900, with g = e = 0, t = 50%, cost per move-out $1,000 and a 5% renewal cap. The plan is N = 4, S = 1, P = 2, C = $10,000, R = $100, D = 1.
+
+    The units, in file order:
+
+    | Unit | Status | First roll |
+    |---|---|---|
+    | A | lease ends Oct 31 | month 1 |
+    | B | month-to-month | month 1 |
+    | C | lease ends Nov 15 | month 2 |
+    | D | on notice, next resident signed | month 1 (signed) |
+    | E | vacant | lease-up month 1 |
+    | F | vacant, pre-leased | lease-up month 1 (signed) |
+
+    Month by month:
+
+    - Month 1: A and B start and fill the pace. D and F are signed; E is passed over and leases normally.
+    - Month 2: C starts.
+    - Month 13: D, now unsigned, comes before E in file order and is the 4th.
+    - Re-lease months: A and B in month 2, C in month 3, D in month 14 (the program finishes in month 14).
+
+    Year 1:
+
+    - GPR = 2 × 12 × $1,100 + ($1,000 + 11 × $1,100) + 3 × 12 × $1,000 = $75,500
+    - Absorption & turnover vacancy = 3 × $1,100 = $3,300, all of it renovation downtime (E and F lease in month 1, so there is no lease-up vacancy)
+    - Loss to lease = $100 (C's month 1)
+    - General vacancy = 5% × ($75,500 − $100) − ($3,300 − $3,300) = $3,770. The downtime doesn't reduce it.
+    - Occupancy = 69 / 72
+    - Turnover costs = $4,000: A, B and C move out, plus D's signed lease
+    - Renovation capex = $30,000
+
+    Year 2:
+
+    - GPR = 4 × $13,200 + 2 × $12,000 = $76,800
+    - Vacancy = $1,100 (D's month 13), all renovation downtime
+    - Loss to lease = $0
+    - General vacancy = 5% × $76,800 = $3,840
+    - Turnover costs = $1,000 + 5 × $500 = $3,500
+    - Renovation capex = $10,000
+
+    Reserve = $40,000, all spent. With a 1-year hold, D's renovation falls outside it: $30,000 is spent and $10,000 is returned in year 1.

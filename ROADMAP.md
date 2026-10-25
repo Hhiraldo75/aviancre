@@ -31,6 +31,7 @@
    - Replaces the quick estimate in the Investment view; validated against a hand-built Excel model
 4. **Live assumptions panel**: change rent growth, exit cap or interest rate and see results update
    - [x] Scenarios: Base, Downside and Upside side by side at the Base price (Investment view card, a switch in Full underwriting, `--scenario` on the CLI, a `scenarios` section in the analyst JSON); EST presets, editable and saved with assumption sets
+   - [x] Value-add business plan (multifamily unit rent rolls, off by default): renovate units at their next roll at a set pace, re-lease at market + premium, funded by an equity reserve at closing; As-is vs Value-add card and pace by year in the Returns tab, `--value-add` on the CLI with a renovation schedule CSV, a `valueAdd` section in the analyst JSON, Downside premium/cost presets. Rules in `docs/UNDERWRITING.md` convention 19
 5. **Rent estimation engine** with comps and confidence ranges; **rent roll import** (CSV/Excel)
    - [x] T-12 import: Yardi/AppFolio/plain 12-month statements mapped to categories with a totals check; Year-1 opex and other income from actuals; T-12 check in the Investment view (NOI bridge, taxes vs tax roll, ratios vs benchmark, price/IRR effect); in the analyst export and memo
 6. **Deploy** to Vercel or Netlify for a public portfolio link
