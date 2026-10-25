@@ -1,6 +1,8 @@
 import type { BenchmarkType, ISODate, LeasingTerms, MarketLeasingAssumptions, Property, Sourced, UnderwritingAssumptions } from '../../types'
 import { DEBT_AS_OF, DEBT_QUOTES, DEBT_RATE, LOAN_SPREAD_BPS, LOAN_TERMS, SPREAD_SOURCE, TREASURY_10Y, TREASURY_SOURCE } from '../../data/debtMarket'
+import { fmt } from '../format'
 import { estimate, fromImport } from '../sourced'
+import { periodLabel, t12ExpenseLines, t12OtherIncomeYear1, withoutT12 } from '../t12'
 import { analysisStartFor } from './timeline'
 import { operatingCashFlows } from './waterfall'
 
@@ -107,6 +109,9 @@ function debtRate(type: BenchmarkType): Sourced<number> {
 }
 const NOT_USED = 'Not used for multifamily'
 
+/** The default single expense line's label when no T-12 is loaded; assumption sets without recorded lines were made on it. */
+export const DEFAULT_EXPENSE_LABEL = { multifamily: 'Operating expenses', commercial: 'Operating expenses (taxes, insurance, CAM)' } as const
+
 function terms(termMonths: number, freeRentMonths: number, tiPerSF: number, lcPct: number): LeasingTerms {
   return {
     termMonths: rot(termMonths),
@@ -136,6 +141,9 @@ export function defaultAssumptions(property: Property, asOf: ISODate): Underwrit
 
   const sizeBasis = isMF ? units(property) : property.physical.rentableSF.value
   const opex = property.market.opexPerYear
+  const start = analysisStartFor(asOf)
+  const t12 = property.t12
+  const rentGrowth = isMF ? MULTIFAMILY_DEFAULTS.marketRentGrowth : c.marketRentGrowth
 
   const assumptions: UnderwritingAssumptions = {
     scenario: 'base',
@@ -143,14 +151,14 @@ export function defaultAssumptions(property: Property, asOf: ISODate): Underwrit
       purchasePrice: estimate(0, 'Pending: year-1 NOI ÷ market cap rate'),
       marketCapRate: marketCap,
       closingCostsPct: rot(s.closingCostsPct),
-      analysisStartDate: analysisStartFor(asOf),
+      analysisStartDate: start,
       holdYears: estimate(s.holdYears, INVESTOR_TARGET),
       initialCapex: estimate(0, 'Placeholder – replace with capital plan'),
     },
     leasing: isMF
       ? {
           marketRent: property.market.marketRent,
-          marketRentGrowth: rot(MULTIFAMILY_DEFAULTS.marketRentGrowth),
+          marketRentGrowth: rot(rentGrowth),
           renewalProbability: estimate(0, NOT_USED),
           downtimeMonths: estimate(0, NOT_USED),
           newLease: unusedTerms(),
@@ -160,7 +168,7 @@ export function defaultAssumptions(property: Property, asOf: ISODate): Underwrit
         }
       : {
           marketRent: property.market.marketRent,
-          marketRentGrowth: rot(c.marketRentGrowth),
+          marketRentGrowth: rot(rentGrowth),
           renewalProbability: rot(c.renewalProbability),
           downtimeMonths: rot(c.downtimeMonths),
           newLease: terms(c.newTermYears * 12, c.freeRentMonths[0], c.tiPerSF[0], s.leasingCommissionNew),
@@ -171,14 +179,17 @@ export function defaultAssumptions(property: Property, asOf: ISODate): Underwrit
     operating: {
       generalVacancyPct: rot(s.generalVacancyPct),
       creditLossPct: rot(s.creditLossPct),
-      expenses: [
-        {
-          label: isMF ? 'Operating expenses' : 'Operating expenses (taxes, insurance, CAM)',
-          annualAmount: estimate(opex.value * sizeBasis, `${opex.sourceName} × ${isMF ? 'units' : 'rentable SF'}`),
-          recoverable: !isMF,
-        },
-      ],
+      expenses: t12
+        ? t12ExpenseLines(t12, s.expenseGrowth, start, !isMF)
+        : [
+            {
+              label: DEFAULT_EXPENSE_LABEL[isMF ? 'multifamily' : 'commercial'],
+              annualAmount: estimate(opex.value * sizeBasis, `${opex.sourceName} × ${isMF ? 'units' : 'rentable SF'}`),
+              recoverable: !isMF,
+            },
+          ],
       expenseGrowth: rot(s.expenseGrowth),
+      ...(t12 ? { otherIncomeYear1: t12OtherIncomeYear1(t12, rentGrowth, start) } : {}),
       managementFeePct: rot(s.managementFeePct),
       capitalReservesPerYear: rot(isMF ? MULTIFAMILY_DEFAULTS.reservesPerUnit : c.reservesPerSF),
     },
@@ -215,7 +226,28 @@ export function defaultAssumptions(property: Property, asOf: ISODate): Underwrit
   }
 
   assumptions.acquisition.purchasePrice = estimatedPrice(property, assumptions, asOf)
+  if (t12) {
+    const price = assumptions.acquisition.purchasePrice
+    price.notes = `${price.notes}. ${t12PriceNote(property, price.value, asOf)}`
+  }
   return assumptions
+}
+
+const priceCache = new WeakMap<Property, { asOf: ISODate; price: number }>()
+
+/** The estimated price the property would have without its T-12 (benchmark operating expenses, rent roll other income). */
+export function priceWithoutT12(property: Property, asOf: ISODate): number {
+  const hit = priceCache.get(property)
+  if (hit?.asOf === asOf) return hit.price
+  const price = defaultAssumptions(withoutT12(property), asOf).acquisition.purchasePrice.value
+  priceCache.set(property, { asOf, price })
+  return price
+}
+
+/** "Loading the T-12 (Oct 2025 – Sep 2026) moved the estimated price from $16,498,774 to $17,743,210." */
+export function t12PriceNote(property: Property, price: number, asOf: ISODate): string {
+  const before = priceWithoutT12(property, asOf)
+  return `Loading the T-12 (${periodLabel(property.t12!)}) moved the estimated price from ${fmt.usd(before)} to ${fmt.usd(price)}`
 }
 
 /**

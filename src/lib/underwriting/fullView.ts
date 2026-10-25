@@ -679,7 +679,8 @@ export function assumptionGroups(a: UnderwritingAssumptions, defaults: Underwrit
     const dflt = fieldValue(defaults, f.key)
     let n = note(dflt)
     const expense = /^operating\.expenses\.(\d+)\./.exec(f.key)
-    if (expense) n += ` · ${a.operating.expenses[Number(expense[1])].recoverable ? 'recoverable' : 'not recoverable'}`
+    // Recovery terms only exist for commercial leases.
+    if (expense && !a.multifamily) n += ` · ${a.operating.expenses[Number(expense[1])].recoverable ? 'recoverable' : 'not recoverable'}`
     group(f.group).items.push({
       label: f.label,
       value: f.format(src.value),

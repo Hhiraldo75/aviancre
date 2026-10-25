@@ -23,6 +23,8 @@ export function multifamilyYears(property: Property, a: UnderwritingAssumptions)
   const units = rr.unitTypes.reduce((s, u) => s + u.unitCount, 0)
   const occupied = rr.unitTypes.reduce((s, u) => s + u.occupiedUnits, 0)
   const expensesYear1 = a.operating.expenses.reduce((s, e) => s + e.annualAmount.value, 0)
+  // A T-12's other income replaces the rent roll's.
+  const otherIncomeYear1 = a.operating.otherIncomeYear1?.value ?? (rr.otherIncomePerUnitMonthly?.value ?? 0) * units * 12
 
   return Array.from({ length: years }, (_, i) => {
     const rentGrowth = Math.pow(1 + g, i)
@@ -44,7 +46,7 @@ export function multifamilyYears(property: Property, a: UnderwritingAssumptions)
       absorptionTurnoverVacancy: 0,
       freeRent: 0,
       expenseRecoveries: 0,
-      otherIncome: (rr.otherIncomePerUnitMonthly?.value ?? 0) * units * 12 * rentGrowth,
+      otherIncome: otherIncomeYear1 * rentGrowth,
       propertyExpenses: expensesYear1 * costGrowth,
       tenantImprovements: units * turnover * mf.turnoverCostPerUnit.value * costGrowth,
       leasingCommissions: 0,
@@ -120,6 +122,7 @@ function unitYears(property: Property, units: ApartmentUnit[], a: UnderwritingAs
   }
 
   const otherIncomeMonthly = units.reduce((s, u) => s + u.otherIncomeMonthly, 0)
+  const otherIncomeYear1 = a.operating.otherIncomeYear1?.value ?? otherIncomeMonthly * 12
   const expensesYear1 = a.operating.expenses.reduce((s, e) => s + e.annualAmount.value, 0)
   return Array.from({ length: years }, (_, i) => {
     const sum = (xs: number[]) => xs.slice(i * 12, i * 12 + 12).reduce((s, x) => s + x, 0)
@@ -130,7 +133,7 @@ function unitYears(property: Property, units: ApartmentUnit[], a: UnderwritingAs
       absorptionTurnoverVacancy: sum(vacancy),
       freeRent: 0,
       expenseRecoveries: 0,
-      otherIncome: otherIncomeMonthly * 12 * Math.pow(1 + g, i),
+      otherIncome: otherIncomeYear1 * Math.pow(1 + g, i),
       propertyExpenses: expensesYear1 * Math.pow(1 + expenseGrowth, i),
       tenantImprovements: sum(turnover),
       leasingCommissions: 0,

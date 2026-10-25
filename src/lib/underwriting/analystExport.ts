@@ -11,6 +11,7 @@ import { cashFlowRows } from './report'
 import { presetChanges, scenarioComparison, SCENARIO_LABELS, SCENARIOS, type ComparisonCell, type PresetItem } from './scenarios'
 import { METRIC_LABELS, SENSITIVITY_CAPTION, sensitivityGrids, sensitivityView } from './sensitivity'
 import { maxBidStat } from './summary'
+import { t12Check, T12_BENCHMARK_GAP, T12_NOI_GAP, T12_TAX_GAP } from './t12Check'
 import { DEBT_YIELD_FLOOR, DSCR_FLOOR, MARK_TO_MARKET_THRESHOLD, ROLLOVER_CONCENTRATION } from './underwrite'
 import { operatingCashFlows } from './waterfall'
 
@@ -222,6 +223,22 @@ export function analystExport(
         : { reason: bid.reason }),
     },
     scenarios: scenariosSection(property, asOf, set.edits, a.scenario),
+    t12: t12Section(property, asOf, set.edits),
+  }
+}
+
+/** The loaded T-12 against the Base underwriting at the set's edits; null when no T-12 is loaded. */
+function t12Section(property: Property, asOf: ISODate, edits: AssumptionEdits) {
+  const check = t12Check(property, asOf, edits, {
+    reason: 'Not looked up on the command line; the app’s Investment view compares a placed deal’s T-12 taxes with the city tax roll.',
+  })
+  if (!check) return null
+  return {
+    note:
+      'Base case at the assumption set’s edits, whichever scenario the rest of this export is. rows[] is the NOI bridge: t12 is the actual, ' +
+      'underwritten is Year 1, noiEffect is what the underwritten figure does to NOI against the T-12 (+ adds). Quote the display strings.',
+    thresholds: { noiGap: pct(T12_NOI_GAP, 0), taxGap: pct(T12_TAX_GAP, 0), benchmarkGap: pct(T12_BENCHMARK_GAP, 0) },
+    ...check,
   }
 }
 

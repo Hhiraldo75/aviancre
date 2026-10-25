@@ -95,6 +95,8 @@ export function operatingCashFlows(property: Property, a: UnderwritingAssumption
   const { months, expiringSFByYear, inPlaceExpiringSFByYear, aboveMarketOptions } = commercialMonths(property, a, asOf)
   const rsf = property.physical.rentableSF.value
   const reserves = a.operating.capitalReservesPerYear.value * rsf
+  const otherIncomeYear1 = a.operating.otherIncomeYear1?.value ?? 0
+  const rentGrowth = a.leasing.marketRentGrowth.value
   const years = Array.from({ length: holdYears + 1 }, (_, i) => {
     const slice = months.slice(i * 12, i * 12 + 12)
     const sum = (k: keyof (typeof months)[number]) => slice.reduce((s, r) => s + r[k], 0)
@@ -105,7 +107,7 @@ export function operatingCashFlows(property: Property, a: UnderwritingAssumption
       absorptionTurnoverVacancy: sum('absorptionTurnoverVacancy'),
       freeRent: sum('freeRent'),
       expenseRecoveries: sum('expenseRecoveries'),
-      otherIncome: 0,
+      otherIncome: otherIncomeYear1 * Math.pow(1 + rentGrowth, i),
       propertyExpenses: sum('totalExpenses'),
       tenantImprovements: sum('tenantImprovements'),
       leasingCommissions: sum('leasingCommissions'),

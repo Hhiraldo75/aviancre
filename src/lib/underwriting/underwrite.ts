@@ -7,8 +7,9 @@ import type {
   UnderwritingResult,
 } from '../../types'
 import { averageInPlaceRent, walt } from '../metrics'
+import { periodLabel } from '../t12'
 import type { AboveMarketOption } from './commercial'
-import { defaultAssumptions } from './defaults'
+import { defaultAssumptions, t12PriceNote } from './defaults'
 import { irr, loanSchedule, npv, payment } from './finance'
 import { normalizeForExit, operatingCashFlows, type OperatingResult, type OperatingYear } from './waterfall'
 
@@ -145,7 +146,7 @@ export function underwrite(
     metrics,
     generatedAt: new Date().toISOString(),
     warnings,
-    notes: buildNotes(a),
+    notes: buildNotes(property, asOf, a),
     expirations: { inPlaceSF: inPlaceExpiringSFByYear.slice(0, H), totalSF: expiringSFByYear.slice(0, H) },
   }
 }
@@ -247,7 +248,7 @@ function buildWarnings(
   return out
 }
 
-function buildNotes(a: UnderwritingAssumptions): string[] {
+function buildNotes(property: Property, asOf: ISODate, a: UnderwritingAssumptions): string[] {
   const out: string[] = []
   if (a.acquisition.purchasePrice.source === 'estimated') {
     out.push(
@@ -255,6 +256,13 @@ function buildNotes(a: UnderwritingAssumptions): string[] {
         'not an asking price or offer. At defaults the going-in cap equals the market cap by construction; ' +
         'other assumption edits move the going-in cap and returns, not the price.',
     )
+  }
+  if (property.t12) {
+    out.push(
+      `Year-1 operating expenses and other income are T-12 actuals (${periodLabel(property.t12)}) grown to Year 1; ` +
+        'revenue still comes from the rent roll and the management fee stays the model’s % of EGI.',
+    )
+    if (a.acquisition.purchasePrice.source === 'estimated') out.push(`${t12PriceNote(property, a.acquisition.purchasePrice.value, asOf)}.`)
   }
   return out
 }

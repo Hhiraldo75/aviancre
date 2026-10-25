@@ -1,6 +1,7 @@
-import type { ISODate, Property, Sourced, UnderwritingAssumptions } from '../../types'
+import type { ISODate, Property, Sourced, T12Statement, UnderwritingAssumptions } from '../../types'
 import { fmt } from '../format'
 import { fromImport } from '../sourced'
+import { t12ExpenseLines, t12OtherIncomeYear1 } from '../t12'
 import { ANALYST_INPUT, defaultAssumptions, estimatedPrice } from './defaults'
 
 /**
@@ -108,6 +109,7 @@ export function editableFields(a: UnderwritingAssumptions): AssumptionField[] {
   pct('operating.generalVacancyPct', 'General vacancy', 0, 50)
   pct('operating.creditLossPct', 'Credit loss', 0, 20)
   a.operating.expenses.forEach((e, i) => usd(`operating.expenses.${i}.annualAmount`, e.label, '/yr'))
+  if (a.operating.otherIncomeYear1) usd('operating.otherIncomeYear1', 'Other income (Year 1)', '/yr')
   pct('operating.expenseGrowth', 'Expense growth', -10, 15)
   pct('operating.managementFeePct', 'Management fee (% of EGI)', 0, 15)
   usd('operating.capitalReservesPerYear', 'Capital reserves', isMF ? '/unit/yr' : '/SF/yr', { cents: !isMF })
@@ -204,7 +206,17 @@ function applyEdits(property: Property, asOf: ISODate, defaults: UnderwritingAss
   if (!('acquisition.purchasePrice' in edits) && 'acquisition.marketCapRate' in edits) {
     a.acquisition.purchasePrice = estimatedPrice(property, defaults, asOf, a.acquisition.marketCapRate)
   }
+  if (property.t12) regrowT12(property.t12, a)
   return a
+}
+
+/** T-12 lines re-grown to Year 1 at the (possibly edited) growth rates; lines the analyst edited stay as entered. */
+function regrowT12(t12: T12Statement, a: UnderwritingAssumptions) {
+  const start = a.acquisition.analysisStartDate
+  const lines = t12ExpenseLines(t12, a.operating.expenseGrowth.value, start, !a.multifamily)
+  a.operating.expenses = a.operating.expenses.map((e, i) => (isEdited(e.annualAmount) || !lines[i] ? e : lines[i]))
+  const other = a.operating.otherIncomeYear1
+  if (other && !isEdited(other)) a.operating.otherIncomeYear1 = t12OtherIncomeYear1(t12, a.leasing.marketRentGrowth.value, start)
 }
 
 export const hasEdits = (edits: AssumptionEdits | undefined) => !!edits && Object.keys(edits).length > 0

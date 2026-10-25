@@ -1,5 +1,6 @@
-import type { ISODate, Property } from '../../types'
+import type { ISODate, Property, UnderwritingAssumptions } from '../../types'
 import { slug } from '../format'
+import { DEFAULT_EXPENSE_LABEL } from './defaults'
 import { defaultsFor, editableFields, sameValue, validateValue, type AssumptionEdits } from './edits'
 import { scenarioFields } from './scenarios'
 
@@ -21,6 +22,12 @@ export interface SavedAssumptionSet {
   savedAt: ISODate
   /** Only the changed assumptions, keyed by assumption path, in engine units. */
   edits: AssumptionEdits
+  /**
+   * Labels of the operating expense lines the set was made on: expense edits
+   * are keyed by line position, which a loaded or removed T-12 changes.
+   * Absent: the default single line.
+   */
+  expenseLines?: string[]
 }
 
 /** The exported file: only the changes, plus property id, set name and date. */
@@ -31,6 +38,8 @@ export interface AssumptionSetFile {
   name: string
   savedAt: ISODate
   changes: AssumptionEdits
+  /** See SavedAssumptionSet.expenseLines. */
+  expenseLines?: string[]
 }
 
 /** The same edits: the same keys, with values equal up to float noise. */
@@ -49,7 +58,65 @@ export function setNameError(name: string): string | null {
 }
 
 export function assumptionSetFile(propertyId: string, set: SavedAssumptionSet): AssumptionSetFile {
-  return { format: SET_FILE_FORMAT, version: SET_FILE_VERSION, propertyId, name: set.name, savedAt: set.savedAt, changes: { ...set.edits } }
+  return {
+    format: SET_FILE_FORMAT,
+    version: SET_FILE_VERSION,
+    propertyId,
+    name: set.name,
+    savedAt: set.savedAt,
+    changes: { ...set.edits },
+    ...(set.expenseLines ? { expenseLines: [...set.expenseLines] } : {}),
+  }
+}
+
+// ---------- expense lines ----------
+
+/** Expense edits, Base or preset: "operating.expenses.0.annualAmount", "scenarios.downside.operating.expenses.…". */
+const EXPENSE_KEY = /^(scenarios\.[a-z]+\.)?operating\.expenses\./
+
+export const expenseLineLabels = (a: UnderwritingAssumptions) => a.operating.expenses.map((e) => e.label)
+
+/** The lines a set was made on: the recorded ones, or the default single line for a set saved before lines were recorded. */
+export function expenseLinesOf(property: Property, recorded: string[] | undefined): string[] {
+  return recorded ?? [DEFAULT_EXPENSE_LABEL[property.rentRoll.kind === 'multifamily' ? 'multifamily' : 'commercial']]
+}
+
+/** The property's current expense lines when they aren't the default single line (what a set records); undefined otherwise. */
+export function recordedExpenseLines(property: Property, asOf: ISODate): string[] | undefined {
+  const now = expenseLineLabels(defaultsFor(property, asOf))
+  const single = expenseLinesOf(property, undefined)
+  return now.length === 1 && now[0] === single[0] ? undefined : now
+}
+
+const describeLines = (property: Property, lines: string[]) =>
+  lines.length === 1 && lines[0] === expenseLinesOf(property, undefined)[0]
+    ? `the single benchmark line “${lines[0]}”`
+    : `${lines.length} T-12 lines (${lines.slice(0, 3).join(', ')}${lines.length > 3 ? ', …' : ''})`
+
+/**
+ * Edits made on other expense lines than the property has now (a T-12 loaded
+ * or removed since) would land on the wrong line, so they are dropped, and the
+ * notice says which and why. Other edits are kept as they are.
+ */
+export function reconcileExpenseEdits(
+  property: Property,
+  asOf: ISODate,
+  edits: AssumptionEdits,
+  madeOn: string[] | undefined,
+  setName?: string,
+): { edits: AssumptionEdits; notice: string | null } {
+  const dropped = Object.keys(edits).filter((k) => EXPENSE_KEY.test(k))
+  const was = expenseLinesOf(property, madeOn)
+  const now = expenseLineLabels(defaultsFor(property, asOf))
+  if (!dropped.length || (was.length === now.length && was.every((x, i) => x === now[i]))) return { edits, notice: null }
+  const n = dropped.length
+  return {
+    edits: Object.fromEntries(Object.entries(edits).filter(([k]) => !EXPENSE_KEY.test(k))),
+    notice:
+      `Dropped ${n} operating expense edit${n === 1 ? '' : 's'}${setName ? ` from “${setName}”` : ''}: ` +
+      `${n === 1 ? 'it was' : 'they were'} made on ${describeLines(property, was)}, and this property now has ${describeLines(property, now)}. ` +
+      'Re-enter them on the current lines if you still want them.',
+  }
 }
 
 /** e.g. "sample-atwells-retail-row--my-case.assumptions.json" */
@@ -66,7 +133,7 @@ export function parseAssumptionSetFile(
   json: unknown,
   property: Property,
   asOf: ISODate,
-): { set: SavedAssumptionSet; errors: [] } | { set: null; errors: string[] } {
+): { set: SavedAssumptionSet; errors: []; notices?: string[] } | { set: null; errors: string[] } {
   const errors: string[] = []
   if (!isObject(json) || json.format !== SET_FILE_FORMAT) return { set: null, errors: ['Not an AVIANCRE assumption set file.'] }
   if (json.version !== SET_FILE_VERSION) return { set: null, errors: [`Unsupported assumption set version ${String(json.version)}.`] }
@@ -78,12 +145,21 @@ export function parseAssumptionSetFile(
   if (nameError) errors.push(`Set name: ${nameError}.`)
   const savedAt = typeof json.savedAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(json.savedAt) ? json.savedAt : null
   if (!savedAt) errors.push('Date (savedAt) must be YYYY-MM-DD.')
+  const lines = json.expenseLines
+  const linesOK = lines === undefined || (Array.isArray(lines) && lines.every((x) => typeof x === 'string'))
+  if (!linesOK) errors.push('"expenseLines" must be a list of expense line labels.')
+  let changes: Record<string, unknown> = {}
+  let notice: string | null = null
   if (!isObject(json.changes)) {
     errors.push('"changes" must be an object of assumption → value.')
-  } else if (json.propertyId === property.id) {
+  } else if (json.propertyId === property.id && linesOK) {
+    // Expense edits made on other lines are dropped before the rest is checked.
+    const reconciled = reconcileExpenseEdits(property, asOf, json.changes as AssumptionEdits, lines as string[] | undefined, name || undefined)
+    changes = reconciled.edits
+    notice = reconciled.notice
     const defaults = defaultsFor(property, asOf)
     const fields = new Map([...editableFields(defaults), ...scenarioFields(defaults)].map((f) => [f.key, f]))
-    for (const [key, value] of Object.entries(json.changes)) {
+    for (const [key, value] of Object.entries(changes)) {
       const f = fields.get(key)
       if (!f) errors.push(`Unknown assumption "${key}" for this property.`)
       else if (typeof value !== 'number') errors.push(`${f.label}: value must be a number.`)
@@ -94,7 +170,12 @@ export function parseAssumptionSetFile(
     }
   }
   if (errors.length) return { set: null, errors }
-  return { set: { name, savedAt: savedAt!, edits: { ...(json.changes as AssumptionEdits) } }, errors: [] }
+  const expenseLines = recordedExpenseLines(property, asOf)
+  return {
+    set: { name, savedAt: savedAt!, edits: { ...(changes as AssumptionEdits) }, ...(expenseLines ? { expenseLines } : {}) },
+    errors: [],
+    ...(notice ? { notices: [notice] } : {}),
+  }
 }
 
 /** Stored sets (local storage) that still have the right shape. Values are re-validated when applied. */
@@ -104,7 +185,8 @@ export function isSavedSet(x: unknown): x is SavedAssumptionSet {
     typeof x.name === 'string' &&
     typeof x.savedAt === 'string' &&
     isObject(x.edits) &&
-    Object.values(x.edits).every((v) => typeof v === 'number' && Number.isFinite(v))
+    Object.values(x.edits).every((v) => typeof v === 'number' && Number.isFinite(v)) &&
+    (x.expenseLines === undefined || (Array.isArray(x.expenseLines) && x.expenseLines.every((l) => typeof l === 'string')))
   )
 }
 
