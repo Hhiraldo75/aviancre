@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import maplibregl, { type GeoJSONSource, type Map as MaplibreMap } from 'maplibre-gl'
+import maplibregl, { type ExpressionSpecification, type GeoJSONSource, type Map as MaplibreMap } from 'maplibre-gl'
 import type { Feature, FeatureCollection, Point, Polygon } from 'geojson'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { LAYER_IDS, MAP_CONFIG, SOURCE_IDS } from '../../config/map'
+import { CITYWIDE_OUTLINE_ZOOM, LAYER_IDS, MAP_CONFIG, SOURCE_IDS } from '../../config/map'
+import { SKIP_REASONS } from '../../lib/citywide/estimate'
+import { BAND_COLORS, outlinesGeoJSON, pointsGeoJSON, SKIPPED_COLOR } from '../../lib/citywide/view'
 import { hasActiveFilters } from '../../lib/filters'
 import { approximatePinsGeoJSON, buildingOutlineIn, featureBounds, isApproximatePin, propertiesToGeoJSON } from '../../lib/geo'
 import { fmt } from '../../lib/format'
 import { useAppStore, usePropertyView } from '../../store/useAppStore'
 import type { ParcelLookup } from '../../types'
+import CitywideToggle from './CitywideToggle'
 import MapLegend from './MapLegend'
 import { PIN_PIXEL_RATIO, PIN_TIP_OFFSET, pinIcon } from './pinIcon'
 
@@ -15,6 +18,20 @@ const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
 
 /** Placing a deal: read the OSM building from whatever tiles have loaded by now if the map never settles. */
 const PLACEMENT_WAIT_MS = 6_000
+
+const CITYWIDE_LAYERS = [LAYER_IDS.citywideDots, LAYER_IDS.citywideFill, LAYER_IDS.citywideLine]
+const isSkipped: ExpressionSpecification = ['==', ['get', 'band'], 'skipped']
+const bandColor = ['match', ['get', 'band'], ...Object.entries(BAND_COLORS).flat(), SKIPPED_COLOR] as unknown as ExpressionSpecification
+/** Faint outside the screening list's filters. */
+const byMatch = (on: number, off: number): ExpressionSpecification => ['case', ['get', 'match'], on, off]
+/** From the outline zoom, a dot whose outline is loaded gives way to it. */
+const dotOpacity = (opacity: ExpressionSpecification): ExpressionSpecification => [
+  'step',
+  ['zoom'],
+  opacity,
+  CITYWIDE_OUTLINE_ZOOM,
+  ['case', ['get', 'outlined'], 0, opacity],
+]
 
 /** Outline of the looked-up parcel, when the city GIS server provided one. */
 function parcelGeoJSON(lookup: ParcelLookup): FeatureCollection {
@@ -60,6 +77,9 @@ export default function MapView() {
   const filtered = useAppStore((s) => hasActiveFilters(s.filters))
   const placing = useAppStore((s) => s.placing)
   const placementRequest = useAppStore((s) => s.placementRequest)
+  const citywide = useAppStore((s) => s.citywide)
+  const citywideVisible = useAppStore((s) => s.citywideVisible)
+  const citywideFilters = useAppStore((s) => s.citywideFilters)
 
   const geojson = useMemo(() => propertiesToGeoJSON(properties, asOf, matchIds), [properties, asOf, matchIds])
   // Read the latest data inside map callbacks without re-creating the map.
@@ -101,6 +121,47 @@ export default function MapView() {
           'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
           'fill-extrusion-color': '#d4d4d8',
           'fill-extrusion-opacity': 0.55,
+        },
+      })
+
+      // Citywide screening estimates, hidden until turned on. Outlines lie under the
+      // translucent buildings; dots sit over them so they read when zoomed out.
+      map.addSource(SOURCE_IDS.citywideOutlines, { type: 'geojson', data: EMPTY })
+      map.addLayer(
+        {
+          id: LAYER_IDS.citywideFill,
+          type: 'fill',
+          source: SOURCE_IDS.citywideOutlines,
+          minzoom: CITYWIDE_OUTLINE_ZOOM,
+          layout: { visibility: 'none' },
+          paint: { 'fill-color': bandColor, 'fill-opacity': ['case', isSkipped, 0, byMatch(0.55, 0.1)] },
+        },
+        LAYER_IDS.contextBuildings,
+      )
+      map.addLayer(
+        {
+          id: LAYER_IDS.citywideLine,
+          type: 'line',
+          source: SOURCE_IDS.citywideOutlines,
+          minzoom: CITYWIDE_OUTLINE_ZOOM,
+          layout: { visibility: 'none' },
+          paint: { 'line-color': ['case', isSkipped, SKIPPED_COLOR, bandColor], 'line-width': 1.5, 'line-opacity': byMatch(0.9, 0.2) },
+        },
+        LAYER_IDS.contextBuildings,
+      )
+      map.addSource(SOURCE_IDS.citywidePoints, { type: 'geojson', data: EMPTY })
+      map.addLayer({
+        id: LAYER_IDS.citywideDots,
+        type: 'circle',
+        source: SOURCE_IDS.citywidePoints,
+        layout: { visibility: 'none' },
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 2.5, 14, 5, 17, 7],
+          'circle-color': bandColor,
+          'circle-opacity': dotOpacity(['case', isSkipped, 0, byMatch(0.95, 0.15)]),
+          'circle-stroke-color': ['case', isSkipped, SKIPPED_COLOR, '#ffffff'],
+          'circle-stroke-width': ['case', isSkipped, 1.5, 0.75],
+          'circle-stroke-opacity': dotOpacity(byMatch(1, 0.2)),
         },
       })
 
@@ -189,7 +250,12 @@ export default function MapView() {
       const layers = clickable.filter((l) => map.getLayer(l))
       const hit = layers.length ? map.queryRenderedFeatures(e.point, { layers })[0] : undefined
       const id = hit?.properties?.matches ? hit.properties.id : undefined
-      if (typeof id === 'string') useAppStore.getState().select(id)
+      if (typeof id === 'string') return useAppStore.getState().select(id)
+      // A citywide parcel: its own lot, even where the dot overlaps a neighbor.
+      const pin = useAppStore.getState().citywideVisible
+        ? map.queryRenderedFeatures(e.point, { layers: CITYWIDE_LAYERS }).find((f) => !(f.layer.id === LAYER_IDS.citywideDots && f.properties.outlined && map.getZoom() >= CITYWIDE_OUTLINE_ZOOM))?.properties.pin
+        : undefined
+      if (typeof pin === 'string') useAppStore.getState().openCitywideParcel(pin, false)
       else void useAppStore.getState().lookupParcel(e.lngLat.lng, e.lngLat.lat)
     })
 
@@ -224,6 +290,38 @@ export default function MapView() {
       map.on('mouseleave', layer, leave)
     }
 
+    // Citywide parcels: address and estimated ÷ assessed.
+    const citywideHover = (e: maplibregl.MapLayerMouseEvent) => {
+      const { placing: placingNow, citywide: c } = useAppStore.getState()
+      const pin = e.features?.[0]?.properties?.pin
+      const row = c.status === 'ready' && typeof pin === 'string' ? c.byPin.get(pin) : undefined
+      if (placingNow || !row) return
+      map.getCanvas().style.cursor = 'pointer'
+      const el = document.createElement('div')
+      el.style.cssText = 'font:12px system-ui;color:#0f172a'
+      const title = document.createElement('strong')
+      title.textContent = row.parcel.address
+      const r = row.result
+      const line =
+        r.status === 'skipped'
+          ? `No estimate: ${SKIP_REASONS[r.reason].toLowerCase()}`
+          : r.ratio !== undefined
+            ? `Screening estimate ${fmt.money(r.value.value)}, ${r.ratio.toFixed(2)}× assessed`
+            : `Screening estimate ${fmt.money(r.value.value)}`
+      el.append(title, document.createElement('br'), line)
+      if (row.peerRatio !== undefined) el.append(document.createElement('br'), `${row.peerRatio.toFixed(2)}× vs similar properties`)
+      popup.setLngLat(e.lngLat).setDOMContent(el).addTo(map)
+    }
+    for (const layer of [LAYER_IDS.citywideDots, LAYER_IDS.citywideFill]) {
+      map.on('mousemove', layer, citywideHover)
+      map.on('mouseleave', layer, leave)
+    }
+    // Outlines are fetched only once the layer is on and the map is zoomed in to draw them.
+    map.on('zoomend', () => {
+      const s = useAppStore.getState()
+      if (s.citywideVisible && map.getZoom() >= CITYWIDE_OUTLINE_ZOOM - 0.5) s.loadCitywideOutlines()
+    })
+
     return () => {
       popup.remove()
       map.remove() // StrictMode mounts twice in dev
@@ -239,6 +337,24 @@ export default function MapView() {
     ;(map?.getSource(SOURCE_IDS.properties) as GeoJSONSource | undefined)?.setData(geojson)
     ;(map?.getSource(SOURCE_IDS.approxPins) as GeoJSONSource | undefined)?.setData(pins)
   }, [geojson, pins, loaded])
+
+  // 2b. Citywide estimates: visibility, data, and outlines when already zoomed in.
+  const citywideRows = citywide.status === 'ready' ? citywide.rows : null
+  const citywideOutlines = citywide.status === 'ready' && typeof citywide.outlines === 'object' ? citywide.outlines : null
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !loaded) return
+    for (const layer of CITYWIDE_LAYERS) map.setLayoutProperty(layer, 'visibility', citywideVisible ? 'visible' : 'none')
+    if (citywideVisible && citywideRows && map.getZoom() >= CITYWIDE_OUTLINE_ZOOM - 0.5) useAppStore.getState().loadCitywideOutlines()
+  }, [citywideVisible, citywideRows, loaded])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !loaded || !citywideRows) return
+    ;(map.getSource(SOURCE_IDS.citywidePoints) as GeoJSONSource | undefined)?.setData(pointsGeoJSON(citywideRows, citywideFilters, citywideOutlines))
+    if (citywideOutlines)
+      (map.getSource(SOURCE_IDS.citywideOutlines) as GeoJSONSource | undefined)?.setData(outlinesGeoJSON(citywideRows, citywideOutlines, citywideFilters))
+  }, [citywideRows, citywideOutlines, citywideFilters, loaded])
 
   // 3. Highlight and fly to the selected property.
   useEffect(() => {
@@ -331,6 +447,7 @@ export default function MapView() {
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
       <MapLegend />
+      <CitywideToggle />
     </div>
   )
 }

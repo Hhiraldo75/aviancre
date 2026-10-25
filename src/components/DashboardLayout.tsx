@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { useAppStore, useSelectedProperty } from '../store/useAppStore'
+import ScreeningList from './citywide/ScreeningList'
 import MapView from './map/MapView'
 import AddressSearch from './panel/AddressSearch'
 import PropertyPanel from './panel/PropertyPanel'
@@ -16,6 +17,7 @@ export default function DashboardLayout() {
   const selected = useSelectedProperty()
   const underwritingOpen = useAppStore((s) => s.underwritingOpen)
   const welcomeOpen = useAppStore((s) => s.welcomeOpen)
+  const screeningOpen = useAppStore((s) => s.citywideVisible && s.citywideListOpen)
   const openWelcome = useAppStore((s) => s.openWelcome)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -24,6 +26,7 @@ export default function DashboardLayout() {
       {/* Behind the welcome screen the map loads but can't be reached with the keyboard. */}
       <main inert={welcomeOpen} className="relative flex-1 bg-slate-900">
         <MapView />
+        {screeningOpen && !(underwritingOpen && selected) && <ScreeningList />}
         {underwritingOpen && selected && <FullUnderwritingPanel property={selected} />}
       </main>
 

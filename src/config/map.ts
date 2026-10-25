@@ -16,6 +16,9 @@ export const LAYER_IDS = {
   parcelFill: 'selected-parcel-fill',
   parcelLine: 'selected-parcel-line',
   clickPoint: 'parcel-click-point',
+  citywideDots: 'citywide-dots',
+  citywideFill: 'citywide-fill',
+  citywideLine: 'citywide-line',
 } as const
 
 export const SOURCE_IDS = {
@@ -23,4 +26,9 @@ export const SOURCE_IDS = {
   approxPins: 'approximate-deal-pins',
   parcel: 'selected-parcel',
   clickPoint: 'parcel-click-point',
+  citywidePoints: 'citywide-points',
+  citywideOutlines: 'citywide-outlines',
 } as const
+
+/** Citywide outlines replace the dots from this zoom. */
+export const CITYWIDE_OUTLINE_ZOOM = 15

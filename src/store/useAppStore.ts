@@ -30,6 +30,16 @@ import {
   type SortKey,
 } from '../lib/filters'
 import { exactAddressMatch, type ParcelSuggestion } from '../lib/addressSearch'
+import { platLotToPin } from '../lib/citywide/join'
+import type { CitywideOutlines, CitywideSnapshot } from '../lib/citywide/types'
+import {
+  DEFAULT_CITYWIDE_SORT,
+  EMPTY_CITYWIDE_FILTERS,
+  screeningRows,
+  type CitywideFilters,
+  type CitywideSort,
+  type ScreeningRow,
+} from '../lib/citywide/view'
 import { interiorPoint, parcelOutline, type BuildingOutline } from '../lib/geo'
 import {
   carryPlacement,
@@ -55,6 +65,7 @@ import {
 import { defaultsFor, SCENARIO_KEY_PREFIX, type AssumptionEdits } from '../lib/underwriting/edits'
 import { shouldShowWelcome } from '../lib/welcome'
 import { fromPublic } from '../lib/sourced'
+import { loadCitywideOutlines, loadCitywideSnapshot } from '../services/citywideSnapshot'
 import { lookupParcelAt, parcelPointByPin, PVD_SOURCE, searchParcelAddresses } from '../services/providenceGis'
 import { isOnPin, lookupTaxRecord, lookupTaxRecordByPin } from '../services/providenceOpenData'
 
@@ -192,6 +203,20 @@ export interface PlacementRequest {
 }
 
 /** Filters and sort start from the URL, so a shared link opens the same view. */
+/** The citywide screening layer: nothing is fetched until it is first turned on. */
+export type CitywideState =
+  | { status: 'off' }
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | {
+      status: 'ready'
+      meta: CitywideSnapshot['meta']
+      rows: ScreeningRow[]
+      byPin: Map<string, ScreeningRow>
+      /** Fetched on the first zoom in far enough to draw them. */
+      outlines: 'not-loaded' | 'loading' | 'failed' | CitywideOutlines
+    }
+
 const initialView = hasWindow ? filtersFromQuery(window.location.search) : { filters: EMPTY_FILTERS, sort: DEFAULT_SORT }
 
 /**
@@ -241,6 +266,14 @@ interface AppState {
   zoomRequest: number
   /** Where the map should fly next (an address search pick); `request` changes on each pick. */
   mapFocus: { lng: number; lat: number; request: number } | null
+  citywide: CitywideState
+  /** The "Citywide estimates" map layer. */
+  citywideVisible: boolean
+  /** The screening list panel over the map. */
+  citywideListOpen: boolean
+  /** Screening list filters; parcels outside them are drawn faint on the map. */
+  citywideFilters: CitywideFilters
+  citywideSort: CitywideSort
   select: (id: string | null) => void
   /** `picked`: the parcel chosen in the address search, matched to the tax roll by its PIN. */
   lookupParcel: (lng: number, lat: number, picked?: PickedParcel) => Promise<void>
@@ -318,6 +351,16 @@ interface AppState {
   completePlacement: (request: PlacementRequest, outline: BuildingOutline | null) => boolean
   /** Back to the approximate pin at the submarket's center. */
   resetDealLocation: (id: string) => boolean
+  /** Shows or hides the citywide layer; the first time on (or after a failed load), loads the snapshot. */
+  toggleCitywide: () => void
+  /** Fetches the parcel outlines once; the map asks when zoomed in. */
+  loadCitywideOutlines: () => void
+  setCitywideListOpen: (open: boolean) => void
+  setCitywideFilter: <K extends keyof CitywideFilters>(key: K, value: CitywideFilters[K]) => void
+  clearCitywideFilters: () => void
+  setCitywideSort: (sort: CitywideSort) => void
+  /** Looks up a snapshot parcel's public record by its PIN, at its point; `fly` also moves the map there. */
+  openCitywideParcel: (pin: string, fly: boolean) => void
 }
 
 /** In-flight parcel request; a newer click aborts the older one. */
@@ -446,6 +489,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
   sort: initialView.sort,
   zoomRequest: 0,
   mapFocus: null,
+  citywide: { status: 'off' },
+  citywideVisible: false,
+  citywideListOpen: false,
+  citywideFilters: EMPTY_CITYWIDE_FILTERS,
+  citywideSort: DEFAULT_CITYWIDE_SORT,
 
   select: (id) => {
     cancelInFlight()
@@ -754,6 +802,45 @@ export const useAppStore = create<AppState>()((set, get) => ({
     set({ properties, dealRecord: null })
     return saveImportedDeals(properties)
   },
+  toggleCitywide: () => {
+    const { citywideVisible, citywide } = get()
+    // After a failed load, turning it on again retries.
+    if (citywideVisible && citywide.status !== 'error') return set({ citywideVisible: false, citywideListOpen: false })
+    set({ citywideVisible: true })
+    if (citywide.status !== 'off' && citywide.status !== 'error') return
+    set({ citywide: { status: 'loading' } })
+    loadCitywideSnapshot().then(
+      ({ meta, parcels }) => {
+        const rows = screeningRows(parcels)
+        set({ citywide: { status: 'ready', meta, rows, byPin: new Map(rows.map((r) => [r.parcel.pin, r])), outlines: 'not-loaded' } })
+      },
+      (err: unknown) => set({ citywide: { status: 'error', message: err instanceof Error ? err.message : String(err) } }),
+    )
+  },
+
+  loadCitywideOutlines: () => {
+    const c = get().citywide
+    if (c.status !== 'ready' || c.outlines !== 'not-loaded') return
+    const withOutlines = (outlines: CitywideOutlines | 'loading' | 'failed') =>
+      set((s) => (s.citywide.status === 'ready' ? { citywide: { ...s.citywide, outlines } } : {}))
+    withOutlines('loading')
+    // Without outlines the dots stay; nothing else depends on them.
+    loadCitywideOutlines().then(withOutlines, () => withOutlines('failed'))
+  },
+
+  setCitywideListOpen: (open) => set({ citywideListOpen: open, ...(open ? { underwritingOpen: false } : {}) }),
+  setCitywideFilter: (key, value) => set((s) => ({ citywideFilters: { ...s.citywideFilters, [key]: value } })),
+  clearCitywideFilters: () => set({ citywideFilters: EMPTY_CITYWIDE_FILTERS }),
+  setCitywideSort: (sort) => set({ citywideSort: sort }),
+
+  openCitywideParcel: (pin, fly) => {
+    const c = get().citywide
+    const row = c.status === 'ready' ? c.byPin.get(pin) : undefined
+    if (!row) return
+    const [lng, lat] = row.parcel.point
+    if (fly) set((s) => ({ mapFocus: { lng, lat, request: (s.mapFocus?.request ?? 0) + 1 } }))
+    void get().lookupParcel(lng, lat, { pin, address: row.parcel.address })
+  },
 }))
 
 // Persist saved assumption sets whenever they change.
@@ -822,3 +909,19 @@ export const useAssumptionSets = (propertyId: string) => useAppStore((s) => s.as
 
 /** The set last applied or saved for a property (Defaults when none). */
 export const useActiveSetName = (propertyId: string) => useAppStore((s) => s.activeSets[propertyId] ?? DEFAULTS_SET)
+
+/** The citywide screening row for a looked-up parcel (by searched PIN, city parcel PIN, or tax-roll plat and lot), once the layer has loaded. */
+export function useCitywideRow(lookup: ParcelLookup): ScreeningRow | null {
+  const citywide = useAppStore((s) => s.citywide)
+  if (citywide.status !== 'ready' || lookup.status !== 'loaded') return null
+  const pins = [
+    lookup.picked?.pin,
+    lookup.gis.status === 'ok' ? lookup.gis.parcel.pin : undefined,
+    lookup.record ? platLotToPin(Number(lookup.record.plat), Number(lookup.record.lot)) : undefined,
+  ]
+  for (const pin of pins) {
+    const row = pin && citywide.byPin.get(pin)
+    if (row) return row
+  }
+  return null
+}

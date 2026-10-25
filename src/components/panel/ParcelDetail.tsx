@@ -4,13 +4,16 @@ import { normalizeAddress } from '../../lib/addressSearch'
 import { fmt } from '../../lib/format'
 import { decodeLandUse } from '../../lib/landUse'
 import { maxHeightLabel, noFarNote, normalizeZoningCode, parcelMetrics } from '../../lib/parcelMetrics'
-import { useAppStore } from '../../store/useAppStore'
+import { useAppStore, useCitywideRow } from '../../store/useAppStore'
+import type { ScreeningRow } from '../../lib/citywide/view'
 import { Card, Chip, Note, Stat, StatGrid } from '../ui/Card'
+import CitywideEstimateCard from './CitywideEstimateCard'
 
 /** Public record for any clicked spot: Providence tax roll, plus city GIS details when reachable. */
 export default function ParcelDetail({ lookup }: { lookup: Exclude<ParcelLookup, { status: 'idle' }> }) {
   const clear = useAppStore((s) => s.clearSelection)
   const retry = useAppStore((s) => s.lookupParcel)
+  const citywideRow = useCitywideRow(lookup)
 
   return (
     <div>
@@ -35,12 +38,22 @@ export default function ParcelDetail({ lookup }: { lookup: Exclude<ParcelLookup,
         </Status>
       )}
 
-      {lookup.status === 'loaded' && <Loaded record={lookup.record} gis={lookup.gis} picked={lookup.picked} />}
+      {lookup.status === 'loaded' && <Loaded record={lookup.record} gis={lookup.gis} picked={lookup.picked} citywideRow={citywideRow} />}
     </div>
   )
 }
 
-function Loaded({ record: r, gis, picked }: { record: TaxRecord | null; gis: GisDetails; picked?: PickedParcel }) {
+function Loaded({
+  record: r,
+  gis,
+  picked,
+  citywideRow,
+}: {
+  record: TaxRecord | null
+  gis: GisDetails
+  picked?: PickedParcel
+  citywideRow: ScreeningRow | null
+}) {
   const g = gis.status === 'ok' ? gis : null
   // A searched parcel keeps the address it was found by; the tax roll sometimes files the lot under another street.
   const title = picked?.address ?? r?.address?.value ?? g?.parcel.address?.value ?? `Parcel ${r?.taxMap ?? g?.parcel.pin ?? ''}`
@@ -51,7 +64,7 @@ function Loaded({ record: r, gis, picked }: { record: TaxRecord | null; gis: Gis
     <>
       <h2 className="text-lg font-semibold leading-tight">{title}</h2>
       {taxRollAddress && <p className="mt-0.5 text-xs text-slate-400">Tax roll: {taxRollAddress}</p>}
-      <PublicRecordBody record={r} gis={gis}>
+      <PublicRecordBody record={r} gis={gis} afterTaxRoll={citywideRow && <CitywideEstimateCard row={citywideRow} />}>
         <Note>
           No rents or tenants for this property yet. Market-based rent estimates and rent-roll import are later milestones;
           persona views currently apply to the sample properties.
@@ -62,7 +75,18 @@ function Loaded({ record: r, gis, picked }: { record: TaxRecord | null; gis: Gis
 }
 
 /** Chips, tax-roll card and GIS cards for a parcel; also shown for an imported deal placed on it. */
-export function PublicRecordBody({ record: r, gis, children }: { record: TaxRecord | null; gis: GisDetails; children?: ReactNode }) {
+export function PublicRecordBody({
+  record: r,
+  gis,
+  afterTaxRoll,
+  children,
+}: {
+  record: TaxRecord | null
+  gis: GisDetails
+  /** The citywide screening estimate, beside the assessed value. */
+  afterTaxRoll?: ReactNode
+  children?: ReactNode
+}) {
   const g = gis.status === 'ok' ? gis : null
   const zoning = g?.overlays.baseZoning?.value ?? g?.parcel.parcelZoning?.value
   const use = decodeLandUse(r?.landUseCode)
@@ -79,6 +103,7 @@ export function PublicRecordBody({ record: r, gis, children }: { record: TaxReco
 
       <div className="mt-4 space-y-4">
         {r ? <TaxRollCard r={r} /> : <Note>No tax-roll record near this spot; showing city GIS details only.</Note>}
+        {afterTaxRoll}
         <GisSection gis={gis} record={r} />
         {children}
       </div>

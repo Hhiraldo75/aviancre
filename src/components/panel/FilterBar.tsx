@@ -15,7 +15,7 @@ import {
 } from '../../lib/filters'
 import { useAppStore, usePropertyView } from '../../store/useAppStore'
 
-function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+export function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
       type="button"
@@ -34,7 +34,7 @@ function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; c
  * Text box for a numeric filter. Keeps what the user typed (so "12." survives)
  * and resyncs when the stored value changes elsewhere: a chip, Clear all, a preset.
  */
-function NumberField<T extends number | null>({
+export function NumberField<T extends number | null>({
   value,
   onChange,
   parse,
