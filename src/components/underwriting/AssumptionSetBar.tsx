@@ -16,6 +16,7 @@ import {
 import type { AssumptionEdits } from '../../lib/underwriting/edits'
 import { useActiveSetName, useAppStore, useAssumptionSets } from '../../store/useAppStore'
 import { downloadFile } from '../ui/download'
+import AssumptionNotice from './AssumptionNotice'
 
 const BUTTON =
   'rounded border border-slate-600 px-2.5 py-1 text-xs text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent'
@@ -75,7 +76,7 @@ export default function AssumptionSetBar({ property: p, asOf, edits }: { propert
     const result = parseAssumptionSetFile(json, p, asOf)
     if (!result.set) return setProblems(result.errors.map((e) => `${file.name}: ${e}`))
     if (!okToLeave()) return
-    if (store(result.set)) setProblems([])
+    if (store(result.set)) setProblems((result.notices ?? []).map((n) => `${file.name}: ${n}`))
   }
 
   return (
@@ -164,6 +165,8 @@ export default function AssumptionSetBar({ property: p, asOf, edits }: { propert
           </button>
         </form>
       )}
+
+      <AssumptionNotice propertyId={p.id} />
 
       {problems.length > 0 && (
         <ul role="alert" className="mt-2 space-y-0.5 rounded-md bg-red-500/10 p-2 text-[11px] leading-snug text-red-300">

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import atwellsDoc from '../../docs/atwells-rent-roll.csv?raw'
+import fernhillT12 from '../../docs/samples/fernhill-commons-t12.csv?raw'
 import { SAMPLE_PROPERTIES } from '../data/sampleProperties'
 import { parseCSV } from '../lib/csv'
 import type { Polygon } from 'geojson'
@@ -17,6 +18,7 @@ import {
   withValidPlacement,
 } from '../lib/importedDeals'
 import { parseRentRoll } from '../lib/rentRollImport'
+import { readT12, statementFrom } from '../lib/t12Read'
 import { fromPublic } from '../lib/sourced'
 import { analystExport } from '../lib/underwriting/analystExport'
 import { underwrite } from '../lib/underwriting/underwrite'
@@ -103,6 +105,54 @@ describe('assumption sets in the store', () => {
   it('ignore a set name that does not exist', () => {
     s().applyAssumptionSet(id, 'Nope')
     expect(s().assumptionEdits[id]).toBeUndefined()
+  })
+})
+
+describe('T-12s in the store', () => {
+  const s = () => useAppStore.getState()
+  const fernhill = SAMPLE_PROPERTIES.find((p) => p.id === 'sample-fernhill-commons')!
+  const t12 = statementFrom(readT12(parseCSV(fernhillT12), { kind: 'multifamily' }), { fileName: 'fernhill-commons-t12.csv', importedAt: AS_OF })
+  const current = (id: string) => s().properties.find((p) => p.id === id)!
+
+  it('attach to the property, drop expense edits made on the old lines with a notice, and come off again', () => {
+    s().setAssumption(fernhill.id, 'operating.expenses.0.annualAmount', 800_000)
+    s().setAssumption(fernhill.id, 'exit.exitCapRate', 0.08)
+    expect(s().loadT12(fernhill.id, t12)).toBe(true)
+    expect(current(fernhill.id).t12).toBe(t12)
+    expect(s().assumptionEdits[fernhill.id]).toEqual({ 'exit.exitCapRate': 0.08 })
+    expect(s().assumptionNotices[fernhill.id]).toMatch(/^Dropped 1 operating expense edit: it was made on the single benchmark line/)
+    s().dismissAssumptionNotice(fernhill.id)
+    expect(s().assumptionNotices[fernhill.id]).toBeUndefined()
+
+    s().setAssumption(fernhill.id, 'operating.expenses.2.annualAmount', 150_000)
+    s().removeT12(fernhill.id)
+    expect(current(fernhill.id)).toEqual(fernhill)
+    expect(s().t12s[fernhill.id]).toBeUndefined()
+    expect(s().assumptionEdits[fernhill.id]).toEqual({ 'exit.exitCapRate': 0.08 })
+    expect(s().assumptionNotices[fernhill.id]).toMatch(/made on 7 T-12 lines/)
+    s().dismissAssumptionNotice(fernhill.id)
+    s().resetAssumptions(fernhill.id)
+  })
+  it('record the T-12 lines on a set saved with a T-12, and drop its expense edits when applied without one', () => {
+    s().loadT12(fernhill.id, t12)
+    s().saveAssumptionSet(fernhill.id, { name: 'T-12 case', savedAt: AS_OF, edits: { 'operating.expenses.0.annualAmount': 240_000, 'debt.ltv': 0.6 } })
+    expect(s().assumptionSets[fernhill.id]?.[0].expenseLines).toHaveLength(7)
+    s().removeT12(fernhill.id)
+    s().applyAssumptionSet(fernhill.id, 'T-12 case')
+    expect(s().assumptionEdits[fernhill.id]).toEqual({ 'debt.ltv': 0.6 })
+    expect(s().assumptionNotices[fernhill.id]).toMatch(/^Dropped 1 operating expense edit from “T-12 case”/)
+    s().deleteAssumptionSet(fernhill.id, 'T-12 case')
+    s().dismissAssumptionNotice(fernhill.id)
+    s().resetAssumptions(fernhill.id)
+  })
+  it('stay with a re-imported deal and go when the deal is removed', () => {
+    s().importDeal(deal)
+    s().loadT12(deal.id, t12)
+    s().importDeal({ ...deal, name: 'Atwells, re-imported' })
+    expect(current(deal.id).t12).toBe(t12)
+    expect(current(deal.id).name).toBe('Atwells, re-imported')
+    s().removeImportedDeal(deal.id)
+    expect(s().t12s[deal.id]).toBeUndefined()
   })
 })
 

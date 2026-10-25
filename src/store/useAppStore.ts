@@ -10,6 +10,7 @@ import type {
   Persona,
   PickedParcel,
   Property,
+  T12Statement,
   TaxRecord,
   Scenario,
   UnderwritingTab,
@@ -42,8 +43,16 @@ import {
 } from '../lib/importedDeals'
 import { todayISO } from '../lib/metrics'
 import { isRentRollPreset, withPreset, type RentRollPreset } from '../lib/rentRollConvert'
-import { DEFAULTS_SET, isSavedSet, type SavedAssumptionSet } from '../lib/underwriting/assumptionSets'
-import { SCENARIO_KEY_PREFIX, type AssumptionEdits } from '../lib/underwriting/edits'
+import { isT12Statement, withoutT12, withT12 } from '../lib/t12'
+import {
+  DEFAULTS_SET,
+  expenseLineLabels,
+  isSavedSet,
+  reconcileExpenseEdits,
+  recordedExpenseLines,
+  type SavedAssumptionSet,
+} from '../lib/underwriting/assumptionSets'
+import { defaultsFor, SCENARIO_KEY_PREFIX, type AssumptionEdits } from '../lib/underwriting/edits'
 import { shouldShowWelcome } from '../lib/welcome'
 import { fromPublic } from '../lib/sourced'
 import { lookupParcelAt, parcelPointByPin, PVD_SOURCE, searchParcelAddresses } from '../services/providenceGis'
@@ -76,7 +85,8 @@ function loadImportedDeals(): Property[] {
 function saveImportedDeals(properties: Property[]): boolean {
   if (!hasWindow) return true
   try {
-    window.localStorage.setItem(IMPORTED_DEALS_KEY, JSON.stringify(properties.filter((p) => p.importedFrom)))
+    // A loaded T-12 is kept in its own entry, never inside the deal.
+    window.localStorage.setItem(IMPORTED_DEALS_KEY, JSON.stringify(properties.filter((p) => p.importedFrom).map(withoutT12)))
     return true
   } catch {
     return false
@@ -98,6 +108,37 @@ function loadAssumptionSets(): Record<string, SavedAssumptionSet[]> {
     return {}
   }
 }
+
+/**
+ * Loaded T-12s, by property id; browser only, like imported deals, and never
+ * sent anywhere. Attached to their property at run time.
+ */
+export const T12_KEY = 'aviancre.t12.v1'
+
+function loadT12s(): Record<string, T12Statement> {
+  if (!hasWindow) return {}
+  try {
+    const stored: unknown = JSON.parse(window.localStorage.getItem(T12_KEY) ?? '{}')
+    if (typeof stored !== 'object' || stored === null) return {}
+    return Object.fromEntries(Object.entries(stored).filter(([, x]) => isT12Statement(x)))
+  } catch {
+    return {}
+  }
+}
+
+/** False when the browser wouldn't store them (they then last until reload). */
+function saveT12s(t12s: Record<string, T12Statement>): boolean {
+  if (!hasWindow) return true
+  try {
+    window.localStorage.setItem(T12_KEY, JSON.stringify(t12s))
+    return true
+  } catch {
+    return false
+  }
+}
+
+const attachT12s = (properties: Property[], t12s: Record<string, T12Statement>) =>
+  properties.map((p) => (t12s[p.id] ? withT12(withoutT12(p), t12s[p.id]) : withoutT12(p)))
 
 /** Confirmed rent roll layout mappings (no deal data, only column labels and codes); browser only. */
 export const RENT_ROLL_PRESETS_KEY = 'aviancre.rentRollPresets.v1'
@@ -189,6 +230,10 @@ interface AppState {
   activeSets: Record<string, string>
   /** Saved rent roll layout mappings; a matching one converts the same layout automatically. Kept in local storage. */
   rentRollPresets: RentRollPreset[]
+  /** Loaded T-12s, by property id; attached to the properties above. Kept in local storage. */
+  t12s: Record<string, T12Statement>
+  /** Why expense edits were just dropped (a T-12 loaded or removed, or a set made on other lines), by property id. */
+  assumptionNotices: Record<string, string>
   /** Portfolio filters; the map and the list show the same matching set. Mirrored in the URL. */
   filters: PropertyFilters
   sort: SortKey
@@ -232,6 +277,15 @@ interface AppState {
   /** Saves a preset, replacing one for the same layout or with the same name. */
   saveRentRollPreset: (preset: RentRollPreset) => void
   deleteRentRollPreset: (name: string) => void
+  /**
+   * Loads a T-12 for a property (replacing any earlier one): Year-1 expenses and
+   * other income then come from it. Expense edits made on the old lines are
+   * dropped, with a notice. Returns false when it couldn't be saved in the browser.
+   */
+  loadT12: (propertyId: string, statement: T12Statement) => boolean
+  /** Back to benchmark expenses and the rent roll's other income. */
+  removeT12: (propertyId: string) => void
+  dismissAssumptionNotice: (propertyId: string) => void
   setFilter: <K extends keyof PropertyFilters>(key: K, value: PropertyFilters[K]) => void
   /** Clears the filter behind an active-filter chip (see `activeFilterChips`). */
   removeFilter: (chipKey: string) => void
@@ -345,8 +399,32 @@ async function runLookup(
   return { status: 'not-found', lng, lat, picked }
 }
 
+const initialT12s = loadT12s()
+
+/** Replaces the property's T-12 (or removes it) and drops expense edits made on the old lines. */
+function swapT12(s: AppState, propertyId: string, statement: T12Statement | null): Partial<AppState> {
+  const old = s.properties.find((p) => p.id === propertyId)
+  if (!old) return {}
+  const t12s = { ...s.t12s }
+  if (statement) t12s[propertyId] = statement
+  else delete t12s[propertyId]
+  const base = withoutT12(old)
+  const next = statement ? withT12(base, statement) : base
+  const properties = s.properties.map((p) => (p.id === propertyId ? next : p))
+  const edits = s.assumptionEdits[propertyId]
+  if (!edits) return { t12s, properties }
+  const r = reconcileExpenseEdits(next, s.asOf, edits, expenseLineLabels(defaultsFor(old, s.asOf)))
+  if (!r.notice) return { t12s, properties }
+  return {
+    t12s,
+    properties,
+    assumptionEdits: { ...s.assumptionEdits, [propertyId]: r.edits },
+    assumptionNotices: { ...s.assumptionNotices, [propertyId]: r.notice },
+  }
+}
+
 export const useAppStore = create<AppState>()((set, get) => ({
-  properties: [...SAMPLE_PROPERTIES, ...loadImportedDeals()],
+  properties: attachT12s([...SAMPLE_PROPERTIES, ...loadImportedDeals()], initialT12s),
   selectedId: null,
   parcel: { status: 'idle' },
   dealRecord: null,
@@ -362,6 +440,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
   assumptionSets: loadAssumptionSets(),
   activeSets: {},
   rentRollPresets: loadRentRollPresets(),
+  t12s: initialT12s,
+  assumptionNotices: {},
   filters: initialView.filters,
   sort: initialView.sort,
   zoomRequest: 0,
@@ -470,8 +550,12 @@ export const useAppStore = create<AppState>()((set, get) => ({
       const others = (s.assumptionSets[propertyId] ?? []).filter((x) => x.name !== saved.name)
       const { [propertyId]: _removed, ...otherEdits } = s.assumptionEdits
       const edits = { ...saved.edits }
+      const property = s.properties.find((p) => p.id === propertyId)
+      // Expense edits are keyed by line position: record the lines they were made on (when not the default single line).
+      const { expenseLines: _old, ...rest } = saved
+      const expenseLines = property ? recordedExpenseLines(property, s.asOf) : saved.expenseLines
       return {
-        assumptionSets: { ...s.assumptionSets, [propertyId]: [...others, { ...saved, edits: { ...saved.edits } }] },
+        assumptionSets: { ...s.assumptionSets, [propertyId]: [...others, { ...rest, edits: { ...saved.edits }, ...(expenseLines ? { expenseLines } : {}) }] },
         assumptionEdits: Object.keys(edits).length ? { ...otherEdits, [propertyId]: edits } : otherEdits,
         activeSets: { ...s.activeSets, [propertyId]: saved.name },
       }
@@ -482,10 +566,14 @@ export const useAppStore = create<AppState>()((set, get) => ({
     if (!saved) return
     set((s) => {
       const { [propertyId]: _removed, ...otherEdits } = s.assumptionEdits
-      const edits = { ...saved.edits }
+      const property = s.properties.find((p) => p.id === propertyId)
+      const r = property ? reconcileExpenseEdits(property, s.asOf, saved.edits, saved.expenseLines, saved.name) : { edits: saved.edits, notice: null }
+      const edits = { ...r.edits }
+      const { [propertyId]: _notice, ...otherNotices } = s.assumptionNotices
       return {
         assumptionEdits: Object.keys(edits).length ? { ...otherEdits, [propertyId]: edits } : otherEdits,
         activeSets: { ...s.activeSets, [propertyId]: name },
+        assumptionNotices: r.notice ? { ...otherNotices, [propertyId]: r.notice } : otherNotices,
       }
     })
   },
@@ -502,6 +590,21 @@ export const useAppStore = create<AppState>()((set, get) => ({
   saveRentRollPreset: (preset) => set((s) => ({ rentRollPresets: withPreset(s.rentRollPresets, preset) })),
   deleteRentRollPreset: (name) => set((s) => ({ rentRollPresets: s.rentRollPresets.filter((p) => p.name !== name) })),
 
+  loadT12: (propertyId, statement) => {
+    set((s) => swapT12(s, propertyId, statement))
+    return saveT12s(get().t12s)
+  },
+  removeT12: (propertyId) => {
+    if (!get().t12s[propertyId]) return
+    set((s) => swapT12(s, propertyId, null))
+    saveT12s(get().t12s)
+  },
+  dismissAssumptionNotice: (propertyId) =>
+    set((s) => {
+      const { [propertyId]: _removed, ...rest } = s.assumptionNotices
+      return { assumptionNotices: rest }
+    }),
+
   setFilter: (key, value) => set((s) => ({ filters: { ...s.filters, [key]: value } })),
   removeFilter: (chipKey) => set((s) => ({ filters: withoutFilter(s.filters, chipKey) })),
   clearFilters: () => set({ filters: EMPTY_FILTERS }),
@@ -511,7 +614,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
   importDeal: (property) => {
     if (!property.importedFrom) throw new Error(`${property.id} is not an imported deal`)
     get().resetAssumptions(property.id)
-    const deal = carryPlacement(get().properties.find((p) => p.id === property.id), property)
+    const placed = carryPlacement(get().properties.find((p) => p.id === property.id), withoutT12(property))
+    // A re-imported rent roll keeps the deal's T-12.
+    const t12 = get().t12s[property.id]
+    const deal = t12 ? withT12(placed, t12) : placed
     const properties = [...get().properties.filter((p) => p.id !== property.id), deal]
     get().select(property.id)
     set({ properties })
@@ -523,8 +629,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
     get().resetAssumptions(id)
     set((s) => {
       const { [id]: _sets, ...assumptionSets } = s.assumptionSets
-      return { assumptionSets }
+      const { [id]: _t12, ...t12s } = s.t12s
+      return { assumptionSets, t12s }
     })
+    saveT12s(get().t12s)
     if (get().selectedId === id) get().clearSelection()
     const properties = get().properties.filter((p) => p.id !== id)
     set((s) => ({ properties, ...(s.placing?.dealId === id ? { placing: null, placementRequest: null } : {}) }))
