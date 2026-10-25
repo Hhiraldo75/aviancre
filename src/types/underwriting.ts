@@ -1,4 +1,5 @@
 import type { Bps, ISODate, Pct, Sourced, USD } from './common'
+import type { T12Category } from './t12'
 
 export type Scenario = 'base' | 'downside' | 'upside'
 
@@ -52,6 +53,8 @@ export interface ExpenseLine {
   annualAmount: Sourced<USD>
   /** Whether tenants reimburse this line under their recovery terms. */
   recoverable: boolean
+  /** Set when the line is a T-12 category; the engine doesn't read it. */
+  t12Category?: T12Category
 }
 
 export interface OperatingAssumptions {
@@ -60,6 +63,12 @@ export interface OperatingAssumptions {
   creditLossPct: Sourced<Pct>
   expenses: ExpenseLine[]
   expenseGrowth: Sourced<Pct>
+  /**
+   * Year-1 other income (parking, laundry, storage…), grown at market rent
+   * growth. Set from a T-12; for multifamily it replaces the rent roll's other
+   * income. Absent: the rent roll's figure (multifamily) or none (commercial).
+   */
+  otherIncomeYear1?: Sourced<USD>
   /** Management fee as a percent of effective gross income. */
   managementFeePct: Sourced<Pct>
   /** Ongoing capital reserves per SF (or per unit) per year. */

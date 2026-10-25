@@ -5,15 +5,15 @@ import { excelSerialToISO, type Cell } from './rentRollCells'
 export const RENT_ROLL_EXTENSIONS = ['.csv', '.xlsx'] as const
 
 /**
- * A rent roll file (CSV or Excel .xlsx) as a grid of cells for `parseRentRoll`.
+ * A rent roll or T-12 file (CSV or Excel .xlsx) as a grid of cells for `parseRentRoll` or `readT12`.
  * Excel date cells become ISO dates; SheetJS is loaded only when an .xlsx is
  * read, so it stays out of the main bundle. Runs in the browser and in Node.
  */
-export async function readRentRollFile(fileName: string, bytes: Uint8Array): Promise<Cell[][]> {
+export async function readRentRollFile(fileName: string, bytes: Uint8Array, what = 'rent roll'): Promise<Cell[][]> {
   const lower = fileName.toLowerCase()
   if (lower.endsWith('.csv')) return parseCSV(new TextDecoder('utf-8').decode(bytes))
   if (lower.endsWith('.xlsx')) return readXlsx(bytes)
-  throw new Error(`"${fileName}" is not a rent roll file. Use ${RENT_ROLL_EXTENSIONS.join(' or ')}.`)
+  throw new Error(`"${fileName}" is not a ${what} file. Use ${RENT_ROLL_EXTENSIONS.join(' or ')}.`)
 }
 
 async function readXlsx(bytes: Uint8Array): Promise<Cell[][]> {

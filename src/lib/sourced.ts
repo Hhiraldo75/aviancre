@@ -6,8 +6,8 @@ export function fromPublic<T>(value: T, sourceName: string, asOf?: ISODate): Sou
   return { value, source: 'public', sourceName, asOf, confidence: 'high' }
 }
 
-export function fromImport<T>(value: T, sourceName: string, asOf?: ISODate): Sourced<T> {
-  return { value, source: 'imported', sourceName, asOf, confidence: 'high' }
+export function fromImport<T>(value: T, sourceName: string, asOf?: ISODate, notes?: string): Sourced<T> {
+  return { value, source: 'imported', sourceName, asOf, confidence: 'high', ...(notes ? { notes } : {}) }
 }
 
 export function estimate<T>(

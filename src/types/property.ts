@@ -11,6 +11,7 @@ import type {
 import type { LocationContext } from './context'
 import type { RentRoll } from './lease'
 import type { RentBasis, SubmarketId } from './market'
+import type { T12Statement } from './t12'
 
 export interface PropertyLocation {
   address: string
@@ -111,4 +112,9 @@ export interface Property {
   isSample: boolean
   /** Set when the rent roll was imported from a file: a private deal, kept in the browser or private-deals/. */
   importedFrom?: { fileName: string; importedAt: ISODate }
+  /**
+   * A loaded T-12, attached at run time from its own store (never saved with
+   * the deal). Year-1 operating expenses and other income then come from it.
+   */
+  t12?: T12Statement
 }
