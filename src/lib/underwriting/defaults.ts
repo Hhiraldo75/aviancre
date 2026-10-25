@@ -95,6 +95,19 @@ export const MULTIFAMILY_DEFAULTS = {
   maxRenewalIncreasePct: 0.05,
 } as const
 
+/** Value-add plan, unit rent rolls only; off by default. */
+export const VALUE_ADD_DEFAULTS = {
+  /** Share of units to renovate; the count is rounded down. */
+  unitsPct: 0.5,
+  startMonth: 1,
+  maxPerMonth: 4,
+  costPerUnit: 12_500,
+  premiumMonthly: 175,
+  downtimeMonths: 1,
+} as const
+
+export const BUSINESS_PLAN = 'Placeholder – replace with the renovation business plan'
+
 const rot = (value: number) => estimate(value, RULE_OF_THUMB)
 const lender = (value: number) => estimate(value, LENDER_TERMS, { confidence: 'medium', asOf: DEBT_AS_OF })
 
@@ -205,6 +218,7 @@ export function defaultAssumptions(property: Property, asOf: ISODate): Underwrit
             : {}),
         }
       : undefined,
+    ...(property.rentRoll.kind === 'multifamily' && property.rentRoll.units ? { valueAdd: valueAddDefaults(property.rentRoll.units.length) } : {}),
     debt: {
       enabled: true,
       ltv: lender(LOAN_TERMS.ltv),
@@ -231,6 +245,21 @@ export function defaultAssumptions(property: Property, asOf: ISODate): Underwrit
     price.notes = `${price.notes}. ${t12PriceNote(property, price.value, asOf)}`
   }
   return assumptions
+}
+
+function valueAddDefaults(units: number): UnderwritingAssumptions['valueAdd'] {
+  const v = VALUE_ADD_DEFAULTS
+  const plan = (value: number) => estimate(value, BUSINESS_PLAN)
+  return {
+    enabled: false,
+    units,
+    unitCount: estimate(Math.floor(v.unitsPct * units), BUSINESS_PLAN, { notes: `${v.unitsPct * 100}% of ${units} units, rounded down` }),
+    startMonth: plan(v.startMonth),
+    maxPerMonth: plan(v.maxPerMonth),
+    costPerUnit: estimate(v.costPerUnit, 'Placeholder – replace with contractor bids', { notes: 'Fixed budget per unit; does not grow' }),
+    premiumMonthly: estimate(v.premiumMonthly, 'Placeholder – replace with renovated rent comps', { notes: 'Year-1 dollars, grown with market rent' }),
+    downtimeMonths: rot(v.downtimeMonths),
+  }
 }
 
 const priceCache = new WeakMap<Property, { asOf: ISODate; price: number }>()

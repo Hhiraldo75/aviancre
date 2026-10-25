@@ -5,7 +5,9 @@ import type {
   UnderwritingAssumptions,
   UnderwritingMetrics,
   UnderwritingResult,
+  ValueAddPlan,
 } from '../../types'
+import { fmt } from '../format'
 import { averageInPlaceRent, walt } from '../metrics'
 import { periodLabel } from '../t12'
 import type { AboveMarketOption } from './commercial'
@@ -39,14 +41,15 @@ export function underwrite(
 ): UnderwritingResult {
   const a = assumptions
   const H = a.acquisition.holdYears.value
-  const { years, expiringSFByYear, inPlaceExpiringSFByYear, aboveMarketOptions } = operating
+  const { years, expiringSFByYear, inPlaceExpiringSFByYear, aboveMarketOptions, valueAdd: plan } = operating
   const hold = years.slice(0, H)
   const forward = years[H]
 
   // ---- acquisition ----
   const price = a.acquisition.purchasePrice.value
   const closingCosts = price * a.acquisition.closingCostsPct.value
-  const totalCost = price + closingCosts + a.acquisition.initialCapex.value
+  // The value-add reserve is funded with equity at closing; what isn't drawn returns at sale.
+  const totalCost = price + closingCosts + a.acquisition.initialCapex.value + (plan ? plan.reserve : 0)
 
   // ---- debt ----
   if (a.debt.rate.type !== 'fixed') throw new Error('Floating-rate debt is not supported yet')
@@ -69,11 +72,24 @@ export function underwrite(
     const proceeds = isExit ? sale.net : 0
     const payoff = isExit ? loanPayoff : 0
     const afterDebt = y.cashFlowBeforeDebt - debtService[i]
+    if (plan) {
+      const returned = isExit ? plan.unspent : 0
+      return annual(y, {
+        debtService: debtService[i],
+        cashFlowAfterDebt: afterDebt,
+        saleProceeds: proceeds,
+        loanPayoff: payoff,
+        unspentReserveReturned: returned,
+        unleveredCashFlow: y.cashFlowBeforeDebt + proceeds + returned,
+        leveredCashFlow: afterDebt + proceeds - payoff + returned,
+      })
+    }
     return annual(y, {
       debtService: debtService[i],
       cashFlowAfterDebt: afterDebt,
       saleProceeds: proceeds,
       loanPayoff: payoff,
+      unspentReserveReturned: 0,
       unleveredCashFlow: y.cashFlowBeforeDebt + proceeds,
       leveredCashFlow: afterDebt + proceeds - payoff,
     })
@@ -84,6 +100,7 @@ export function underwrite(
       cashFlowAfterDebt: y.cashFlowBeforeDebt,
       saleProceeds: 0,
       loanPayoff: 0,
+      unspentReserveReturned: 0,
       unleveredCashFlow: 0,
       leveredCashFlow: 0,
     })
@@ -136,6 +153,13 @@ export function underwrite(
   }
 
   const warnings = buildWarnings(property, metrics, cashFlows, expiringSFByYear, aboveMarketOptions)
+  if (plan && plan.renovated < plan.target) {
+    warnings.push(
+      `Value-add plan: ${plan.renovated} of ${plan.target} units are renovated within the ${H}-year hold ` +
+        `(pace ${a.valueAdd!.maxPerMonth.value}/month from month ${a.valueAdd!.startMonth.value}); ` +
+        `the unspent reserve (${fmt.usd(plan.unspent)}) is returned at sale.`,
+    )
+  }
 
   return {
     propertyId: property.id,
@@ -145,8 +169,9 @@ export function underwrite(
     normalizedExitYear,
     metrics,
     generatedAt: new Date().toISOString(),
+    ...(plan ? { valueAdd: plan } : {}),
     warnings,
-    notes: buildNotes(property, asOf, a),
+    notes: buildNotes(property, asOf, a, plan),
     expirations: { inPlaceSF: inPlaceExpiringSFByYear.slice(0, H), totalSF: expiringSFByYear.slice(0, H) },
   }
 }
@@ -155,7 +180,7 @@ function annual(
   y: OperatingYear,
   debt: Pick<
     AnnualCashFlow,
-    'debtService' | 'cashFlowAfterDebt' | 'saleProceeds' | 'loanPayoff' | 'unleveredCashFlow' | 'leveredCashFlow'
+    'debtService' | 'cashFlowAfterDebt' | 'saleProceeds' | 'loanPayoff' | 'unspentReserveReturned' | 'unleveredCashFlow' | 'leveredCashFlow'
   >,
 ): AnnualCashFlow {
   return {
@@ -164,6 +189,7 @@ function annual(
     grossPotentialRent: y.grossPotentialRent,
     lossToLease: y.lossToLease,
     absorptionTurnoverVacancy: y.absorptionTurnoverVacancy,
+    renovationDowntime: y.renovationDowntime ?? 0,
     freeRent: y.freeRent,
     expenseRecoveries: y.expenseRecoveries,
     otherIncome: y.otherIncome,
@@ -176,6 +202,9 @@ function annual(
     tenantImprovements: y.tenantImprovements,
     leasingCommissions: y.leasingCommissions,
     capitalReserves: y.capitalReserves,
+    renovationCapex: y.renovationCapex ?? 0,
+    renovationReserveDraw: y.renovationReserveDraw ?? 0,
+    unitsRenovated: y.unitsRenovated ?? 0,
     cashFlowBeforeDebt: y.cashFlowBeforeDebt,
     ...debt,
   }
@@ -248,7 +277,7 @@ function buildWarnings(
   return out
 }
 
-function buildNotes(property: Property, asOf: ISODate, a: UnderwritingAssumptions): string[] {
+function buildNotes(property: Property, asOf: ISODate, a: UnderwritingAssumptions, plan?: ValueAddPlan): string[] {
   const out: string[] = []
   if (a.acquisition.purchasePrice.source === 'estimated') {
     out.push(
@@ -263,6 +292,14 @@ function buildNotes(property: Property, asOf: ISODate, a: UnderwritingAssumption
         'revenue still comes from the rent roll and the management fee stays the model’s % of EGI.',
     )
     if (a.acquisition.purchasePrice.source === 'estimated') out.push(`${t12PriceNote(property, a.acquisition.purchasePrice.value, asOf)}.`)
+  }
+  if (plan) {
+    out.push(
+      `Value-add plan on: ${plan.target} units at ${fmt.usd(a.valueAdd!.costPerUnit.value)} each. The ${fmt.usd(plan.reserve)} renovation reserve is ` +
+        'funded with equity at closing (in total cost), each renovation draws its cost, and what is left is returned at sale. ' +
+        (a.acquisition.purchasePrice.source === 'estimated' ? 'The estimated price stays at the as-is figure: the plan never raises it. ' : '') +
+        'The loan is LTV × price and funds none of the plan.',
+    )
   }
   return out
 }

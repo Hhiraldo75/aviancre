@@ -2,13 +2,14 @@ import type { AnnualCashFlow, Escalation, Lease, Property, UnderwritingAssumptio
 
 /** Plain-text and CSV renderings of an underwriting result, for the CLI and Excel checks. */
 
-export type LineKey = Exclude<keyof AnnualCashFlow, 'year' | 'occupancy'>
+export type LineKey = Exclude<keyof AnnualCashFlow, 'year' | 'occupancy' | 'unitsRenovated'>
 
 /**
  * Waterfall lines in report order. Losses and costs are positive amounts.
- * Multifamily shows rent at market, then loss to lease on leased units.
+ * Multifamily shows rent at market, then loss to lease on leased units. The
+ * value-add lines appear only when the plan is on.
  */
-function lines(isMultifamily: boolean): [label: string, key: LineKey][] {
+function lines(isMultifamily: boolean, valueAdd: boolean): [label: string, key: LineKey][] {
   const rent: [label: string, key: LineKey][] = isMultifamily
     ? [
         ['Gross potential rent (at market)', 'grossPotentialRent'],
@@ -18,6 +19,7 @@ function lines(isMultifamily: boolean): [label: string, key: LineKey][] {
   return [
     ...rent,
     ['Less: absorption & turnover vacancy', 'absorptionTurnoverVacancy'],
+    ...(valueAdd ? ([['  of which renovation downtime', 'renovationDowntime']] as [string, LineKey][]) : []),
     ['Less: free rent', 'freeRent'],
     ['Expense recoveries', 'expenseRecoveries'],
     ['Other income', 'otherIncome'],
@@ -30,11 +32,18 @@ function lines(isMultifamily: boolean): [label: string, key: LineKey][] {
     [isMultifamily ? 'Turnover costs' : 'Tenant improvements', 'tenantImprovements'],
     ['Leasing commissions', 'leasingCommissions'],
     ['Capital reserves', 'capitalReserves'],
+    ...(valueAdd
+      ? ([
+          ['Renovation capex', 'renovationCapex'],
+          ['Funded from renovation reserve', 'renovationReserveDraw'],
+        ] as [string, LineKey][])
+      : []),
     ['Cash flow before debt', 'cashFlowBeforeDebt'],
     ['Debt service', 'debtService'],
     ['Cash flow after debt', 'cashFlowAfterDebt'],
     ['Net sale proceeds', 'saleProceeds'],
     ['Loan payoff', 'loanPayoff'],
+    ...(valueAdd ? ([['Unspent reserve returned', 'unspentReserveReturned']] as [string, LineKey][]) : []),
     ['Unlevered cash flow', 'unleveredCashFlow'],
     ['Levered cash flow', 'leveredCashFlow'],
   ]
@@ -52,8 +61,10 @@ export const MF_OCCUPANCY_LABEL = 'Physical occupancy (before general vacancy)'
 
 export interface ReportRow {
   label: string
-  /** The cash flow field; undefined for the occupancy row. */
+  /** The cash flow field; undefined for the occupancy and units-renovated rows. */
   key?: LineKey
+  /** Set on a row without a key that counts units rather than a share. */
+  count?: true
   /** Year 0, years 1..N, the forward year, then the normalized exit year. */
   values: (number | null)[]
 }
@@ -64,9 +75,13 @@ export function cashFlowRows(r: UnderwritingResult): ReportRow[] {
     label: isMF ? MF_OCCUPANCY_LABEL : 'Occupancy',
     values: [null, ...r.cashFlows.map((c) => c.occupancy), r.forwardYear.occupancy, null],
   }
+  const renovated: ReportRow[] = r.valueAdd
+    ? [{ label: 'Units renovated (started)', count: true, values: [null, ...r.cashFlows.map((c) => c.unitsRenovated), null, null] }]
+    : []
   return [
     occupancy,
-    ...lines(isMF).map(([label, key]) => ({
+    ...renovated,
+    ...lines(isMF, r.valueAdd !== undefined).map(([label, key]) => ({
       label,
       key,
       values: [
@@ -81,7 +96,7 @@ export function cashFlowRows(r: UnderwritingResult): ReportRow[] {
 
 /** The forward and normalized exit years have no debt or sale lines. */
 function forwardValue(year: AnnualCashFlow, key: LineKey): number | null {
-  const noDebt: LineKey[] = ['debtService', 'cashFlowAfterDebt', 'saleProceeds', 'loanPayoff', 'unleveredCashFlow', 'leveredCashFlow']
+  const noDebt: LineKey[] = ['debtService', 'cashFlowAfterDebt', 'saleProceeds', 'loanPayoff', 'unspentReserveReturned', 'unleveredCashFlow', 'leveredCashFlow']
   return noDebt.includes(key) ? null : year[key]
 }
 
@@ -116,6 +131,21 @@ export function metricRows(r: UnderwritingResult): [label: string, value: string
     ['Cash-on-cash by year', byYear(m.cashOnCashByYear, (x) => pct(x, 1))],
     ['WALT (years)', m.walt === null ? 'n/a' : m.walt.toFixed(2)],
     ['In-place vs market rent', inPlaceVsMarket(r)],
+    ...valueAddMetricRows(r),
+  ]
+}
+
+/** The value-add plan's totals; none when the plan is off. */
+function valueAddMetricRows(r: UnderwritingResult): [label: string, value: string][] {
+  const plan = r.valueAdd
+  if (!plan) return []
+  const finish = plan.finishMonth === null ? `not reached in the hold (${plan.renovated} of ${plan.target})` : `month ${plan.finishMonth}`
+  return [
+    ['Units renovated', `${plan.renovated} of ${plan.target}`],
+    ['Renovation reserve (in total cost)', usd(plan.reserve)],
+    ['Renovation spend (drawn)', usd(plan.spent)],
+    ['Unspent reserve returned at sale', usd(plan.unspent)],
+    ['Program finishes (last re-lease)', finish],
   ]
 }
 
@@ -138,8 +168,13 @@ export interface AssumptionRow {
 /**
  * Flattens assumptions to one row per leaf. Sourced values become a single row
  * carrying their source label; plain fields (scenario, dates, flags) have none.
+ * The value-add plan's inputs are listed only while it is on.
  */
 export function assumptionRows(assumptions: UnderwritingAssumptions): AssumptionRow[] {
+  if (assumptions.valueAdd && !assumptions.valueAdd.enabled) {
+    const { valueAdd: _off, ...rest } = assumptions
+    return assumptionRows(rest)
+  }
   const out: AssumptionRow[] = []
   const walk = (node: unknown, path: string) => {
     if (node === undefined || node === null) return
@@ -181,6 +216,7 @@ export function toTable(r: UnderwritingResult): string {
     const isOcc = row.key === undefined
     const cells = row.values.map((v) => {
       if (v === null) return ''
+      if (row.count) return String(v)
       if (isOcc) return `${(v * 100).toFixed(1)}%`
       const k = v / 1000
       return Math.abs(k) < 0.05 ? '-' : k.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })

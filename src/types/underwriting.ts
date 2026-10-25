@@ -87,6 +87,30 @@ export interface MultifamilyAssumptions {
   maxRenewalIncreasePct?: Sourced<Pct>
 }
 
+/**
+ * Value-add business plan, unit rent rolls only: units are renovated at their
+ * next roll and re-lease at market + a premium. Funded by a reserve of
+ * units × cost, paid in with equity at closing; what's left returns at sale.
+ */
+export interface ValueAddAssumptions {
+  /** Off by default; the engine ignores every other field while off. */
+  enabled: boolean
+  /** Units on the rent roll: the most that can be renovated. */
+  units: number
+  /** Units to renovate (whole number). */
+  unitCount: S
+  /** 1-based analysis month the first renovation can start. */
+  startMonth: S
+  /** Most renovations started in one month. */
+  maxPerMonth: S
+  /** Renovation cost per unit, fixed nominal dollars. */
+  costPerUnit: Sourced<USD>
+  /** Rent premium per renovated unit per month, Year-1 dollars, grown with market rent. */
+  premiumMonthly: Sourced<USD>
+  /** Whole months a unit is offline for renovation, with no rent. */
+  downtimeMonths: S
+}
+
 /** Fixed rate, or floating off an index that can be pulled live from FRED. */
 export type InterestRate =
   | { type: 'fixed'; rate: Sourced<Pct> }
@@ -115,6 +139,8 @@ export interface UnderwritingAssumptions {
   leasing: MarketLeasingAssumptions
   operating: OperatingAssumptions
   multifamily?: MultifamilyAssumptions
+  /** Present for unit rent rolls only. */
+  valueAdd?: ValueAddAssumptions
   debt: DebtAssumptions
   exit: ExitAssumptions
   /** Discount rate for NPV. */
@@ -132,8 +158,10 @@ export interface AnnualCashFlow {
   grossPotentialRent: USD
   /** Market rent minus in-place rent on leased units; multifamily only (negative when in-place is above market). */
   lossToLease: USD
-  /** Vacancy from lease rollover downtime and unleased space. */
+  /** Vacancy from lease rollover downtime and unleased space (and value-add renovation downtime). */
   absorptionTurnoverVacancy: USD
+  /** Value-add plan: the renovation downtime within absorption & turnover vacancy; it doesn't offset the general vacancy floor (0 when off). */
+  renovationDowntime: USD
   freeRent: USD
   expenseRecoveries: USD
   otherIncome: USD
@@ -148,6 +176,12 @@ export interface AnnualCashFlow {
   tenantImprovements: USD
   leasingCommissions: USD
   capitalReserves: USD
+  /** Value-add plan: renovation cost spent this year, below NOI (0 when the plan is off). */
+  renovationCapex: USD
+  /** Value-add plan: the same amount, drawn from the renovation reserve (0 when off). */
+  renovationReserveDraw: USD
+  /** Value-add plan: renovations started this year (0 when off). */
+  unitsRenovated: number
   cashFlowBeforeDebt: USD
   debtService: USD
   /** Operating cash flow after debt service, before sale proceeds. */
@@ -156,6 +190,8 @@ export interface AnnualCashFlow {
   saleProceeds: USD
   /** Loan balance repaid at sale (final hold year only). */
   loanPayoff: USD
+  /** Value-add plan: reserve left at sale, returned to equity (final hold year only; 0 when off). */
+  unspentReserveReturned: USD
   /** Cash flow before debt + sale proceeds: the unlevered IRR stream. */
   unleveredCashFlow: USD
   /** Cash flow after debt + sale proceeds − payoff: the levered IRR stream. */
@@ -164,7 +200,7 @@ export interface AnnualCashFlow {
 
 export interface UnderwritingMetrics {
   purchasePrice: USD
-  /** Price + closing costs + initial capex. */
+  /** Price + closing costs + initial capex (+ the renovation reserve when the value-add plan is on). */
   totalCost: USD
   closingCosts: USD
   /** Lender fee on the loan amount; paid from equity. */
@@ -210,6 +246,42 @@ export interface UnderwritingMetrics {
   inPlaceVsMarket: Pct | null
 }
 
+/** One renovation of the value-add plan. Months are 1-based analysis months. */
+export interface Renovation {
+  unit: string
+  floorPlan: string
+  /** Occupied: the resident moves out at the roll. Lease-up: renovated before its first lease. */
+  status: 'occupied' | 'lease-up'
+  /** The roll month the renovation starts in (offline from this month). */
+  month: number
+  /** The month the renovated unit leases again (month + downtime). */
+  releaseMonth: number
+  /** Monthly rent of the new lease: (market + premium) grown to the release month's year. */
+  releaseRent: USD
+  cost: USD
+  /** Full cost per move-out (occupied units only), grown with expenses. */
+  moveOutCost: USD
+  /** Earlier eligible rolls passed over because that month's pace was full. */
+  passedOver: number
+}
+
+/** What the value-add plan did in this run. */
+export interface ValueAddPlan {
+  target: number
+  /** Renovations started within the hold. */
+  renovated: number
+  /** Funded with equity at closing: target × cost per unit. */
+  reserve: USD
+  /** Drawn from the reserve: renovated × cost per unit. */
+  spent: USD
+  /** Returned to equity at sale. */
+  unspent: USD
+  /** Release month of the last renovation once the target is reached; null otherwise. */
+  finishMonth: number | null
+  /** In the order they start (by month, then rent-roll order). */
+  renovations: Renovation[]
+}
+
 export interface UnderwritingResult {
   propertyId: string
   assumptions: UnderwritingAssumptions
@@ -221,6 +293,8 @@ export interface UnderwritingResult {
   normalizedExitYear: AnnualCashFlow
   metrics: UnderwritingMetrics
   generatedAt: string
+  /** Present when the value-add plan is on. */
+  valueAdd?: ValueAddPlan
   /** Plain-language flags, e.g. "DSCR below 1.25x in year 3". */
   warnings: string[]
   /** Context that isn't a risk flag, e.g. that the price is a model estimate. */

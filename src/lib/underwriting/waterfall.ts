@@ -1,4 +1,4 @@
-import type { ISODate, OperatingAssumptions, Property, UnderwritingAssumptions } from '../../types'
+import type { ISODate, OperatingAssumptions, Property, UnderwritingAssumptions, ValueAddPlan } from '../../types'
 import { commercialMonths, type AboveMarketOption } from './commercial'
 import { multifamilyYears } from './multifamily'
 
@@ -20,6 +20,12 @@ export interface OperatingInputs {
   tenantImprovements: number
   leasingCommissions: number
   capitalReserves: number
+  /** Value-add plan on only: renovation downtime, already in absorptionTurnoverVacancy; it comes on top of the general vacancy floor. */
+  renovationDowntime?: number
+  /** Value-add plan on only: renovation cost (below NOI), the same amount drawn from the reserve, and renovations started. */
+  renovationCapex?: number
+  renovationReserveDraw?: number
+  unitsRenovated?: number
 }
 
 export interface OperatingYear extends OperatingInputs {
@@ -35,7 +41,8 @@ export interface OperatingYear extends OperatingInputs {
 
 /**
  * General vacancy is a floor on total vacancy: the line only adds what the
- * rollover and lease-up vacancy didn't already account for.
+ * rollover and lease-up vacancy didn't already account for. Value-add
+ * renovation downtime comes on top: callers leave it out of `modeledVacancy`.
  */
 export function generalVacancy(rate: number, potentialRevenue: number, modeledVacancy: number): number {
   return Math.max(0, rate * potentialRevenue - modeledVacancy)
@@ -44,13 +51,15 @@ export function generalVacancy(rate: number, potentialRevenue: number, modeledVa
 /** Applies vacancy, credit loss and management fee to one year of inputs. */
 export function applyWaterfall(year: number, x: OperatingInputs, op: OperatingAssumptions): OperatingYear {
   const potential = x.grossPotentialRent - x.lossToLease + x.expenseRecoveries + x.otherIncome
-  const gv = generalVacancy(op.generalVacancyPct.value, potential, x.absorptionTurnoverVacancy)
+  const gv = generalVacancy(op.generalVacancyPct.value, potential, x.absorptionTurnoverVacancy - (x.renovationDowntime ?? 0))
   const beforeCredit = potential - x.absorptionTurnoverVacancy - x.freeRent - gv
   const creditLoss = op.creditLossPct.value * beforeCredit
   const egi = beforeCredit - creditLoss
   const managementFee = op.managementFeePct.value * egi
   const operatingExpenses = x.propertyExpenses + managementFee
   const noi = egi - operatingExpenses
+  // Renovations are paid from the reserve, so they net to zero here.
+  const renovation = (x.renovationCapex ?? 0) - (x.renovationReserveDraw ?? 0)
   return {
     ...x,
     year,
@@ -60,7 +69,7 @@ export function applyWaterfall(year: number, x: OperatingInputs, op: OperatingAs
     managementFee,
     operatingExpenses,
     netOperatingIncome: noi,
-    cashFlowBeforeDebt: noi - x.tenantImprovements - x.leasingCommissions - x.capitalReserves,
+    cashFlowBeforeDebt: noi - x.tenantImprovements - x.leasingCommissions - x.capitalReserves - renovation,
   }
 }
 
@@ -70,7 +79,7 @@ export function applyWaterfall(year: number, x: OperatingInputs, op: OperatingAs
  * a normal year, not one that happens to have a lease in downtime.
  */
 export function normalizeForExit(y: OperatingYear, op: OperatingAssumptions): OperatingYear {
-  return applyWaterfall(y.year, { ...y, absorptionTurnoverVacancy: 0, freeRent: 0 }, op)
+  return applyWaterfall(y.year, { ...y, absorptionTurnoverVacancy: 0, freeRent: 0, ...(y.renovationDowntime === undefined ? {} : { renovationDowntime: 0 }) }, op)
 }
 
 export interface OperatingResult {
@@ -81,15 +90,18 @@ export interface OperatingResult {
   /** The in-place leases' share of `expiringSFByYear`. */
   inPlaceExpiringSFByYear: number[]
   aboveMarketOptions: AboveMarketOption[]
+  /** Present when the value-add plan is on. */
+  valueAdd?: ValueAddPlan
 }
 
 /** Property-level cash flows before debt for every year of the hold plus the forward year. */
 export function operatingCashFlows(property: Property, a: UnderwritingAssumptions, asOf: ISODate): OperatingResult {
   const holdYears = a.acquisition.holdYears.value
   if (property.rentRoll.kind === 'multifamily') {
-    const years = multifamilyYears(property, a).map((x, i) => applyWaterfall(i + 1, x, a.operating))
+    const mf = multifamilyYears(property, a)
+    const years = mf.years.map((x, i) => applyWaterfall(i + 1, x, a.operating))
     const zeros = () => Array.from({ length: holdYears + 1 }, () => 0)
-    return { years, expiringSFByYear: zeros(), inPlaceExpiringSFByYear: zeros(), aboveMarketOptions: [] }
+    return { years, expiringSFByYear: zeros(), inPlaceExpiringSFByYear: zeros(), aboveMarketOptions: [], ...(mf.valueAdd ? { valueAdd: mf.valueAdd } : {}) }
   }
 
   const { months, expiringSFByYear, inPlaceExpiringSFByYear, aboveMarketOptions } = commercialMonths(property, a, asOf)

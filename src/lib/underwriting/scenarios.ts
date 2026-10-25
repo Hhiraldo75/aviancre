@@ -9,6 +9,7 @@ import {
   formatInput,
   sameValue,
   SCENARIO_KEY_PREFIX,
+  valueAddFields,
   type AssumptionEdits,
   type AssumptionField,
   type AssumptionGroupTitle,
@@ -54,6 +55,9 @@ export const LEVERS: readonly Lever[] = [
   { key: 'operating.generalVacancyPct', label: 'General vacancy', kind: 'pts', preset: { downside: 0.02, upside: -0.01 }, limit: 20 },
   { key: 'operating.expenseGrowth', label: 'Expense growth', kind: 'pts', preset: { downside: 0, upside: 0 }, limit: 10 },
   { key: 'exit.exitCapRate', label: 'Exit cap', kind: 'bps', preset: { downside: 0.005, upside: -0.0025 }, limit: 300 },
+  // The value-add plan's levers apply only while the plan is on.
+  { key: 'valueAdd.premiumMonthly', label: 'Rent premium', kind: 'relative', preset: { downside: -0.25, upside: 0 }, limit: 100 },
+  { key: 'valueAdd.costPerUnit', label: 'Renovation cost', kind: 'relative', preset: { downside: 0.15, upside: 0 }, limit: 100 },
 ]
 
 /** Upside takes general vacancy no lower than this, and never raises a Base that is already below it. */
@@ -94,10 +98,14 @@ function leverField(l: Lever, scenario: StressScenario, group: AssumptionGroupTi
   }
 }
 
-/** The preset inputs, shaped like assumption fields so the same parsing and validation apply. */
+/**
+ * The preset inputs, shaped like assumption fields so the same parsing and
+ * validation apply. Includes the value-add levers whenever the property has
+ * the plan, on or off, so their presets can be kept while it is off.
+ */
 export function scenarioFields(a: UnderwritingAssumptions): AssumptionField[] {
-  const fields = fieldMap(a)
-  return applicableLevers(a).flatMap((l) => STRESS_SCENARIOS.map((s) => leverField(l, s, fields.get(l.key)!.group)))
+  const fields = new Map([...editableFields(a), ...valueAddFields(a)].map((f) => [f.key, f]))
+  return LEVERS.filter((l) => fields.has(l.key)).flatMap((l) => STRESS_SCENARIOS.map((s) => leverField(l, s, fields.get(l.key)!.group)))
 }
 
 /** A preset's change: the analyst's edit, or the rule-of-thumb preset (EST). */
@@ -329,7 +337,7 @@ const valueText = (kind: Kind, x: number | null) =>
 const sign = (x: number) => (x > 0 ? '+' : '−')
 
 /** "−$412,345 (−6.1%)" (short "−6.1%"), "−182 bps", "−0.15x"; "no change" when equal. */
-function changeText(kind: Kind, x: number, base: number): { display: string; short: string } {
+export function changeText(kind: Kind, x: number, base: number): { display: string; short: string } {
   const d = x - base
   const same = (display: string) => ({ display, short: display })
   if (Math.abs(d) < (kind === 'usd' ? 0.5 : 5e-7)) return same('no change')

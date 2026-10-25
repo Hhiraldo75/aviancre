@@ -21,7 +21,16 @@ export type AssumptionEdits = Record<string, number>
 export const SCENARIO_KEY_PREFIX = 'scenarios.'
 const isBaseKey = (key: string) => !key.startsWith(SCENARIO_KEY_PREFIX)
 
-export type AssumptionGroupTitle = 'Acquisition' | 'Leasing' | 'Operating' | 'Debt' | 'Exit'
+export type AssumptionGroupTitle = 'Acquisition' | 'Leasing' | 'Operating' | 'Value-add' | 'Debt' | 'Exit'
+
+/**
+ * The value-add plan's on/off switch, stored as 1 when on. While it is off the
+ * plan's inputs (and its scenario presets) may stay in the edits, inert: they
+ * aren't listed as changes and the engine ignores them.
+ */
+export const VALUE_ADD_KEY = 'valueAdd.enabled'
+export const VALUE_ADD_ON = 'Value-add plan On (default Off)'
+const VALUE_ADD_INPUT = /^(scenarios\.[a-z]+\.)?valueAdd\./
 
 export interface AssumptionField {
   key: string
@@ -37,6 +46,8 @@ export interface AssumptionField {
   /** The minimum itself is not allowed (e.g. a price must be above $0). */
   minExclusive?: boolean
   integer?: boolean
+  /** Also accepts a percent of this many, rounded down (e.g. "50%" of the units). */
+  percentOf?: number
   /** Formats an engine value for reading, e.g. "7.25%". */
   format: (x: number) => string
 }
@@ -114,6 +125,8 @@ export function editableFields(a: UnderwritingAssumptions): AssumptionField[] {
   pct('operating.managementFeePct', 'Management fee (% of EGI)', 0, 15)
   usd('operating.capitalReservesPerYear', 'Capital reserves', isMF ? '/unit/yr' : '/SF/yr', { cents: !isMF })
 
+  if (a.valueAdd?.enabled) fields.push(...valueAddInputs(a.valueAdd.units))
+
   group = 'Debt'
   pct('debt.ltv', 'Loan-to-value', 0, 90)
   if (a.debt.rate.type === 'fixed') pct('debt.rate.rate', 'Interest rate (fixed)', 0.5, 20, (x) => fmt.pct(x, 2))
@@ -128,6 +141,68 @@ export function editableFields(a: UnderwritingAssumptions): AssumptionField[] {
   pct('targetLeveredIRR', 'Target levered IRR', 0, 50)
 
   return fields
+}
+
+/** The value-add plan's inputs (listed with the other assumptions only while the plan is on). */
+function valueAddInputs(units: number): AssumptionField[] {
+  const group = 'Value-add'
+  const whole = (key: string, label: string, suffix: string, min: number, max: number, format: (x: number) => string): AssumptionField => ({
+    key,
+    label,
+    group,
+    scale: 1,
+    suffix,
+    min,
+    max,
+    integer: true,
+    format,
+  })
+  const usd = (key: string, label: string, suffix: string): AssumptionField => ({
+    key,
+    label,
+    group,
+    scale: 1,
+    prefix: '$',
+    suffix,
+    min: 0,
+    max: Infinity,
+    format: (x) => `${fmt.usd(x)}${suffix}`,
+  })
+  return [
+    { ...whole('valueAdd.unitCount', 'Units to renovate', 'units', 0, units, (x) => `${x} units (${fmt.pctShort(x / units)})`), percentOf: units },
+    whole('valueAdd.startMonth', 'Start month', 'month', 1, 240, (x) => `month ${x}`),
+    whole('valueAdd.maxPerMonth', 'Max pace', 'units/mo', 1, 1000, (x) => `${x} units/mo`),
+    usd('valueAdd.costPerUnit', 'Renovation cost', '/unit'),
+    usd('valueAdd.premiumMonthly', 'Rent premium (Year 1)', '/unit/mo'),
+    whole('valueAdd.downtimeMonths', 'Renovation downtime', 'mo', 0, 12, (x) => `${x} mo`),
+  ]
+}
+
+/**
+ * Every value-add key a property accepts, on or off: the switch and the
+ * inputs. Edits and assumption sets are checked against these, so the inputs
+ * can be kept while the plan is off. Empty unless the property has a unit rent roll.
+ */
+export function valueAddFields(a: UnderwritingAssumptions): AssumptionField[] {
+  if (!a.valueAdd) return []
+  const toggle: AssumptionField = {
+    key: VALUE_ADD_KEY,
+    label: 'Value-add plan',
+    group: 'Value-add',
+    scale: 1,
+    suffix: '',
+    min: 0,
+    max: 1,
+    integer: true,
+    format: (x) => (x === 1 ? 'On' : 'Off'),
+  }
+  return [toggle, ...valueAddInputs(a.valueAdd.units)]
+}
+
+/** Edits without the plan's inputs and presets while the plan is off (they change nothing then). */
+export function activeEdits(edits: AssumptionEdits): AssumptionEdits {
+  if (edits[VALUE_ADD_KEY] === 1) return edits
+  return Object.fromEntries(Object.entries(edits).filter(([k]) => !VALUE_ADD_INPUT.test(k)))
 }
 
 type Node = Record<string, unknown>
@@ -179,7 +254,9 @@ export function validateValue(f: AssumptionField, value: number): string | null 
 export function parseInput(f: AssumptionField, text: string): { value: number } | { error: string } {
   const cleaned = text.replace(/[,$%\s]/g, '').replace(/^−/, '-')
   if (!/^-?(\d+\.?\d*|\.\d+)$/.test(cleaned)) return { error: 'Enter a number' }
-  const value = Number(cleaned) / f.scale
+  const share = f.percentOf !== undefined && text.trim().endsWith('%')
+  // Rounded down after a little float slack, so 50% of 120 is 60, never 59.
+  const value = share ? Math.floor((Number(cleaned) / 100) * f.percentOf! + 1e-9) : Number(cleaned) / f.scale
   const error = validateValue(f, value)
   return error ? { error } : { value }
 }
@@ -196,10 +273,14 @@ export function formatInput(f: AssumptionField, value: number): string {
  */
 function applyEdits(property: Property, asOf: ISODate, defaults: UnderwritingAssumptions, edits: AssumptionEdits) {
   const a = structuredClone(defaults)
-  const fields = new Map(editableFields(defaults).map((f) => [f.key, f]))
+  const fields = new Map([...editableFields(defaults), ...valueAddFields(defaults)].map((f) => [f.key, f]))
   for (const [key, value] of Object.entries(edits)) {
     const f = fields.get(key)
     if (!f || validateValue(f, value)) continue
+    if (key === VALUE_ADD_KEY) {
+      a.valueAdd!.enabled = value === 1
+      continue
+    }
     const [parent, last] = parentOf(a, key)
     parent[last] = fromImport(value, ANALYST_INPUT)
   }
@@ -249,8 +330,10 @@ export function assumptionsFor(property: Property, asOf: ISODate, edits?: Assump
 /** Edited assumptions as "Exit cap rate 7.50% (default 7.25%)", for the "Assumptions changed" tooltip. */
 export function assumptionChanges(a: UnderwritingAssumptions, defaults: UnderwritingAssumptions): string[] {
   return editableFields(a).flatMap((f) => {
+    // The plan's switch heads its inputs.
+    const on = f.key === 'valueAdd.unitCount' ? [VALUE_ADD_ON] : []
     const v = fieldValue(a, f.key)
-    if (!isEdited(v)) return []
-    return [`${f.label} ${f.format(v.value)} (default ${f.format(fieldValue(defaults, f.key).value)})`]
+    if (!isEdited(v)) return on
+    return [...on, `${f.label} ${f.format(v.value)} (default ${f.format(fieldValue(defaults, f.key).value)})`]
   })
 }

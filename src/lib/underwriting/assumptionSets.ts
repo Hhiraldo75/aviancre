@@ -1,7 +1,7 @@
 import type { ISODate, Property, UnderwritingAssumptions } from '../../types'
 import { slug } from '../format'
 import { DEFAULT_EXPENSE_LABEL } from './defaults'
-import { defaultsFor, editableFields, sameValue, validateValue, type AssumptionEdits } from './edits'
+import { defaultsFor, editableFields, sameValue, validateValue, valueAddFields, type AssumptionEdits } from './edits'
 import { scenarioFields } from './scenarios'
 
 /**
@@ -158,7 +158,7 @@ export function parseAssumptionSetFile(
     changes = reconciled.edits
     notice = reconciled.notice
     const defaults = defaultsFor(property, asOf)
-    const fields = new Map([...editableFields(defaults), ...scenarioFields(defaults)].map((f) => [f.key, f]))
+    const fields = new Map([...editableFields(defaults), ...valueAddFields(defaults), ...scenarioFields(defaults)].map((f) => [f.key, f]))
     for (const [key, value] of Object.entries(changes)) {
       const f = fields.get(key)
       if (!f) errors.push(`Unknown assumption "${key}" for this property.`)
