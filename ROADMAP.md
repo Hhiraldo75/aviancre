@@ -12,6 +12,7 @@
 - [x] Click any building → live public record: Providence Open Data 2025 tax roll (owner, land use, assessed value, taxes, condo units), plus year built, building and land area, zoning, overlay and historic districts and parcel outline from the city's ArcGIS Online `Parcel_Zoning_FL`, and flood zone and base flood elevation from RIGIS's FEMA DFIRM (2022)
 - [x] Address search: type-ahead over the city's parcel addresses (ArcGIS Online `Parcel_Zoning_FL`) plus the sample properties and imported deals; picking one flies there and opens its public record
 - [x] Filters synced across map and list: asset type, size, occupancy, lease expiration, submarket, levered IRR and max bid vs price; shareable in the URL
+- [x] Citywide screening estimates: every commercial lot (RI class 2) priced from public building data and the benchmarks (rentable share of gross area, NOI ÷ cap, everything EST), colored on the map by estimate ÷ 2025 assessed value relative to the median for the property type ("vs peers"), with the NOI build on the parcel card and a sortable, filterable screening list; static snapshot from `npm run citywide:refresh`, lazy-loaded; submarkets from the city's official neighborhoods, office vs retail from OpenStreetMap tags. Screening estimate, not an appraisal
 
 ## Next
 1. **Real building footprints and parcels** (in progress)

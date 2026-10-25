@@ -30,6 +30,12 @@ and an imported rent roll never leaves the user's machine.
   RIGIS's FEMA flood map.
 - **Address search.** Type-ahead over every city parcel address, the sample properties
   and imported deals; picking one flies there and opens its record.
+- **Citywide screening estimates.** A map layer that prices every commercial parcel in
+  the city (about 3,100 of 4,800 lots) from public building data and the market
+  benchmarks and colors it by estimate ÷ 2025 assessed value relative to similar
+  properties (the median for its type). Click a parcel for the
+  NOI build beside its public record, or open the sortable, filterable screening list
+  to see where to look first. A screening estimate, not an appraisal.
 - **Filters.** Asset type, size, occupancy, lease expiration, submarket, levered IRR and
   max bid vs price, synced between map and list and shareable in the URL.
 - **Four persona views** of the same property: Analyst, Broker, Developer and Investment.
@@ -91,8 +97,14 @@ and an imported rent roll never leaves the user's machine.
 | Parcels, zoning, overlay and historic districts, building size | City of Providence ArcGIS Online, [`Parcel_Zoning_FL`](https://services6.arcgis.com/wv9mHoqblhTsnqdG/arcgis/rest/services/Parcel_Zoning_FL/FeatureServer) |
 | Flood zone and base flood elevation | RIGIS, [FEMA DFIRM Statewide Flood Hazard Areas 2022](https://services2.arcgis.com/S8zZg9pg23JUEexQ/arcgis/rest/services/PLAN_DFIRM_Statewide_Flood_Hazard_Areas_2022/FeatureServer/1) |
 | Basemap and 3D buildings | OpenStreetMap via [OpenFreeMap](https://openfreemap.org/) |
+| Neighborhoods (citywide estimates' submarkets) | City of Providence ArcGIS Online, [`Providence_Neighborhoods_(Polygon_Layer)`](https://services6.arcgis.com/wv9mHoqblhTsnqdG/arcgis/rest/services/Providence_Neighborhoods_(Polygon_Layer)/FeatureServer/0) |
+| Office and shop tags (citywide estimates' office vs retail) | OpenStreetMap contributors via the [Overpass API](https://overpass-api.de/) |
 
-All sources are called straight from the browser.
+The app calls every source straight from the browser. The citywide estimates are the
+exception: `npm run citywide:refresh` pulls the tax roll, parcel layer, neighborhoods
+and OpenStreetMap tags once into a static snapshot (`public/data/citywide/`), and the
+app loads that file when the layer is turned on. Coverage:
+[docs/citywide-coverage.md](docs/citywide-coverage.md); method: [docs/UNDERWRITING.md](docs/UNDERWRITING.md#citywide-screening-estimates).
 
 > **Sample data.** The 11 sample properties sit on real Providence buildings, but their
 > names, tenants, rents and leases are fictional. Market cap rates, vacancy and office and
