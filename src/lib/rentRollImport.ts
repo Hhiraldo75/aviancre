@@ -148,6 +148,7 @@ const notInRentRoll = (what: string) => `Not in rent roll – replace with ${wha
 export const rentRollZoning = (): ZoningInfo => ({ district: estimate('Unknown', notInRentRoll('the Providence zoning map')) })
 
 /** An imported deal's gross SF until it is placed on a parcel with building records: its rentable SF. */
+export const rentRollFloors = () => estimate(1, notInRentRoll('building records'))
 export const rentRollGrossSF = (rentableSF: number) => estimate(rentableSF, notInRentRoll('building records (rentable SF used)'))
 
 /** The address an imported deal gets when its rent roll has none. */
@@ -398,7 +399,7 @@ export function parseRentRoll(grid: Cell[][], opts: ImportOptions): RentRollImpo
     physical: {
       grossBuildingSF: rentRollGrossSF(rentableSF!),
       rentableSF: fromImport(rentableSF!, sourceName, importedAt),
-      floors: estimate(1, notInRentRoll('building records')),
+      floors: rentRollFloors(),
       ...(rentRoll.kind === 'multifamily' ? { unitCount: fromImport(rentRoll.units?.length ?? 0, sourceName, importedAt) } : {}),
     },
     zoning: rentRollZoning(),

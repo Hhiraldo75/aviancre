@@ -3,8 +3,10 @@ import { SUBMARKETS } from '../data/submarkets'
 import { ZONING_SOURCE } from '../data/zoning'
 import { normalizeAddress } from './addressSearch'
 import { normalizeZoningCode, zoningLimitsFor } from './parcelMetrics'
-import { approximateAddress, isImportedDealId, rentRollGrossSF, rentRollZoning } from './rentRollImport'
-import { fromPublic } from './sourced'
+import { ringAreaSF } from './geo'
+import { fmt } from './format'
+import { approximateAddress, isImportedDealId, rentRollFloors, rentRollGrossSF, rentRollZoning } from './rentRollImport'
+import { estimate, fromPublic } from './sourced'
 
 /**
  * Imported deals at rest: browser local storage in the app, private-deals/<id>.json
@@ -99,6 +101,20 @@ export function parcelFacts(parcel: ParcelRecord, overlays: ParcelOverlays): Par
 }
 
 /**
+ * Floors = city gross building area ÷ the OpenStreetMap building's outline area, at least 1.
+ * Null without both: a parcel outline is the lot, not the building, and the rent roll's
+ * gross SF is only its rentable SF.
+ */
+export function estimateFloors(placement: DealPlacement, footprint: Sourced<LngLat[]>, gross: Sourced<SF> | undefined): Sourced<number> | null {
+  if (placement.outlineFrom !== 'osm' || gross?.source !== 'public') return null
+  const outlineSF = ringAreaSF(footprint.value)
+  if (!(outlineSF > 0) || !(gross.value > 0)) return null
+  const floors = Math.max(1, Math.round(gross.value / outlineSF))
+  const notes = `${fmt.int(gross.value)} sf gross building area (city records) ÷ ${fmt.int(outlineSF)} sf building outline (OpenStreetMap), rounded, at least 1`
+  return estimate(floors, 'Gross building area ÷ building outline area', { notes })
+}
+
+/**
  * The deal on a real parcel: its point, PIN, building outline, and the parcel's
  * zoning, lot and building area. Nothing the underwriting reads changes (rent
  * roll, market, rentable SF, submarket).
@@ -110,12 +126,14 @@ export function withPlacement(
   footprint: Sourced<LngLat[]>,
   facts: ParcelFacts,
 ): Property {
+  const floors = estimateFloors(placement, footprint, facts.grossBuildingSF)
   return {
     ...p,
     location: { ...p.location, lng, lat, parcelId: placement.pin, isApproximate: false, placement },
     physical: {
       ...p.physical,
       footprint,
+      floors: floors ?? rentRollFloors(),
       ...(facts.landAreaSF ? { landAreaSF: facts.landAreaSF } : {}),
       ...(facts.grossBuildingSF ? { grossBuildingSF: facts.grossBuildingSF } : {}),
     },
@@ -131,7 +149,7 @@ export function withoutPlacement(p: Property): Property {
   return {
     ...p,
     location: { ...location, lng, lat, isApproximate: true },
-    physical: { ...physical, grossBuildingSF: rentRollGrossSF(p.physical.rentableSF.value) },
+    physical: { ...physical, grossBuildingSF: rentRollGrossSF(p.physical.rentableSF.value), floors: rentRollFloors() },
     zoning: rentRollZoning(),
   }
 }

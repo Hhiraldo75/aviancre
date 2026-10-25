@@ -8,6 +8,7 @@ import { BAND_COLORS, outlinesGeoJSON, pointsGeoJSON, SKIPPED_COLOR } from '../.
 import { hasActiveFilters } from '../../lib/filters'
 import { approximatePinsGeoJSON, buildingOutlineIn, featureBounds, isApproximatePin, propertiesToGeoJSON } from '../../lib/geo'
 import { fmt } from '../../lib/format'
+import { nullSafeFilter } from '../../lib/styleFilters'
 import { useAppStore, usePropertyView } from '../../store/useAppStore'
 import type { ParcelLookup } from '../../types'
 import CitywideToggle from './CitywideToggle'
@@ -104,6 +105,13 @@ export default function MapView() {
       canvasContextAttributes: { antialias: true },
     })
     mapRef.current = map
+    // Before any tile is read, so the basemap's numeric filters never meet a missing property.
+    map.on('style.load', () => {
+      for (const layer of map.getStyle().layers) {
+        const filter = nullSafeFilter('filter' in layer ? layer.filter : undefined)
+        if (filter) map.setFilter(layer.id, filter)
+      }
+    })
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right')
 
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 })

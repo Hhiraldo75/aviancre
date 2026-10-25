@@ -202,7 +202,23 @@ describe('placing a deal on its real building', () => {
     expect({ ...placed, location: deal.location, physical: deal.physical, zoning: deal.zoning }).toEqual(deal)
     const { footprint: _f, landAreaSF, grossBuildingSF, ...rest } = placed.physical
     expect([landAreaSF?.value, grossBuildingSF.value]).toEqual([10_000, 9_000])
-    expect({ ...rest, grossBuildingSF: deal.physical.grossBuildingSF }).toEqual(deal.physical)
+    expect({ ...rest, grossBuildingSF: deal.physical.grossBuildingSF, floors: deal.physical.floors }).toEqual(deal.physical)
+  })
+
+  it('estimates floors as city gross area ÷ OSM outline area, at least 1, and leaves the underwriting alone', () => {
+    // The outline is about 15,900 sf, so the city's 9,000 sf is under one floor.
+    expect(placed.physical.floors).toMatchObject({ value: 1, source: 'estimated', sourceName: 'Gross building area ÷ building outline area' })
+    const tall = (outlineFrom: DealPlacement['outlineFrom'], gross = 48_000) =>
+      withPlacement(deal, { ...placement, outlineFrom }, [-71.4295, 41.8205], fromPublic(building, 'OSM', AS_OF), parcelFacts({ ...record, grossBuildingSF: fromPublic(gross, GIS) }, overlays))
+    const three = tall('osm')
+    expect(three.physical.floors).toMatchObject({ value: 3, source: 'estimated' })
+    expect(three.physical.floors.notes).toMatch(/48,000 sf gross building area \(city records\) ÷ 15,\d{3} sf building outline/)
+    // 3 floors × 16 ft for retail.
+    expect(developmentCapacity(three).heightFt).toBe(48)
+    expect(run(three)).toEqual(run(deal))
+    // A parcel outline is the lot, not the building.
+    expect(tall('parcel').physical.floors).toEqual(deal.physical.floors)
+    expect(withoutPlacement(three)).toEqual(deal)
   })
 
   it('gives the Developer view the parcel’s real zoning, as for a clicked parcel', () => {

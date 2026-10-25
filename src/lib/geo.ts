@@ -115,6 +115,14 @@ export function pointInPolygon(point: LngLat, geometry: Polygon | MultiPolygon):
 const ringArea = (ring: Position[]) =>
   Math.abs(ring.reduce((s, [x1, y1], i) => s + x1 * ring[(i + 1) % ring.length][1] - ring[(i + 1) % ring.length][0] * y1, 0)) / 2
 
+/** Area of a lng/lat ring in square feet, flat-earth around its first vertex (fine at building scale). */
+export function ringAreaSF(ring: Position[]): number {
+  const [lng0, lat0] = ring[0]
+  const mPerDegLng = METERS_PER_DEG_LAT * Math.cos((lat0 * Math.PI) / 180)
+  const m = ring.map(([lng, lat]): Position => [(lng - lng0) * mPerDegLng, (lat - lat0) * METERS_PER_DEG_LAT])
+  return ringArea(m) / SQFT_TO_SQM
+}
+
 /**
  * A point inside a parcel (the largest part of a multipolygon): its box
  * center when that's inside, else the middle of the widest stretch of the
