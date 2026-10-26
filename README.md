@@ -48,6 +48,13 @@ and an imported rent roll never leaves the user's machine.
   Value-add at the same price.
   Outputs include IRR (levered and unlevered), equity multiple, cash-on-cash, DSCR, debt
   yield, WALT, NPV and plain-language warnings.
+- **Base / Downside / Upside scenarios.** Run any property under three cases side by
+  side (rents, vacancy, exit cap, rollover and costs move together) and compare returns,
+  DSCR and max bid. Every case is a full engine run.
+- **T-12 import.** Load a trailing-12 operating statement (CSV or Excel, mapped through a
+  screen) to replace the placeholder Year-1 expenses and other income with the
+  property's actuals, with a check of the T-12 against the model. T-12s stay in the
+  browser, like rent rolls.
 - **Live assumptions and saved cases.** Edit any assumption and every figure updates.
   Save edits as named assumption sets, switch between them, and export or import them as
   files.
@@ -65,7 +72,7 @@ and an imported rent roll never leaves the user's machine.
 
 ## How it was validated
 
-- **Four independent Excel models.** The engine's output was matched to the cent against
+- **Four independent Excel validations.** The engine's output was matched to the cent against
   separately built Excel models for:
   - Atwells Retail Row (retail, NNN)
   - Westminster Office Tower (office, base-year recoveries, vacant-suite lease-up)
@@ -86,8 +93,15 @@ and an imported rent roll never leaves the user's machine.
   so the app's defaults can follow the market without breaking the match. They also run
   after an assumption edit and reset, and after importing the same rent roll from CSV and
   from Excel.
-- **927 automated tests** (Vitest) across the engine, sensitivity, max bid, rent roll
+- **965 automated tests** (Vitest) across the engine, sensitivity, max bid, rent roll
   import and conversion, assumption sets, search, filters and the public-record clients.
+
+## Real market data
+
+Market cap rates, vacancy and rents come from published Providence reports (NAR/CoStar,
+Cushman & Wakefield) and debt rates from the 10-year Treasury plus lender spreads. Each
+figure shows its source and date in the app and is labeled actual (ACT) or estimate
+(EST), so an analyst can see what is data and what is judgment.
 
 ## Data sources
 
